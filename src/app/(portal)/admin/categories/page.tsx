@@ -13,6 +13,7 @@ import {
   adminUpdateCategory,
   type AdminCategory,
 } from "@/lib/api/admin-client";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 type CategoryDraft = {
   slug: string;
@@ -24,6 +25,7 @@ type CategoryDraft = {
 const emptyDraft: CategoryDraft = { slug: "", name: "", description: "", icon: "Circle" };
 
 export default function AdminCategoriesPage() {
+  const { t } = useI18n("ru");
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [draft, setDraft] = useState<CategoryDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
@@ -98,26 +100,26 @@ export default function AdminCategoriesPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Categories</h1>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("admin.categories.title")}</h1>
 
       <Card className="glass border-white/10">
         <CardHeader>
-          <CardTitle className="text-base">Create category</CardTitle>
+          <CardTitle className="text-base">{t("admin.categories.createTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <Input placeholder="Slug" value={draft.slug} onChange={(e) => setDraft((p) => ({ ...p, slug: e.target.value }))} />
-          <Input placeholder="Name" value={draft.name} onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))} />
-          <Input placeholder="Description" value={draft.description} onChange={(e) => setDraft((p) => ({ ...p, description: e.target.value }))} />
-          <Input placeholder="Icon name (lucide)" value={draft.icon} onChange={(e) => setDraft((p) => ({ ...p, icon: e.target.value }))} />
+          <Input placeholder={t("admin.categories.slug")} value={draft.slug} onChange={(e) => setDraft((p) => ({ ...p, slug: e.target.value }))} />
+          <Input placeholder={t("admin.categories.name")} value={draft.name} onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))} />
+          <Input placeholder={t("admin.categories.description")} value={draft.description} onChange={(e) => setDraft((p) => ({ ...p, description: e.target.value }))} />
+          <Input placeholder={t("admin.categories.iconName")} value={draft.icon} onChange={(e) => setDraft((p) => ({ ...p, icon: e.target.value }))} />
           <Button onClick={() => void createCategory()} disabled={!draft.slug || !draft.name || !draft.icon}>
-            Create
+            {t("admin.categories.create")}
           </Button>
         </CardContent>
       </Card>
 
       <Card className="glass border-white/10">
         <CardHeader>
-          <CardTitle className="text-base">Category CRUD</CardTitle>
+          <CardTitle className="text-base">{t("admin.categories.crudTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="relative">
@@ -125,13 +127,13 @@ export default function AdminCategoriesPage() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by slug, name, description, icon..."
+              placeholder={t("admin.categories.searchPlaceholder")}
               className="pl-9"
             />
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Showing {filteredCategories.length} of {categories.length} categories
+            {t("admin.categories.showing")} {filteredCategories.length} {t("admin.categories.of")} {categories.length} {t("admin.categories.categories")}
           </p>
 
           {filteredCategories.map((cat) => (
@@ -150,17 +152,17 @@ export default function AdminCategoriesPage() {
               </div>
               <div className="mt-3 flex gap-2">
                 <Button variant="secondary" onClick={() => void updateCategory(cat.id, { slug: cat.slug, name: cat.name, description: cat.description, icon: cat.icon })} disabled={savingId === cat.id}>
-                  Save
+                  {t("admin.categories.save")}
                 </Button>
                 <Button variant="destructive" onClick={() => void removeCategory(cat.id)}>
-                  Delete
+                  {t("admin.categories.delete")}
                 </Button>
               </div>
             </div>
           ))}
           {filteredCategories.length === 0 && (
             <div className="rounded-xl border border-white/10 bg-muted/10 p-6 text-center text-sm text-muted-foreground">
-              Nothing found for your search.
+              {t("admin.categories.empty")}
             </div>
           )}
         </CardContent>

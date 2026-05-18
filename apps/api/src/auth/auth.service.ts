@@ -18,7 +18,7 @@ import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
 
 /** Mirrors Prisma `AccountStatus` — string union keeps emitted `.d.ts` stable if Prisma re-exports differ. */
-export type AccountStatusValue = "ACTIVE" | "FROZEN_PENDING_DELETION";
+export type AccountStatusValue = "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
 
 export type SafeUser = {
   id: string;
@@ -233,6 +233,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       await this.finalizeExpiredFrozenAccount(user.id, now, user.uuid);
       return null;
     }
+    if (user.accountStatus === "BLOCKED") return null;
 
     if (!user.passwordHash) return null;
     const ok = await bcrypt.compare(password, user.passwordHash);
@@ -310,17 +311,52 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   }
 
   async recordLoginEvent(userId: number, ctx: LoginContext) {
-    await this.prisma.loginEvent.create({
-      data: {
+    const data = {
+      ipAddress: ctx.ipAddress ?? null,
+      countryCode: ctx.countryCode?.toUpperCase() ?? null,
+      city: ctx.city ?? null,
+      userAgent: ctx.userAgent ?? null,
+      deviceLabel: ctx.deviceLabel ?? null,
+      requestId: ctx.requestId ?? null,
+    };
+    const existingDevice = await this.prisma.loginEvent.findFirst({
+      where: {
         userId,
-        ipAddress: ctx.ipAddress ?? null,
-        countryCode: ctx.countryCode?.toUpperCase() ?? null,
-        city: ctx.city ?? null,
-        userAgent: ctx.userAgent ?? null,
-        deviceLabel: ctx.deviceLabel ?? null,
-        requestId: ctx.requestId ?? null,
+        userAgent: data.userAgent,
+        deviceLabel: data.deviceLabel,
       },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
     });
+
+    if (existingDevice) {
+      await this.prisma.loginEvent.update({
+        where: { id: existingDevice.id },
+        data: {
+          ...data,
+          createdAt: new Date(),
+        },
+      });
+    } else {
+      await this.prisma.loginEvent.create({
+        data: {
+          userId,
+          ...data,
+        },
+      });
+    }
+
+    const staleDevices = await this.prisma.loginEvent.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      skip: 10,
+      select: { id: true },
+    });
+    if (staleDevices.length > 0) {
+      await this.prisma.loginEvent.deleteMany({
+        where: { id: { in: staleDevices.map((event) => event.id) } },
+      });
+    }
   }
 
   async refresh(dto: RefreshDto) {
@@ -335,6 +371,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     });
     if (!row?.user) {
       throw new UnauthorizedException("Invalid or expired refresh token");
+    }
+    if (row.user.accountStatus === "BLOCKED") {
+      throw new UnauthorizedException("Account is blocked");
     }
     await this.prisma.refreshToken.update({
       where: { id: row.id },
@@ -394,6 +433,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   async findSafeUserById(id: number): Promise<SafeUser | null> {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) return null;
+    if (user.accountStatus === "BLOCKED") return null;
     const now = new Date();
     if (
       user.accountStatus === "FROZEN_PENDING_DELETION" &&

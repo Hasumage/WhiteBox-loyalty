@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { promises as fs } from "fs";
 import { join, resolve } from "path";
@@ -836,7 +836,7 @@ export class AdminService {
           ? ({ createdAt: sortDir } as const)
           : ({ [sortBy]: sortDir } as const);
 
-    const [items, total] = await Promise.all([
+    const [items, total, activeUsers, adminUsers, blockedUsers] = await Promise.all([
       this.prisma.user.findMany({
         where,
         orderBy,
@@ -852,11 +852,20 @@ export class AdminService {
         take: safeLimit,
       }),
       this.prisma.user.count({ where }),
+      this.prisma.user.count({ where: { accountStatus: AccountStatus.ACTIVE } }),
+      this.prisma.user.count({ where: { role: { in: [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER, UserRole.SUPPORT] } } }),
+      this.prisma.user.count({ where: { accountStatus: AccountStatus.BLOCKED } }),
     ]);
 
     return {
       items,
       total,
+      summary: {
+        totalUsers: total,
+        activeUsers,
+        adminUsers,
+        blockedUsers,
+      },
       page: safePage,
       limit: safeLimit,
       totalPages: Math.ceil(total / safeLimit),
@@ -983,7 +992,40 @@ export class AdminService {
     }
   }
 
-  async updateUserRole(uuid: string, role: UserRole) {
+  private assertCanAssignRole(actorRole: UserRole, nextRole: UserRole) {
+    if (actorRole === UserRole.SUPER_ADMIN) return;
+
+    const adminAssignableRoles = new Set<UserRole>([
+      UserRole.CLIENT,
+      UserRole.COMPANY,
+      UserRole.MANAGER,
+      UserRole.SUPPORT,
+    ]);
+    if (actorRole === UserRole.ADMIN && adminAssignableRoles.has(nextRole)) return;
+
+    throw new ForbiddenException("Only SUPER_ADMIN can assign this role");
+  }
+
+  private isAdminWorkspaceRole(role: UserRole) {
+    const adminWorkspaceRoles = new Set<UserRole>([
+      UserRole.SUPER_ADMIN,
+      UserRole.ADMIN,
+      UserRole.MANAGER,
+      UserRole.SUPPORT,
+    ]);
+    return adminWorkspaceRoles.has(role);
+  }
+
+  async updateUserRole(uuid: string, role: UserRole, actorUserId: number) {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { role: true },
+    });
+    if (!actor) {
+      throw new ForbiddenException("Actor account was not found");
+    }
+    this.assertCanAssignRole(actor.role, role);
+
     const user = await this.prisma.user.findUnique({ where: { uuid } });
     if (!user) {
       throw new NotFoundException("User not found");
@@ -1093,7 +1135,7 @@ export class AdminService {
         },
         loginEvents: {
           orderBy: { createdAt: "desc" },
-          take: 25,
+          take: 10,
           select: {
             id: true,
             ipAddress: true,
@@ -1184,6 +1226,12 @@ export class AdminService {
     if (!existing) {
       throw new NotFoundException("User not found");
     }
+    const actor = actorUserId
+      ? await this.prisma.user.findUnique({
+          where: { id: actorUserId },
+          select: { id: true, role: true, email: true },
+        })
+      : null;
 
     const updateData: Prisma.UserUpdateInput = {};
 
@@ -1191,10 +1239,36 @@ export class AdminService {
       updateData.name = dto.name.trim();
     }
     if (dto.role !== undefined) {
+      if (!actor) {
+        throw new ForbiddenException("Actor account was not found");
+      }
+      this.assertCanAssignRole(actor.role, dto.role);
       updateData.role = dto.role;
     }
     if (dto.accountStatus !== undefined) {
-      updateData.accountStatus = dto.accountStatus;
+      const nextStatus = dto.accountStatus as AccountStatus;
+      const nextStatusValue = String(dto.accountStatus);
+      const statusChanges = nextStatus !== existing.accountStatus;
+      if (statusChanges && !actor) {
+        throw new ForbiddenException("Actor account was not found");
+      }
+      if (
+        statusChanges &&
+        this.isAdminWorkspaceRole(existing.role) &&
+        actor?.role !== UserRole.SUPER_ADMIN
+      ) {
+        throw new ForbiddenException("Only SUPER_ADMIN can freeze, block or reactivate admin workspace accounts");
+      }
+      const touchesBlockedStatus =
+        nextStatusValue === "BLOCKED" ||
+        (String(existing.accountStatus) === "BLOCKED" && nextStatusValue !== "BLOCKED");
+      if (touchesBlockedStatus && actor?.role !== UserRole.SUPER_ADMIN) {
+        throw new ForbiddenException("Only SUPER_ADMIN can block or unblock accounts");
+      }
+      updateData.accountStatus = nextStatus;
+      if (nextStatus === AccountStatus.BLOCKED || nextStatus === AccountStatus.ACTIVE) {
+        updateData.deletionScheduledAt = null;
+      }
     }
     if (dto.emailVerifiedAt !== undefined) {
       updateData.emailVerifiedAt =
@@ -1209,12 +1283,21 @@ export class AdminService {
     const shouldRecordFreezeAudit =
       dto.accountStatus === AccountStatus.FROZEN_PENDING_DELETION &&
       existing.accountStatus !== AccountStatus.FROZEN_PENDING_DELETION;
+    const shouldRecordBlockAudit =
+      dto.accountStatus === AccountStatus.BLOCKED &&
+      existing.accountStatus !== AccountStatus.BLOCKED;
 
     try {
       await this.prisma.user.update({
         where: { uuid },
         data: updateData,
       });
+      if (dto.accountStatus === AccountStatus.BLOCKED) {
+        await this.prisma.refreshToken.updateMany({
+          where: { userId: existing.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -1240,14 +1323,103 @@ export class AdminService {
         tags: ["CRITICAL_ACTION", "SECURITY", "USER", "FREEZE"],
       });
     }
+    if (shouldRecordBlockAudit) {
+      await this.createAuditEvent({
+        workspace: AuditWorkspace.MANAGER,
+        category: AuditCategory.SECURITY,
+        level: AuditLevel.CRITICAL,
+        action: "Account blocked by super admin",
+        details: "User account was set to BLOCKED. All active refresh sessions were revoked.",
+        actorUserId: actorUserId ?? null,
+        targetUserId: existing.id,
+        targetLabel: existing.name,
+        targetEmail: existing.email,
+        targetUuid: existing.uuid,
+        tags: ["CRITICAL_ACTION", "SECURITY", "USER", "BLOCK"],
+      });
+    }
 
     return this.getUserByUuid(uuid);
   }
 
-  async reactivateUserAccountByUuid(uuid: string) {
-    const user = await this.prisma.user.findUnique({ where: { uuid } });
+  async blockUserAccountByUuid(uuid: string, actorUserId: number, reason?: string) {
+    const [actor, target] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: actorUserId }, select: { id: true, role: true, email: true } }),
+      this.prisma.user.findUnique({ where: { uuid }, select: { id: true, uuid: true, email: true, name: true, role: true, accountStatus: true } }),
+    ]);
+    if (!actor || actor.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException("Only SUPER_ADMIN can block accounts");
+    }
+    if (!target) {
+      throw new NotFoundException("User not found");
+    }
+    if (target.id === actor.id) {
+      throw new BadRequestException("You cannot block your own super admin account");
+    }
+
+    const cleanReason = reason?.trim().slice(0, 1000) || "No reason provided.";
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { uuid },
+        data: {
+          accountStatus: AccountStatus.BLOCKED,
+          deletionScheduledAt: null,
+        },
+        select: {
+          uuid: true,
+          email: true,
+          name: true,
+          role: true,
+          accountStatus: true,
+          updatedAt: true,
+        },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: target.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.auditEvent.create({
+        data: {
+          workspace: AuditWorkspace.MANAGER,
+          category: AuditCategory.SECURITY,
+          level: AuditLevel.CRITICAL,
+          action: "Account blocked by super admin",
+          details: cleanReason,
+          actorUserId: actor.id,
+          actorLabel: actor.email,
+          targetUserId: target.id,
+          targetLabel: target.name,
+          targetEmail: target.email,
+          targetUuid: target.uuid,
+          tags: ["CRITICAL_ACTION", "SECURITY", "USER", "BLOCK"],
+          result: AuditResult.BLOCKED,
+        },
+      });
+      return user;
+    });
+
+    return {
+      ...updated,
+      realtime: {
+        event: "account_blocked",
+        requiredClientAction: "clear_tokens_and_lock_screen",
+      },
+    };
+  }
+
+  async reactivateUserAccountByUuid(uuid: string, actorUserId: number) {
+    const [user, actor] = await Promise.all([
+      this.prisma.user.findUnique({ where: { uuid } }),
+      this.prisma.user.findUnique({ where: { id: actorUserId }, select: { role: true } }),
+    ]);
     if (!user) {
       throw new NotFoundException("User not found");
+    }
+    if (!actor) {
+      throw new ForbiddenException("Actor account was not found");
+    }
+    if (this.isAdminWorkspaceRole(user.role) && actor.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException("Only SUPER_ADMIN can reactivate admin workspace accounts");
     }
     return this.prisma.user.update({
       where: { uuid },
@@ -1806,6 +1978,28 @@ export class AdminService {
     };
   }
 
+  private mapPickedCompanyAddress(dto: UpsertCompanyLocationDto) {
+    if (dto.latitude == null || dto.longitude == null) return null;
+    const latitude = Number(dto.latitude);
+    const longitude = Number(dto.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new BadRequestException("Map coordinates are invalid.");
+    }
+    return {
+      latitude,
+      longitude,
+      precision: "manual",
+      formattedAddress: dto.address.trim(),
+      raw: {
+        source: "admin-map-picker",
+        latitude,
+        longitude,
+        address: dto.address.trim(),
+        city: dto.city?.trim() || null,
+      } as Prisma.InputJsonValue,
+    };
+  }
+
   private async ensureSingleMainLocation(companyId: number, locationId: number) {
     await this.prisma.companyLocation.updateMany({
       where: { companyId, id: { not: locationId } },
@@ -1855,7 +2049,7 @@ export class AdminService {
       throw new BadRequestException("Company profile must exist before adding locations.");
     }
     const address = dto.address.trim();
-    const geocoded = await this.geocodeCompanyAddress(address);
+    const geocoded = this.mapPickedCompanyAddress(dto) ?? (await this.geocodeCompanyAddress(address));
     await this.assertUniqueCompanyLocationAddress(user.managedCompany.id, geocoded.formattedAddress);
     const openTime = dto.openTime ?? "09:00";
     const closeTime = dto.closeTime ?? "21:00";
@@ -1900,7 +2094,7 @@ export class AdminService {
     }
 
     const nextAddress = dto.address.trim();
-    const geocoded = nextAddress !== existing.address ? await this.geocodeCompanyAddress(nextAddress) : null;
+    const geocoded = this.mapPickedCompanyAddress(dto) ?? (nextAddress !== existing.address ? await this.geocodeCompanyAddress(nextAddress) : null);
     const nextFormattedAddress = geocoded?.formattedAddress ?? nextAddress;
     await this.assertUniqueCompanyLocationAddress(user.managedCompany.id, nextFormattedAddress, existing.id);
     const openTime = dto.openTime ?? existing.openTime;

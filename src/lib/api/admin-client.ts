@@ -7,13 +7,19 @@ export type AdminUserRow = {
   email: string;
   name: string;
   role: AdminRole;
-  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION";
+  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
   createdAt: string;
 };
 
 export type AdminUsersResponse = {
   items: AdminUserRow[];
   total: number;
+  summary?: {
+    totalUsers: number;
+    activeUsers: number;
+    adminUsers: number;
+    blockedUsers: number;
+  };
   page: number;
   limit: number;
   totalPages: number;
@@ -302,7 +308,7 @@ export type AdminCompanyUser = {
   name: string;
   email: string;
   role: "COMPANY";
-  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION";
+  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
   emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -341,7 +347,7 @@ export type AdminCompanyClientRow = {
   userUuid: string;
   name: string;
   email: string;
-  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION";
+  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
   userCreatedAt: string;
   linkCreatedAt: string;
   linkUpdatedAt: string;
@@ -480,7 +486,7 @@ export type AdminUserDetail = {
   name: string;
   email: string;
   role: AdminRole;
-  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION";
+  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
   emailVerifiedAt: string | null;
   deletionScheduledAt: string | null;
   createdAt: string;
@@ -591,7 +597,7 @@ export type AdminUserDetail = {
 export type AdminUpdateUserInput = {
   name?: string;
   role?: AdminRole;
-  accountStatus?: "ACTIVE" | "FROZEN_PENDING_DELETION";
+  accountStatus?: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
   emailVerifiedAt?: string | null;
   createdAt?: string | null;
 };
@@ -817,7 +823,7 @@ export async function adminGetCompanyUser(uuid: string) {
 
 export async function adminUpdateCompanyUser(uuid: string, input: {
   name?: string;
-  accountStatus?: "ACTIVE" | "FROZEN_PENDING_DELETION";
+  accountStatus?: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
   emailVerifiedAt?: string | null;
   createdAt?: string | null;
 }) {
@@ -849,6 +855,8 @@ export async function adminCreateCompanyLocation(uuid: string, input: {
   title?: string;
   address: string;
   city?: string;
+  latitude?: number;
+  longitude?: number;
   openTime?: string;
   closeTime?: string;
   workingDays?: number[];
@@ -872,6 +880,8 @@ export async function adminUpdateCompanyLocation(uuid: string, locationUuid: str
   title?: string;
   address: string;
   city?: string;
+  latitude?: number;
+  longitude?: number;
   openTime?: string;
   closeTime?: string;
   workingDays?: number[];

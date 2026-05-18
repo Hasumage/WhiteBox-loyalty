@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { adminListCompanyUsers, type AdminCompanyUser } from "@/lib/api/admin-client";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 export default function AdminCompaniesPage() {
+  const { t } = useI18n("ru");
   const [query, setQuery] = useState("");
   const [companies, setCompanies] = useState<AdminCompanyUser[]>([]);
 
@@ -28,32 +30,32 @@ export default function AdminCompaniesPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Companies</h1>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("admin.companies.title")}</h1>
       <Card className="glass border-white/10">
         <CardHeader>
-          <CardTitle className="text-base">Company accounts directory</CardTitle>
+          <CardTitle className="text-base">{t("admin.companies.directoryTitle")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="mb-3 flex flex-col gap-2 sm:flex-row">
             <Input
-              placeholder="Search companies by name, email, uuid"
+              placeholder={t("admin.companies.searchPlaceholder")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
             <Button variant="secondary" onClick={() => void load()} className="sm:min-w-28">
-              Search
+              {t("admin.companies.search")}
             </Button>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-[900px] w-full text-sm">
               <thead>
                 <tr className="text-left text-muted-foreground">
-                  <th className="py-2">Account</th>
-                  <th>Email</th>
-                  <th>UUID</th>
-                  <th>Status</th>
-                  <th>Company profile</th>
-                  <th className="text-right">Actions</th>
+                  <th className="py-2">{t("admin.companies.account")}</th>
+                  <th>{t("admin.companies.email")}</th>
+                  <th>{t("admin.companies.uuid")}</th>
+                  <th>{t("admin.companies.status")}</th>
+                  <th>{t("admin.companies.companyProfile")}</th>
+                  <th className="text-right">{t("admin.companies.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -63,10 +65,10 @@ export default function AdminCompaniesPage() {
                     <td className="whitespace-nowrap">{c.email}</td>
                     <td className="font-mono text-xs">{c.uuid}</td>
                     <td>{c.accountStatus}</td>
-                    <td>{c.managedCompany ? c.managedCompany.name : "Not configured"}</td>
+                    <td>{c.managedCompany ? c.managedCompany.name : t("admin.companies.notConfigured")}</td>
                     <td className="text-right">
                       <Button asChild variant="secondary" size="sm">
-                        <Link href={`/admin/companies/${c.uuid}`}>Manage</Link>
+                        <Link href={`/admin/companies/${c.uuid}`}>{t("admin.companies.manage")}</Link>
                       </Button>
                     </td>
                   </tr>
@@ -75,7 +77,7 @@ export default function AdminCompaniesPage() {
             </table>
           </div>
           {companies.length === 0 && (
-            <p className="pt-4 text-sm text-muted-foreground">No company accounts found.</p>
+            <p className="pt-4 text-sm text-muted-foreground">{t("admin.companies.empty")}</p>
           )}
         </CardContent>
       </Card>

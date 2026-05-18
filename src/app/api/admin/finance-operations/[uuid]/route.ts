@@ -20,10 +20,22 @@ export async function PATCH(
 
   const actor = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, role: true, email: true },
+    select: {
+      id: true,
+      role: true,
+      email: true,
+      permissions: {
+        where: { scope: "FINANCE" },
+        select: { canApprove: true },
+      },
+    },
   });
-  if (!actor || !["SUPER_ADMIN", "ADMIN"].includes(actor.role)) {
-    return NextResponse.json({ message: "Only SUPER_ADMIN can approve or process finance operations" }, { status: 403 });
+  const canApprove =
+    actor?.role === "SUPER_ADMIN" ||
+    actor?.role === "ADMIN" ||
+    Boolean(actor?.permissions[0]?.canApprove);
+  if (!actor || !canApprove) {
+    return NextResponse.json({ message: "Finance approval is not allowed" }, { status: 403 });
   }
 
   const uuid = await readUuid(context.params);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { persistLocale, readClientLocale } from "./client";
+import { LOCALE_CHANGE_EVENT, persistLocale, readClientLocale } from "./client";
 import { translate, type TranslationKey } from "./dictionary";
 import { isLocale, type Locale } from "./shared";
 
@@ -23,6 +23,26 @@ export function useI18n(fallback: Locale = "en") {
       active = false;
     };
   }, [fallback]);
+
+  useEffect(() => {
+    function handleLocaleChange(event: Event) {
+      const nextLocale = (event as CustomEvent<unknown>).detail;
+      if (isLocale(nextLocale)) setLocaleState(nextLocale);
+    }
+
+    function handleStorageChange(event: StorageEvent) {
+      if (event.key === "wb_locale" && isLocale(event.newValue)) {
+        setLocaleState(event.newValue);
+      }
+    }
+
+    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    window.addEventListener("storage", handleStorageChange);
+    return () => {
+      window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
 
   const setLocale = useCallback(async (nextLocale: Locale) => {
     setLocaleState(nextLocale);

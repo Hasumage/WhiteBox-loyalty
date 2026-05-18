@@ -74,6 +74,30 @@ export function getAccessToken(): string | null {
   return localStorage.getItem(STORAGE_ACCESS);
 }
 
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(STORAGE_REFRESH);
+}
+
+export async function refreshStoredSession(): Promise<AuthTokensResponse | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  const res = await fetch(`${apiBase()}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.accessToken) {
+    clearStoredSession();
+    return null;
+  }
+
+  setStoredSession(data as AuthTokensResponse);
+  return data as AuthTokensResponse;
+}
+
 export async function register(body: {
   name: string;
   email: string;

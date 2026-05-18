@@ -8,13 +8,41 @@ async function actorFromSession(session: Awaited<ReturnType<typeof requireAdminS
   if (isAuthResponse(session)) return null;
   return prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, uuid: true, role: true, email: true, name: true },
+    select: {
+      id: true,
+      uuid: true,
+      role: true,
+      email: true,
+      name: true,
+      permissions: {
+        where: { scope: "FINANCE" },
+        select: { canView: true, canEdit: true, canApprove: true },
+      },
+    },
   });
+}
+
+function financeAccess(actor: Awaited<ReturnType<typeof actorFromSession>>) {
+  const explicit = actor?.permissions[0];
+  const defaults = {
+    canView: actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN" || actor?.role === "MANAGER",
+    canEdit: actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN" || actor?.role === "MANAGER",
+    canApprove: actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN",
+  };
+  return {
+    canView: defaults.canView || Boolean(explicit?.canView),
+    canEdit: defaults.canEdit || Boolean(explicit?.canEdit),
+    canApprove: defaults.canApprove || Boolean(explicit?.canApprove),
+  };
 }
 
 export async function GET(request: NextRequest) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
+  const actor = await actorFromSession(session);
+  if (!financeAccess(actor).canView) {
+    return NextResponse.json({ message: "Finance access is not allowed" }, { status: 403 });
+  }
 
   const items = await prisma.financeOperation.findMany({
     orderBy: { createdAt: "desc" },
@@ -34,8 +62,8 @@ export async function POST(request: NextRequest) {
   if (isAuthResponse(session)) return session;
 
   const actor = await actorFromSession(session);
-  if (!actor || !["SUPER_ADMIN", "ADMIN", "MANAGER"].includes(actor.role)) {
-    return NextResponse.json({ message: "Only managers and super admins can create payout requests" }, { status: 403 });
+  if (!actor || !financeAccess(actor).canEdit) {
+    return NextResponse.json({ message: "Finance request creation is not allowed" }, { status: 403 });
   }
 
   const body = (await request.json().catch(() => ({}))) as {

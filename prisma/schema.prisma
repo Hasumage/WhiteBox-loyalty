@@ -30,6 +30,7 @@ enum UserRole {
 enum AccountStatus {
   ACTIVE
   FROZEN_PENDING_DELETION
+  BLOCKED
 }
 
 enum LoyaltyTransactionType {

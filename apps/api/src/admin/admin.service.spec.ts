@@ -1,5 +1,5 @@
-import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
-import { UserRole } from "@prisma/client";
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import { AccountStatus, UserRole } from "@prisma/client";
 import { AdminService } from "./admin.service";
 
 describe("AdminService", () => {
@@ -37,6 +37,16 @@ describe("AdminService", () => {
       deleteMany: jest.Mock;
       createMany: jest.Mock;
       findMany: jest.Mock;
+    };
+    companyLocation: {
+      findMany: jest.Mock;
+      count: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+      findUnique: jest.Mock;
+      delete: jest.Mock;
+      findFirst: jest.Mock;
     };
     userCompany: {
       findMany: jest.Mock;
@@ -108,6 +118,16 @@ describe("AdminService", () => {
         deleteMany: jest.fn(),
         createMany: jest.fn(),
         findMany: jest.fn(),
+      },
+      companyLocation: {
+        findMany: jest.fn(),
+        count: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+        findUnique: jest.fn(),
+        delete: jest.fn(),
+        findFirst: jest.fn(),
       },
       userCompany: {
         findMany: jest.fn(),
@@ -218,6 +238,11 @@ describe("AdminService", () => {
         uuid: "u-11",
       })
       .mockResolvedValueOnce({
+        id: 1,
+        role: UserRole.SUPER_ADMIN,
+        email: "super@example.com",
+      })
+      .mockResolvedValueOnce({
         id: 11,
         uuid: "u-11",
         telegramId: null,
@@ -245,7 +270,7 @@ describe("AdminService", () => {
       name: " Jane Updated ",
       role: UserRole.ADMIN,
       emailVerifiedAt: "2026-01-02T00:00:00.000Z",
-    });
+    }, 1);
 
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -258,6 +283,87 @@ describe("AdminService", () => {
       }),
     );
     expect(result.uuid).toBe("u-11");
+  });
+
+  it("updateUserRole allows ADMIN to assign support roles", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 1, role: UserRole.ADMIN })
+      .mockResolvedValueOnce({ id: 2, uuid: "u-2" });
+    prisma.user.update.mockResolvedValue({
+      uuid: "u-2",
+      email: "support@example.com",
+      name: "Support",
+      role: UserRole.SUPPORT,
+      updatedAt: new Date(),
+    });
+
+    const result = await service.updateUserRole("u-2", UserRole.SUPPORT, 1);
+
+    expect(result.role).toBe(UserRole.SUPPORT);
+  });
+
+  it("updateUserRole blocks ADMIN from assigning SUPER_ADMIN", async () => {
+    prisma.user.findUnique.mockResolvedValueOnce({ id: 1, role: UserRole.ADMIN });
+
+    await expect(service.updateUserRole("u-2", UserRole.SUPER_ADMIN, 1)).rejects.toThrow(
+      "Only SUPER_ADMIN",
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("updateUserByUuid blocks ADMIN from freezing another admin workspace account", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 2,
+        uuid: "u-admin",
+        role: UserRole.ADMIN,
+        accountStatus: "ACTIVE",
+      })
+      .mockResolvedValueOnce({
+        id: 1,
+        role: UserRole.ADMIN,
+        email: "admin@example.com",
+      });
+
+    await expect(
+      service.updateUserByUuid(
+        "u-admin",
+        { accountStatus: AccountStatus.FROZEN_PENDING_DELETION },
+        1,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("blockUserAccountByUuid requires SUPER_ADMIN and revokes refresh sessions", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 1, role: UserRole.SUPER_ADMIN, email: "super@example.com" })
+      .mockResolvedValueOnce({
+        id: 2,
+        uuid: "u-2",
+        email: "target@example.com",
+        name: "Target",
+        accountStatus: "ACTIVE",
+      });
+    prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
+    prisma.user.update.mockResolvedValue({
+      uuid: "u-2",
+      email: "target@example.com",
+      name: "Target",
+      role: UserRole.CLIENT,
+      accountStatus: "BLOCKED",
+      updatedAt: new Date(),
+    });
+    prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
+    prisma.auditEvent.create.mockResolvedValue({ id: "audit-1" });
+
+    const result = await service.blockUserAccountByUuid("u-2", 1, "Risk confirmed");
+
+    expect(result.accountStatus).toBe("BLOCKED");
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ userId: 2 }) }),
+    );
+    expect(prisma.auditEvent.create).toHaveBeenCalled();
   });
 
   it("requestEmailChange creates request and returns preview", async () => {
@@ -274,7 +380,9 @@ describe("AdminService", () => {
   });
 
   it("reactivateUserAccountByUuid resets deletion schedule", async () => {
-    prisma.user.findUnique.mockResolvedValue({ id: 1, uuid: "u-1" });
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 1, uuid: "u-1", role: UserRole.CLIENT })
+      .mockResolvedValueOnce({ role: UserRole.ADMIN });
     prisma.user.update.mockResolvedValue({
       uuid: "u-1",
       accountStatus: "ACTIVE",
@@ -282,7 +390,7 @@ describe("AdminService", () => {
       updatedAt: new Date(),
     });
 
-    const result = await service.reactivateUserAccountByUuid("u-1");
+    const result = await service.reactivateUserAccountByUuid("u-1", 2);
 
     expect(result.accountStatus).toBe("ACTIVE");
     expect(prisma.user.update).toHaveBeenCalledWith(
@@ -491,6 +599,58 @@ describe("AdminService", () => {
         pointsPerReward: 0,
       } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("createCompanyLocation stores manually picked map coordinates without geocoding", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 20,
+      uuid: "company-map-user",
+      role: UserRole.COMPANY,
+      managedCompany: { id: 501 },
+    });
+    prisma.companyLocation.findMany.mockResolvedValue([]);
+    prisma.companyLocation.count.mockResolvedValue(0);
+    prisma.companyLocation.create.mockImplementation(async ({ data }) => ({
+      id: 701,
+      uuid: "location-701",
+      ...data,
+      createdAt: new Date("2026-05-19T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-19T00:00:00.000Z"),
+    }));
+    prisma.companyLocation.updateMany.mockResolvedValue({ count: 0 });
+
+    const result = await service.createCompanyLocation("company-map-user", {
+      title: "Front door",
+      address: "Россия, Москва, Тверская улица, 7",
+      city: "Москва",
+      latitude: 55.761111,
+      longitude: 37.609222,
+      openTime: "10:00",
+      closeTime: "22:00",
+      workingDays: [1, 2, 3, 4, 5],
+      isMain: true,
+    });
+
+    const createCall = prisma.companyLocation.create.mock.calls[0][0];
+    expect(createCall.data).toMatchObject({
+      companyId: 501,
+      title: "Front door",
+      address: "Россия, Москва, Тверская улица, 7",
+      city: "Москва",
+      precision: "manual",
+      openTime: "10:00",
+      closeTime: "22:00",
+      workingDays: [1, 2, 3, 4, 5],
+      isMain: true,
+      isActive: true,
+    });
+    expect(createCall.data.latitude.toString()).toBe("55.761111");
+    expect(createCall.data.longitude.toString()).toBe("37.609222");
+    expect(createCall.data.geocoderResponse).toMatchObject({
+      source: "admin-map-picker",
+      address: "Россия, Москва, Тверская улица, 7",
+    });
+    expect(result.uuid).toBe("location-701");
   });
 
   it("listCompanyClients returns paginated rows and level by spent", async () => {

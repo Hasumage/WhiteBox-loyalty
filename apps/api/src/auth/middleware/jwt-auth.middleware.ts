@@ -6,6 +6,7 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { UserRole } from "@prisma/client";
 import type { NextFunction, Request, Response } from "express";
+import { PrismaService } from "../../prisma/prisma.service";
 import type { JwtPayload } from "../strategies/jwt.strategy";
 
 /**
@@ -20,9 +21,10 @@ export class JwtAuthMiddleware implements NestMiddleware {
   constructor(
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  use(req: Request, res: Response, next: NextFunction) {
+  async use(req: Request, res: Response, next: NextFunction) {
     const authHeader = req.headers.authorization;
     const token =
       typeof authHeader === "string" && authHeader.startsWith("Bearer ")
@@ -40,10 +42,33 @@ export class JwtAuthMiddleware implements NestMiddleware {
     try {
       const secret = this.config.getOrThrow<string>("JWT_SECRET");
       const payload = this.jwt.verify<JwtPayload>(token, { secret });
+      const user = await this.prisma.user.findUnique({
+        where: { id: Number(payload.sub) },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          accountStatus: true,
+        },
+      });
+      if (!user) {
+        return res.status(401).json({
+          statusCode: 401,
+          message: "Unauthorized",
+          error: "User not found",
+        });
+      }
+      if (user.accountStatus === "BLOCKED") {
+        return res.status(423).json({
+          statusCode: 423,
+          message: "Account blocked",
+          error: "This account is blocked by an administrator",
+        });
+      }
       req.user = {
-        userId: Number(payload.sub),
-        email: payload.email,
-        role: payload.role as UserRole,
+        userId: user.id,
+        email: user.email,
+        role: user.role as UserRole,
       };
       next();
     } catch {

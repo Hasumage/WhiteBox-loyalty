@@ -53,10 +53,12 @@ import {
   type AdminCompanyLocation,
   type AdminCompanySubscription,
 } from "@/lib/api/admin-client";
+import type { TranslationKey } from "@/lib/i18n/dictionary";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 type CompanyForm = {
   name: string;
-  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION";
+  accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
   emailVerifiedAt: string;
   createdAt: string;
 };
@@ -105,47 +107,52 @@ type SaveOptions = {
 const SUBSCRIPTION_POLICY_OPTIONS = [
   {
     key: "EXCLUDE" as const,
-    title: "Exclude subscriptions",
-    description: "Subscription purchases do not affect level progress and do not grant cashback.",
-    badge: "Safe default",
+    titleKey: "admin.companyDetail.policyExcludeTitle",
+    descriptionKey: "admin.companyDetail.policyExcludeDescription",
+    badgeKey: "admin.companyDetail.policyExcludeBadge",
   },
   {
     key: "INCLUDE_NO_BONUS" as const,
-    title: "Count spend only",
-    description: "Subscription purchases increase level progress, but cashback is not granted.",
-    badge: "Balanced",
+    titleKey: "admin.companyDetail.policySpendOnlyTitle",
+    descriptionKey: "admin.companyDetail.policySpendOnlyDescription",
+    badgeKey: "admin.companyDetail.policySpendOnlyBadge",
   },
   {
     key: "INCLUDE_WITH_BONUS" as const,
-    title: "Count spend + cashback",
-    description: "Subscription purchases affect both level progress and cashback accrual.",
-    badge: "Most generous",
+    titleKey: "admin.companyDetail.policySpendCashbackTitle",
+    descriptionKey: "admin.companyDetail.policySpendCashbackDescription",
+    badgeKey: "admin.companyDetail.policySpendCashbackBadge",
   },
-];
+] satisfies Array<{
+  key: "EXCLUDE" | "INCLUDE_NO_BONUS" | "INCLUDE_WITH_BONUS";
+  titleKey: TranslationKey;
+  descriptionKey: TranslationKey;
+  badgeKey: TranslationKey;
+}>;
 
 const SECTION_META = [
   {
     key: "account",
-    title: "Account",
-    description: "Identity and lifecycle",
+    titleKey: "admin.companyDetail.sectionAccount",
+    descriptionKey: "admin.companyDetail.sectionAccountDescription",
     icon: ShieldAlert,
   },
   {
     key: "profile",
-    title: "Profile",
-    description: "Brand and rewards",
+    titleKey: "admin.companyDetail.sectionProfile",
+    descriptionKey: "admin.companyDetail.sectionProfileDescription",
     icon: Building2,
   },
   {
     key: "locations",
-    title: "Locations",
-    description: "Addresses and map points",
+    titleKey: "admin.companyDetail.sectionLocations",
+    descriptionKey: "admin.companyDetail.sectionLocationsDescription",
     icon: MapPin,
   },
   {
     key: "subscriptions",
-    title: "Subscriptions",
-    description: "Plans and offers",
+    titleKey: "admin.companyDetail.sectionSubscriptions",
+    descriptionKey: "admin.companyDetail.sectionSubscriptionsDescription",
     icon: CircleDollarSign,
   },
 ] as const;
@@ -153,13 +160,13 @@ const SECTION_META = [
 type SectionKey = (typeof SECTION_META)[number]["key"];
 
 const WEEKDAY_OPTIONS = [
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-  { value: 0, label: "Sun" },
+  { value: 1, labelKey: "admin.companyDetail.weekdayMon" },
+  { value: 2, labelKey: "admin.companyDetail.weekdayTue" },
+  { value: 3, labelKey: "admin.companyDetail.weekdayWed" },
+  { value: 4, labelKey: "admin.companyDetail.weekdayThu" },
+  { value: 5, labelKey: "admin.companyDetail.weekdayFri" },
+  { value: 6, labelKey: "admin.companyDetail.weekdaySat" },
+  { value: 0, labelKey: "admin.companyDetail.weekdaySun" },
 ];
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -212,7 +219,18 @@ function normalizeLevelRules(
   return mapped.length > 0 ? mapped : [{ levelName: "Bronze", minTotalSpend: 0, cashbackPercent: 0 }];
 }
 
+function statusLabel(value: string, t: (key: TranslationKey) => string) {
+  if (value === "ACTIVE") return t("admin.companyDetail.statusActive");
+  if (value === "INACTIVE") return t("admin.companyDetail.statusInactive");
+  if (value === "FROZEN_PENDING_DELETION") return t("admin.companyDetail.statusFrozen");
+  if (value === "BLOCKED") return t("admin.companyDetail.statusBlocked");
+  if (value === "MAIN") return t("admin.companyDetail.statusMain");
+  if (value === "BRANCH") return t("admin.companyDetail.statusBranch");
+  return value;
+}
+
 export default function AdminCompanyProfilePage() {
+  const { t } = useI18n("ru");
   const params = useParams<{ uuid: string }>();
   const companyUserUuid = params.uuid;
 
@@ -319,7 +337,7 @@ export default function AdminCompanyProfilePage() {
       const [userRes, cats] = await Promise.all([adminGetCompanyUser(companyUserUuid), adminListCategories()]);
       setCategories(cats);
       if (!userRes.ok) {
-        setError(`Cannot load company user (${userRes.status}): ${userRes.message}`);
+        setError(`${t("admin.companyDetail.loadUserFailed")} (${userRes.status}): ${userRes.message}`);
         setLoading(false);
         return;
       }
@@ -390,7 +408,7 @@ export default function AdminCompanyProfilePage() {
         ),
       );
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Cannot load company profile.");
+      setError(loadError instanceof Error ? loadError.message : t("admin.companyDetail.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -404,7 +422,7 @@ export default function AdminCompanyProfilePage() {
         if (ignore) return;
         setCategories(cats);
         if (!userRes.ok) {
-          setError(`Cannot load company user (${userRes.status}): ${userRes.message}`);
+          setError(`${t("admin.companyDetail.loadUserFailed")} (${userRes.status}): ${userRes.message}`);
           setLoading(false);
           return;
         }
@@ -478,7 +496,7 @@ export default function AdminCompanyProfilePage() {
         setLoading(false);
       } catch (loadError) {
         if (ignore) return;
-        setError(loadError instanceof Error ? loadError.message : "Cannot load company profile.");
+        setError(loadError instanceof Error ? loadError.message : t("admin.companyDetail.loadFailed"));
         setLoading(false);
       }
     })();
@@ -499,7 +517,7 @@ export default function AdminCompanyProfilePage() {
       setError(String(res.message));
       return false;
     }
-    if (!options?.silent) setNotice("Company user account updated.");
+    if (!options?.silent) setNotice(t("admin.companyDetail.accountUpdated"));
     setError(null);
     if (!options?.skipReload) await load();
     return true;
@@ -509,7 +527,7 @@ export default function AdminCompanyProfilePage() {
     if (!companyForm) return;
     const categoryIds = companyForm.categoryIds.filter((id) => Number.isInteger(id) && id > 0);
     if (categoryIds.length === 0) {
-      setError("Select at least one company category.");
+      setError(t("admin.companyDetail.selectCategoryError"));
       return false;
     }
     const sortedLevelRules = [...companyForm.levelRules].sort(
@@ -518,7 +536,7 @@ export default function AdminCompanyProfilePage() {
     for (let i = 1; i < sortedLevelRules.length; i += 1) {
       if (Number(sortedLevelRules[i].cashbackPercent) < Number(sortedLevelRules[i - 1].cashbackPercent)) {
         setError(
-          "Cashback percent cannot be higher on lower levels. Keep cashback increasing by level.",
+          t("admin.companyDetail.cashbackOrderError"),
         );
         return false;
       }
@@ -532,7 +550,7 @@ export default function AdminCompanyProfilePage() {
       pointsPerReward: Math.max(1, Number(companyForm.pointsPerReward || 1)),
       subscriptionSpendPolicy: companyForm.subscriptionSpendPolicy,
       levelRules: companyForm.levelRules.map((rule) => ({
-        levelName: rule.levelName.trim() || "Level",
+        levelName: rule.levelName.trim() || t("admin.companyDetail.levelFallback"),
         minTotalSpend: Number(rule.minTotalSpend || 0),
         cashbackPercent: Number(rule.cashbackPercent || 0),
       })),
@@ -542,7 +560,7 @@ export default function AdminCompanyProfilePage() {
       setError(String(res.message));
       return false;
     }
-    if (!options?.silent) setNotice("Company profile saved.");
+    if (!options?.silent) setNotice(t("admin.companyDetail.profileSaved"));
     setError(null);
     if (!options?.skipReload) await load();
     return true;
@@ -575,7 +593,7 @@ export default function AdminCompanyProfilePage() {
       categoryId: "",
     });
     setError(null);
-    setNotice("Subscription created.");
+    setNotice(t("admin.companyDetail.subscriptionCreated"));
     await load();
   }
 
@@ -597,7 +615,7 @@ export default function AdminCompanyProfilePage() {
       return false;
     }
     setError(null);
-    if (!options?.silent) setNotice("Subscription updated.");
+    if (!options?.silent) setNotice(t("admin.companyDetail.subscriptionUpdated"));
     if (!options?.skipReload) await load();
     return true;
   }
@@ -609,7 +627,7 @@ export default function AdminCompanyProfilePage() {
       return;
     }
     setError(null);
-    setNotice("Subscription deleted.");
+    setNotice(t("admin.companyDetail.subscriptionDeleted"));
     await load();
   }
 
@@ -626,7 +644,7 @@ export default function AdminCompanyProfilePage() {
 
   async function createLocation() {
     if (!locationDraft.address.trim()) {
-      setError("Location address is required.");
+      setError(t("admin.companyDetail.locationAddressRequired"));
       return;
     }
     setLocationSaving(true);
@@ -646,7 +664,7 @@ export default function AdminCompanyProfilePage() {
       return;
     }
     setError(null);
-    setNotice("Location geocoded and saved.");
+    setNotice(t("admin.companyDetail.locationSaved"));
     setLocationDraft({ title: "", address: "", city: "Moscow", openTime: "09:00", closeTime: "21:00", workingDays: DEFAULT_WORKING_DAYS, isMain: false });
     await load();
   }
@@ -669,7 +687,7 @@ export default function AdminCompanyProfilePage() {
       return;
     }
     setError(null);
-    setNotice("Location geocoded and updated.");
+    setNotice(t("admin.companyDetail.locationUpdated"));
     await load();
   }
 
@@ -682,7 +700,7 @@ export default function AdminCompanyProfilePage() {
       return;
     }
     setError(null);
-    setNotice("Location deleted.");
+    setNotice(t("admin.companyDetail.locationDeleted"));
     await load();
   }
 
@@ -734,7 +752,7 @@ export default function AdminCompanyProfilePage() {
           })),
       ),
     );
-    setNotice("All local edits discarded.");
+    setNotice(t("admin.companyDetail.discarded"));
     setError(null);
   }
 
@@ -793,7 +811,7 @@ export default function AdminCompanyProfilePage() {
     }
 
     await load();
-    setNotice("All changes saved.");
+    setNotice(t("admin.companyDetail.allSaved"));
   }
 
   if (error && !accountForm && !companyForm) {
@@ -801,17 +819,17 @@ export default function AdminCompanyProfilePage() {
       <Card className="glass border-destructive/30">
         <CardContent className="space-y-4 py-6">
           <div className="space-y-1">
-            <p className="text-base font-semibold text-destructive">Cannot load company profile</p>
+            <p className="text-base font-semibold text-destructive">{t("admin.companyDetail.loadFailedTitle")}</p>
             <p className="text-sm text-muted-foreground">{error}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => void load()}>
-              Retry
+              {t("admin.common.retry")}
             </Button>
             <Button asChild variant="ghost">
               <Link href="/admin/companies">
                 <ArrowLeft className="h-4 w-4" />
-                Back to companies
+                {t("admin.companyDetail.back")}
               </Link>
             </Button>
           </div>
@@ -821,7 +839,7 @@ export default function AdminCompanyProfilePage() {
   }
 
   if (loading || !accountForm || !companyForm) {
-    return <p className="text-sm text-muted-foreground">Loading company profile...</p>;
+    return <p className="text-sm text-muted-foreground">{t("admin.companyDetail.loading")}</p>;
   }
 
   return (
@@ -831,13 +849,13 @@ export default function AdminCompanyProfilePage() {
           <Button asChild variant="ghost" size="sm" className="-ml-2 w-fit">
             <Link href="/admin/companies">
               <ArrowLeft className="h-4 w-4" />
-              Back to companies
+              {t("admin.companyDetail.back")}
             </Link>
           </Button>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">Company workspace</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{t("admin.companyDetail.title")}</h1>
             <Badge variant={companyForm.isActive ? "default" : "secondary"}>
-              {companyForm.isActive ? "ACTIVE" : "INACTIVE"}
+              {companyForm.isActive ? statusLabel("ACTIVE", t) : statusLabel("INACTIVE", t)}
             </Badge>
             <Badge variant="outline">UUID: {companyUserUuid.slice(0, 8)}...</Badge>
           </div>
@@ -846,12 +864,12 @@ export default function AdminCompanyProfilePage() {
           <Button asChild variant="secondary">
             <Link href={`/admin/companies/${companyUserUuid}/clients`}>
               <Users className="h-4 w-4" />
-              Company clients
+              {t("admin.companyDetail.companyClients")}
             </Link>
           </Button>
           <Button variant="destructive" onClick={() => void removeCompanyUser()}>
             <Trash2 className="h-4 w-4" />
-            Delete company user
+            {t("admin.companyDetail.deleteCompanyUser")}
           </Button>
         </div>
       </div>
@@ -863,8 +881,8 @@ export default function AdminCompanyProfilePage() {
               <Building2 className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Company profile</p>
-              <p className="text-sm font-semibold">{companyForm.name || "Not set"}</p>
+              <p className="text-xs text-muted-foreground">{t("admin.companyDetail.companyProfile")}</p>
+              <p className="text-sm font-semibold">{companyForm.name || t("admin.companyDetail.notSet")}</p>
             </div>
           </CardContent>
         </Card>
@@ -874,7 +892,7 @@ export default function AdminCompanyProfilePage() {
               <CircleDollarSign className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Min redeem</p>
+              <p className="text-xs text-muted-foreground">{t("admin.companyDetail.minRedeem")}</p>
               <p className="text-sm font-semibold">{formatPrice(companyForm.pointsPerReward)}</p>
             </div>
           </CardContent>
@@ -885,7 +903,7 @@ export default function AdminCompanyProfilePage() {
               <ShieldCheck className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Subscriptions</p>
+              <p className="text-xs text-muted-foreground">{t("admin.companyDetail.subscriptions")}</p>
               <p className="text-sm font-semibold">{subscriptions.length}</p>
             </div>
           </CardContent>
@@ -894,7 +912,7 @@ export default function AdminCompanyProfilePage() {
 
       <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
         <Sparkles className="h-3.5 w-3.5 text-primary" />
-        Pro tip: draft all edits first, then use <span className="font-medium text-foreground">Save all</span> in the sticky bar for one clean update.
+        {t("admin.companyDetail.proTipStart")} <span className="font-medium text-foreground">{t("admin.companyDetail.saveAll")}</span> {t("admin.companyDetail.proTipEnd")}
       </div>
 
       <Card className="glass border-white/10">
@@ -911,9 +929,9 @@ export default function AdminCompanyProfilePage() {
                 onClick={() => openSection(section.key)}
               >
                 <Icon className="h-4 w-4" />
-                <span className="text-left">
-                  <span className="block text-sm font-semibold">{section.title}</span>
-                  <span className="block text-[11px] opacity-75">{section.description}</span>
+                  <span className="text-left">
+                  <span className="block text-sm font-semibold">{t(section.titleKey)}</span>
+                  <span className="block text-[11px] opacity-75">{t(section.descriptionKey)}</span>
                 </span>
               </Button>
             );
@@ -932,12 +950,12 @@ export default function AdminCompanyProfilePage() {
             <div className="space-y-1">
               <CardTitle className="inline-flex items-center gap-2 text-base">
                 <ShieldAlert className="h-4 w-4 text-primary" />
-                Company user account
+                {t("admin.companyDetail.accountTitle")}
               </CardTitle>
-              <p className="text-xs text-muted-foreground">Identity and account lifecycle fields.</p>
+              <p className="text-xs text-muted-foreground">{t("admin.companyDetail.accountDescription")}</p>
             </div>
             <div className="flex items-center gap-2">
-              {accountDirty && <Badge variant="outline">Unsaved</Badge>}
+              {accountDirty && <Badge variant="outline">{t("admin.companyDetail.unsaved")}</Badge>}
               <Button
                 variant="ghost"
                 size="sm"
@@ -955,7 +973,7 @@ export default function AdminCompanyProfilePage() {
           <div className="rounded-xl border border-white/10 bg-muted/10 p-3.5 md:p-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
-              <Label htmlFor="acc-name">Display name</Label>
+              <Label htmlFor="acc-name">{t("admin.companyDetail.displayName")}</Label>
               <Input
                 id="acc-name"
                 value={accountForm.name}
@@ -965,7 +983,7 @@ export default function AdminCompanyProfilePage() {
             <div className="space-y-2">
               <Label htmlFor="acc-status" className="inline-flex items-center gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5 text-primary" />
-                Account status
+                {t("admin.companyDetail.accountStatus")}
               </Label>
               <SelectField
                 id="acc-status"
@@ -974,12 +992,13 @@ export default function AdminCompanyProfilePage() {
                   setAccountForm((p) => (p ? { ...p, accountStatus: e.target.value as CompanyForm["accountStatus"] } : p))
                 }
               >
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="FROZEN_PENDING_DELETION">FROZEN_PENDING_DELETION</option>
+                <option value="ACTIVE">{statusLabel("ACTIVE", t)}</option>
+                <option value="FROZEN_PENDING_DELETION">{statusLabel("FROZEN_PENDING_DELETION", t)}</option>
+                <option value="BLOCKED">{statusLabel("BLOCKED", t)}</option>
               </SelectField>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="acc-email-verified">Email verified at</Label>
+              <Label htmlFor="acc-email-verified">{t("admin.companyDetail.emailVerifiedAt")}</Label>
               <Input
                 id="acc-email-verified"
                 type="datetime-local"
@@ -988,7 +1007,7 @@ export default function AdminCompanyProfilePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="acc-created-at">Created at</Label>
+              <Label htmlFor="acc-created-at">{t("admin.companyDetail.createdAt")}</Label>
               <Input
                 id="acc-created-at"
                 type="datetime-local"
@@ -1000,7 +1019,7 @@ export default function AdminCompanyProfilePage() {
           </div>
           <Button onClick={() => void saveAccount()}>
             <Save className="h-4 w-4" />
-            Save account
+            {t("admin.companyDetail.saveAccount")}
           </Button>
         </CardContent>}
       </Card>
@@ -1016,14 +1035,20 @@ export default function AdminCompanyProfilePage() {
             <div className="space-y-1">
               <CardTitle className="inline-flex items-center gap-2 text-base">
                 <MapPin className="h-4 w-4 text-primary" />
-                Locations
+                {t("admin.companyDetail.locations")}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Add real company addresses. Coordinates are resolved through Yandex Geocoder and stored in the database.
+                {t("admin.companyDetail.locationsDescription")}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline">{locations.length} saved</Badge>
+              <Button asChild variant="secondary" size="sm" onClick={(event) => event.stopPropagation()}>
+                <Link href={`/admin/companies/${companyUserUuid}/map`}>
+                  <MapPin className="h-4 w-4" />
+                  {t("admin.companyDetail.openMapPicker")}
+                </Link>
+              </Button>
+              <Badge variant="outline">{locations.length} {t("admin.companyDetail.savedCount")}</Badge>
               <Button
                 variant="ghost"
                 size="sm"
@@ -1039,37 +1064,51 @@ export default function AdminCompanyProfilePage() {
         </CardHeader>
         {sections.locations && (
           <CardContent className="space-y-4 pb-4 pt-0">
-            <div className="rounded-xl border border-white/10 bg-muted/10 p-4">
+            <div className="rounded-2xl border border-cyan-200/15 bg-gradient-to-br from-cyan-200/[0.07] via-muted/10 to-muted/5 p-4 shadow-[0_18px_70px_rgba(0,0,0,0.16)]">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="inline-flex items-center gap-2 text-sm font-semibold">
+                    <Plus className="h-4 w-4 text-cyan-100" />
+                    {t("admin.companyDetail.addLocationTitle")}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t("admin.companyDetail.addLocationHint")}</p>
+                </div>
+                {locationDraft.isMain && (
+                  <Badge variant="outline" className="border-cyan-200/40 bg-cyan-200/10 text-cyan-50">
+                    {t("admin.companyDetail.mainLocationSelected")}
+                  </Badge>
+                )}
+              </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
                 <div className="space-y-2 xl:col-span-2">
-                  <Label htmlFor="location-title">Label</Label>
+                  <Label htmlFor="location-title">{t("admin.companyDetail.locationLabel")}</Label>
                   <Input
                     id="location-title"
-                    placeholder="Main branch"
+                    placeholder={t("admin.companyDetail.locationLabelPlaceholder")}
                     value={locationDraft.title}
                     onChange={(e) => setLocationDraft((p) => ({ ...p, title: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-2 xl:col-span-2">
-                  <Label htmlFor="location-city">City</Label>
+                  <Label htmlFor="location-city">{t("admin.companyDetail.city")}</Label>
                   <Input
                     id="location-city"
-                    placeholder="Moscow"
+                    placeholder={t("admin.companyDetail.cityPlaceholder")}
                     value={locationDraft.city}
                     onChange={(e) => setLocationDraft((p) => ({ ...p, city: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-2 xl:col-span-4">
-                  <Label htmlFor="location-address">Address</Label>
+                  <Label htmlFor="location-address">{t("admin.companyDetail.address")}</Label>
                   <Input
                     id="location-address"
-                    placeholder="Moscow, Tverskaya street, 7"
+                    placeholder={t("admin.companyDetail.addressPlaceholder")}
                     value={locationDraft.address}
                     onChange={(e) => setLocationDraft((p) => ({ ...p, address: e.target.value }))}
                   />
                 </div>
-                <div className="space-y-2 xl:col-span-1">
-                  <Label htmlFor="location-open">Open</Label>
+                <div className="space-y-2 xl:col-span-2">
+                  <Label htmlFor="location-open">{t("admin.companyDetail.openTime")}</Label>
                   <Input
                     id="location-open"
                     type="time"
@@ -1077,8 +1116,8 @@ export default function AdminCompanyProfilePage() {
                     onChange={(e) => setLocationDraft((p) => ({ ...p, openTime: e.target.value }))}
                   />
                 </div>
-                <div className="space-y-2 xl:col-span-1">
-                  <Label htmlFor="location-close">Close</Label>
+                <div className="space-y-2 xl:col-span-2">
+                  <Label htmlFor="location-close">{t("admin.companyDetail.closeTime")}</Label>
                   <Input
                     id="location-close"
                     type="time"
@@ -1086,57 +1125,63 @@ export default function AdminCompanyProfilePage() {
                     onChange={(e) => setLocationDraft((p) => ({ ...p, closeTime: e.target.value }))}
                   />
                 </div>
-                <div className="flex min-w-0 items-end gap-2 xl:col-span-2">
-                  <Button
-                    type="button"
-                    variant={locationDraft.isMain ? "default" : "secondary"}
-                    onClick={() => setLocationDraft((p) => ({ ...p, isMain: !p.isMain }))}
-                    className="h-10 min-w-0 flex-1"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Main
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => void createLocation()}
-                    disabled={locationSaving || !locationDraft.address.trim()}
-                    className="h-10 min-w-0 flex-1"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add
-                  </Button>
+                <div className="space-y-2 md:col-span-2 xl:col-span-7">
+                  <Label>{t("admin.companyDetail.workingDays")}</Label>
+                  <div className="flex flex-wrap gap-1.5 rounded-xl border border-white/10 bg-background/35 p-2">
+                    {WEEKDAY_OPTIONS.map((day) => (
+                      <Button
+                        key={day.value}
+                        type="button"
+                        size="sm"
+                        variant={(locationDraft.workingDays ?? DEFAULT_WORKING_DAYS).includes(day.value) ? "default" : "secondary"}
+                        className="h-8 min-w-9 px-2 text-xs"
+                        onClick={() =>
+                          setLocationDraft((prev) => ({ ...prev, workingDays: toggleWeekday(prev.workingDays ?? DEFAULT_WORKING_DAYS, day.value) }))
+                        }
+                      >
+                        {t(day.labelKey as TranslationKey)}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {WEEKDAY_OPTIONS.map((day) => (
-                  <Button
-                    key={day.value}
-                    type="button"
-                    size="sm"
-                    variant={(locationDraft.workingDays ?? DEFAULT_WORKING_DAYS).includes(day.value) ? "default" : "secondary"}
-                    className="h-7 px-2 text-xs"
-                    onClick={() =>
-                      setLocationDraft((prev) => ({ ...prev, workingDays: toggleWeekday(prev.workingDays ?? DEFAULT_WORKING_DAYS, day.value) }))
-                    }
-                  >
-                    {day.label}
-                  </Button>
-                ))}
+                <div className="space-y-2 md:col-span-2 xl:col-span-5">
+                  <Label>{t("admin.companyDetail.locationActions")}</Label>
+                  <div className="grid gap-2 rounded-xl border border-white/10 bg-background/35 p-2 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      variant={locationDraft.isMain ? "default" : "secondary"}
+                      onClick={() => setLocationDraft((p) => ({ ...p, isMain: !p.isMain }))}
+                      className="h-10 min-w-0"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      {t("admin.companyDetail.markMainLocation")}
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => void createLocation()}
+                      disabled={locationSaving || !locationDraft.address.trim()}
+                      className="h-10 min-w-0"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {t("admin.companyDetail.addLocationButton")}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="grid gap-3">
               {locations.map((location) => (
-                <div key={location.uuid} className="rounded-xl border border-white/10 bg-muted/10 p-3">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div key={location.uuid} className="rounded-2xl border border-white/10 bg-muted/10 p-4">
+                  <div className="mb-4 grid gap-3 border-b border-white/10 pb-3 xl:grid-cols-[1fr_auto] xl:items-start">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={location.isMain ? "default" : "secondary"}>
-                        {location.isMain ? "MAIN" : "BRANCH"}
+                        {location.isMain ? statusLabel("MAIN", t) : statusLabel("BRANCH", t)}
                       </Badge>
                       <Badge variant={location.isActive ? "outline" : "secondary"}>
-                        {location.isActive ? "ACTIVE" : "INACTIVE"}
+                        {location.isActive ? statusLabel("ACTIVE", t) : statusLabel("INACTIVE", t)}
                       </Badge>
-                      {location.precision && <Badge variant="outline">precision: {location.precision}</Badge>}
+                      {location.precision && <Badge variant="outline">{t("admin.companyDetail.precision")}: {location.precision}</Badge>}
                     </div>
                     <p className="font-mono text-xs text-muted-foreground">
                       {Number(location.latitude).toFixed(6)}, {Number(location.longitude).toFixed(6)}
@@ -1144,7 +1189,7 @@ export default function AdminCompanyProfilePage() {
                   </div>
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
                     <div className="space-y-1 xl:col-span-2">
-                      <Label className="text-xs">Label</Label>
+                      <Label className="text-xs">{t("admin.companyDetail.locationLabel")}</Label>
                       <Input
                         value={location.title ?? ""}
                         onChange={(e) =>
@@ -1155,7 +1200,7 @@ export default function AdminCompanyProfilePage() {
                       />
                     </div>
                     <div className="space-y-1 xl:col-span-2">
-                      <Label className="text-xs">City</Label>
+                      <Label className="text-xs">{t("admin.companyDetail.city")}</Label>
                       <Input
                         value={location.city ?? ""}
                         onChange={(e) =>
@@ -1166,7 +1211,7 @@ export default function AdminCompanyProfilePage() {
                       />
                     </div>
                     <div className="space-y-1 xl:col-span-4">
-                      <Label className="text-xs">Address</Label>
+                      <Label className="text-xs">{t("admin.companyDetail.address")}</Label>
                       <Input
                         value={location.address}
                         onChange={(e) =>
@@ -1176,8 +1221,8 @@ export default function AdminCompanyProfilePage() {
                         }
                       />
                     </div>
-                    <div className="space-y-1 xl:col-span-1">
-                      <Label className="text-xs">Open</Label>
+                    <div className="space-y-1 xl:col-span-2">
+                      <Label className="text-xs">{t("admin.companyDetail.openTime")}</Label>
                       <Input
                         type="time"
                         value={location.openTime}
@@ -1188,8 +1233,8 @@ export default function AdminCompanyProfilePage() {
                         }
                       />
                     </div>
-                    <div className="space-y-1 xl:col-span-1">
-                      <Label className="text-xs">Close</Label>
+                    <div className="space-y-1 xl:col-span-2">
+                      <Label className="text-xs">{t("admin.companyDetail.closeTime")}</Label>
                       <Input
                         type="time"
                         value={location.closeTime}
@@ -1200,7 +1245,34 @@ export default function AdminCompanyProfilePage() {
                         }
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2 xl:col-span-2 xl:flex xl:items-end">
+                    <div className="space-y-2 md:col-span-2 xl:col-span-7">
+                      <Label className="text-xs">{t("admin.companyDetail.workingDays")}</Label>
+                      <div className="flex flex-wrap gap-1.5 rounded-xl border border-white/10 bg-background/35 p-2">
+                        {WEEKDAY_OPTIONS.map((day) => (
+                          <Button
+                            key={day.value}
+                            type="button"
+                            size="sm"
+                            variant={(location.workingDays ?? DEFAULT_WORKING_DAYS).includes(day.value) ? "default" : "secondary"}
+                            className="h-8 min-w-9 px-2 text-xs"
+                            onClick={() =>
+                              setLocations((prev) =>
+                                prev.map((item) =>
+                                  item.uuid === location.uuid
+                                    ? { ...item, workingDays: toggleWeekday(item.workingDays ?? DEFAULT_WORKING_DAYS, day.value) }
+                                    : item,
+                                ),
+                              )
+                            }
+                          >
+                            {t(day.labelKey as TranslationKey)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2 md:col-span-2 xl:col-span-5">
+                      <Label className="text-xs">{t("admin.companyDetail.locationActions")}</Label>
+                      <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-background/35 p-2">
                       <Button
                         variant={location.isMain ? "default" : "secondary"}
                         onClick={() =>
@@ -1211,9 +1283,9 @@ export default function AdminCompanyProfilePage() {
                             })),
                           )
                         }
-                        className="min-w-0 flex-1"
+                        className="min-w-0"
                       >
-                        Main
+                        {location.isMain ? t("admin.companyDetail.mainLocationSelected") : t("admin.companyDetail.markMainLocation")}
                       </Button>
                       <Button
                         variant={location.isActive ? "secondary" : "outline"}
@@ -1224,45 +1296,24 @@ export default function AdminCompanyProfilePage() {
                             ),
                           )
                         }
-                        className="min-w-0 flex-1"
+                        className="min-w-0"
                       >
-                        {location.isActive ? "Active" : "Inactive"}
+                        {location.isActive ? statusLabel("ACTIVE", t) : statusLabel("INACTIVE", t)}
                       </Button>
-                      <Button onClick={() => void saveLocation(location)} disabled={locationSaving} className="min-w-0 flex-1">
-                        Save
+                      <Button onClick={() => void saveLocation(location)} disabled={locationSaving} className="min-w-0">
+                        {t("admin.companyDetail.save")}
                       </Button>
-                      <Button variant="destructive" onClick={() => void removeLocation(location.uuid)} className="min-w-0 flex-1">
-                        Delete
+                      <Button variant="destructive" onClick={() => void removeLocation(location.uuid)} className="min-w-0">
+                        {t("admin.companyDetail.delete")}
                       </Button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {WEEKDAY_OPTIONS.map((day) => (
-                      <Button
-                        key={day.value}
-                        type="button"
-                        size="sm"
-                        variant={(location.workingDays ?? DEFAULT_WORKING_DAYS).includes(day.value) ? "default" : "secondary"}
-                        className="h-7 px-2 text-xs"
-                        onClick={() =>
-                          setLocations((prev) =>
-                            prev.map((item) =>
-                              item.uuid === location.uuid
-                                ? { ...item, workingDays: toggleWeekday(item.workingDays ?? DEFAULT_WORKING_DAYS, day.value) }
-                                : item,
-                            ),
-                          )
-                        }
-                      >
-                        {day.label}
-                      </Button>
-                    ))}
                   </div>
                 </div>
               ))}
               {locations.length === 0 && (
                 <div className="rounded-xl border border-dashed border-white/15 bg-muted/10 p-5 text-sm text-muted-foreground">
-                  No addresses yet. Add at least one address to show this company on the map.
+                  {t("admin.companyDetail.noAddresses")}
                 </div>
               )}
             </div>
@@ -1281,12 +1332,12 @@ export default function AdminCompanyProfilePage() {
             <div className="space-y-1">
               <CardTitle className="inline-flex items-center gap-2 text-base">
                 <Building2 className="h-4 w-4 text-primary" />
-                Company profile
+                {t("admin.companyDetail.companyProfile")}
               </CardTitle>
-              <p className="text-xs text-muted-foreground">Public brand info and reward settings.</p>
+              <p className="text-xs text-muted-foreground">{t("admin.companyDetail.profileDescription")}</p>
             </div>
             <div className="flex items-center gap-2">
-              {companyDirty && <Badge variant="outline">Unsaved</Badge>}
+              {companyDirty && <Badge variant="outline">{t("admin.companyDetail.unsaved")}</Badge>}
               <Button
                 variant="ghost"
                 size="sm"
@@ -1304,16 +1355,16 @@ export default function AdminCompanyProfilePage() {
           <div className="rounded-xl border border-white/10 bg-muted/10 p-3.5 md:p-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
-              <Label htmlFor="company-name">Company name</Label>
+              <Label htmlFor="company-name">{t("admin.companyDetail.companyName")}</Label>
               <Input
                 id="company-name"
-                placeholder="Company name"
+                placeholder={t("admin.companyDetail.companyName")}
                 value={companyForm.name}
                 onChange={(e) => setCompanyForm((p) => (p ? { ...p, name: e.target.value } : p))}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="company-slug">Slug</Label>
+              <Label htmlFor="company-slug">{t("admin.companyDetail.slug")}</Label>
               <Input
                 id="company-slug"
                 placeholder="company-slug"
@@ -1322,10 +1373,10 @@ export default function AdminCompanyProfilePage() {
               />
             </div>
             <div className="space-y-2 xl:col-span-2">
-              <Label htmlFor="company-description">Description</Label>
+              <Label htmlFor="company-description">{t("admin.companyDetail.description")}</Label>
               <Textarea
                 id="company-description"
-                placeholder="Brief description"
+                placeholder={t("admin.companyDetail.descriptionPlaceholder")}
                 rows={2}
                 className="max-h-48"
                 value={companyForm.description}
@@ -1333,7 +1384,7 @@ export default function AdminCompanyProfilePage() {
               />
             </div>
             <div className="space-y-2 xl:col-span-2">
-              <Label htmlFor="company-category">Categories</Label>
+              <Label htmlFor="company-category">{t("admin.companyDetail.categories")}</Label>
               <CategoryMultiSelect
                 id="company-category"
                 value={companyForm.categoryIds}
@@ -1341,11 +1392,11 @@ export default function AdminCompanyProfilePage() {
                 onChange={(nextValues) =>
                   setCompanyForm((p) => (p ? { ...p, categoryIds: nextValues } : p))
                 }
-                placeholder="Select one or more categories"
+                placeholder={t("admin.companyDetail.categoriesPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="company-points">Min redeem</Label>
+              <Label htmlFor="company-points">{t("admin.companyDetail.minRedeem")}</Label>
               <Input
                 id="company-points"
                 type="number"
@@ -1359,7 +1410,7 @@ export default function AdminCompanyProfilePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="company-active">Company status</Label>
+              <Label htmlFor="company-active">{t("admin.companyDetail.companyStatus")}</Label>
               <SelectField
                 id="company-active"
                 value={companyForm.isActive ? "active" : "inactive"}
@@ -1367,14 +1418,14 @@ export default function AdminCompanyProfilePage() {
                   setCompanyForm((p) => (p ? { ...p, isActive: e.target.value === "active" } : p))
                 }
               >
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="inactive">Inactive</option>
+                <option value="active">{statusLabel("ACTIVE", t)}</option>
+                <option value="inactive">{statusLabel("INACTIVE", t)}</option>
               </SelectField>
             </div>
             <div className="space-y-2 xl:col-span-2">
               <Label className="inline-flex items-center gap-1.5">
                 <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
-                Subscription impact mode
+                {t("admin.companyDetail.subscriptionImpactMode")}
               </Label>
               <div className="grid grid-cols-3 gap-2">
                 {SUBSCRIPTION_POLICY_OPTIONS.map((opt) => {
@@ -1391,7 +1442,7 @@ export default function AdminCompanyProfilePage() {
                         )
                       }
                     >
-                      {opt.title}
+                      {t(opt.titleKey)}
                     </Button>
                   );
                 })}
@@ -1399,37 +1450,25 @@ export default function AdminCompanyProfilePage() {
               <div className="rounded-md border border-white/10 bg-muted/30 px-2.5 py-2 text-xs">
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <p className="font-medium">
-                    {
-                      SUBSCRIPTION_POLICY_OPTIONS.find(
-                        (opt) => opt.key === companyForm.subscriptionSpendPolicy,
-                      )?.title
-                    }
+                    {t(SUBSCRIPTION_POLICY_OPTIONS.find((opt) => opt.key === companyForm.subscriptionSpendPolicy)?.titleKey ?? "admin.companyDetail.policyExcludeTitle")}
                   </p>
                   <Badge variant="outline">
-                    {
-                      SUBSCRIPTION_POLICY_OPTIONS.find(
-                        (opt) => opt.key === companyForm.subscriptionSpendPolicy,
-                      )?.badge
-                    }
+                    {t(SUBSCRIPTION_POLICY_OPTIONS.find((opt) => opt.key === companyForm.subscriptionSpendPolicy)?.badgeKey ?? "admin.companyDetail.policyExcludeBadge")}
                   </Badge>
                 </div>
                 <p className="text-muted-foreground">
-                  {
-                    SUBSCRIPTION_POLICY_OPTIONS.find(
-                      (opt) => opt.key === companyForm.subscriptionSpendPolicy,
-                    )?.description
-                  }
+                  {t(SUBSCRIPTION_POLICY_OPTIONS.find((opt) => opt.key === companyForm.subscriptionSpendPolicy)?.descriptionKey ?? "admin.companyDetail.policyExcludeDescription")}
                 </p>
               </div>
             </div>
             <div className="space-y-2 xl:col-span-4">
-              <Label>Loyalty levels</Label>
+              <Label>{t("admin.companyDetail.loyaltyLevels")}</Label>
               <div className="space-y-2 rounded-xl border border-white/10 bg-muted/20 p-3">
                 <div className="hidden grid-cols-12 gap-2 px-1 text-xs font-medium text-muted-foreground md:grid">
-                  <div className="col-span-5">Level name</div>
-                  <div className="col-span-3">Min total spend</div>
-                  <div className="col-span-2">Cashback %</div>
-                  <div className="col-span-2 text-center">Actions</div>
+                  <div className="col-span-5">{t("admin.companyDetail.levelName")}</div>
+                  <div className="col-span-3">{t("admin.companyDetail.minTotalSpend")}</div>
+                  <div className="col-span-2">{t("admin.companyDetail.cashbackPercent")}</div>
+                  <div className="col-span-2 text-center">{t("admin.companyDetail.actions")}</div>
                 </div>
                 {companyForm.levelRules.map((rule, index) => (
                   <div
@@ -1437,9 +1476,9 @@ export default function AdminCompanyProfilePage() {
                     className="grid gap-2 rounded-lg border border-white/10 bg-background/50 p-2.5 md:grid-cols-12"
                   >
                     <div className="space-y-1 md:col-span-5">
-                      <Label className="text-xs md:hidden">Level name</Label>
+                      <Label className="text-xs md:hidden">{t("admin.companyDetail.levelName")}</Label>
                       <Input
-                        placeholder="Level name"
+                        placeholder={t("admin.companyDetail.levelName")}
                         value={rule.levelName}
                         onChange={(e) =>
                           setCompanyForm((p) =>
@@ -1456,7 +1495,7 @@ export default function AdminCompanyProfilePage() {
                       />
                     </div>
                     <div className="space-y-1 md:col-span-3">
-                      <Label className="text-xs md:hidden">Min total spend</Label>
+                      <Label className="text-xs md:hidden">{t("admin.companyDetail.minTotalSpend")}</Label>
                       <Input
                         type="number"
                         min={0}
@@ -1486,7 +1525,7 @@ export default function AdminCompanyProfilePage() {
                       />
                     </div>
                     <div className="space-y-1 md:col-span-2">
-                      <Label className="text-xs md:hidden">Cashback %</Label>
+                      <Label className="text-xs md:hidden">{t("admin.companyDetail.cashbackPercent")}</Label>
                       <Input
                         type="number"
                         min={0}
@@ -1564,7 +1603,7 @@ export default function AdminCompanyProfilePage() {
                       }
                       disabled={companyForm.levelRules.length <= 1}
                     >
-                      Remove
+                      {t("admin.companyDetail.remove")}
                     </Button>
                   </div>
                 ))}
@@ -1578,7 +1617,7 @@ export default function AdminCompanyProfilePage() {
                             levelRules: [
                               ...p.levelRules,
                               {
-                                levelName: `Level ${p.levelRules.length + 1}`,
+                                levelName: `${t("admin.companyDetail.levelFallback")} ${p.levelRules.length + 1}`,
                                 minTotalSpend: 0,
                                 cashbackPercent: 0,
                               },
@@ -1589,14 +1628,14 @@ export default function AdminCompanyProfilePage() {
                   }
                 >
                   <Plus className="h-4 w-4" />
-                  Add level
+                  {t("admin.companyDetail.addLevel")}
                 </Button>
               </div>
             </div>
             <div className="flex items-end xl:col-span-4">
               <Button onClick={() => void saveCompanyProfile()} className="w-full">
                 <Save className="h-4 w-4" />
-                Save company profile
+                {t("admin.companyDetail.saveCompanyProfile")}
               </Button>
             </div>
             </div>
@@ -1615,12 +1654,12 @@ export default function AdminCompanyProfilePage() {
             <div className="space-y-1">
               <CardTitle className="inline-flex items-center gap-2 text-base">
                 <CircleDollarSign className="h-4 w-4 text-primary" />
-                Subscriptions
+                {t("admin.companyDetail.subscriptions")}
               </CardTitle>
-              <p className="text-xs text-muted-foreground">Create, search and batch-edit offers for this company.</p>
+              <p className="text-xs text-muted-foreground">{t("admin.companyDetail.subscriptionsDescription")}</p>
             </div>
             <div className="flex items-center gap-2">
-              {subscriptionsDirty && <Badge variant="outline">Unsaved</Badge>}
+              {subscriptionsDirty && <Badge variant="outline">{t("admin.companyDetail.unsaved")}</Badge>}
               <Button
                 variant="ghost"
                 size="sm"
@@ -1640,7 +1679,7 @@ export default function AdminCompanyProfilePage() {
               <div className="space-y-2 xl:col-span-3">
                 <Label htmlFor="sub-draft-name" className="inline-flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  Name
+                  {t("admin.companyDetail.name")}
                 </Label>
                 <Input
                   id="sub-draft-name"
@@ -1652,7 +1691,7 @@ export default function AdminCompanyProfilePage() {
               <div className="space-y-2 xl:col-span-2">
                 <Label htmlFor="sub-draft-price" className="inline-flex items-center gap-1.5">
                   <CircleDollarSign className="h-3.5 w-3.5 text-primary" />
-                  Price
+                  {t("admin.companyDetail.price")}
                 </Label>
                 <Input
                   id="sub-draft-price"
@@ -1665,7 +1704,7 @@ export default function AdminCompanyProfilePage() {
               <div className="space-y-2 xl:col-span-2">
                 <Label htmlFor="sub-draft-renewal-value" className="inline-flex items-center gap-1.5 whitespace-nowrap">
                   <Hash className="h-3.5 w-3.5 text-primary" />
-                  Period value
+                  {t("admin.companyDetail.periodValue")}
                 </Label>
                 <Input
                   id="sub-draft-renewal-value"
@@ -1680,7 +1719,7 @@ export default function AdminCompanyProfilePage() {
               <div className="space-y-2 xl:col-span-2">
                 <Label htmlFor="sub-draft-renewal-unit" className="inline-flex items-center gap-1.5">
                   <CalendarClock className="h-3.5 w-3.5 text-primary" />
-                  Renewal period
+                  {t("admin.companyDetail.renewalPeriod")}
                 </Label>
                 <SelectField
                   id="sub-draft-renewal-unit"
@@ -1689,15 +1728,15 @@ export default function AdminCompanyProfilePage() {
                     setDraft((p) => ({ ...p, renewalUnit: e.target.value as "week" | "month" | "year" }))
                   }
                 >
-                  <option value="week">week</option>
-                  <option value="month">month</option>
-                  <option value="year">year</option>
+                  <option value="week">{t("admin.companyDetail.week")}</option>
+                  <option value="month">{t("admin.companyDetail.month")}</option>
+                  <option value="year">{t("admin.companyDetail.year")}</option>
                 </SelectField>
               </div>
               <div className="space-y-2 xl:col-span-2">
                 <Label htmlFor="sub-draft-promo-bonus" className="inline-flex items-center gap-1.5">
                   <Gift className="h-3.5 w-3.5 text-primary" />
-                  Bonus days (promo)
+                  {t("admin.companyDetail.bonusDays")}
                 </Label>
                 <Input
                   id="sub-draft-promo-bonus"
@@ -1712,7 +1751,7 @@ export default function AdminCompanyProfilePage() {
               <div className="space-y-2 xl:col-span-3">
                 <Label htmlFor="sub-draft-slug" className="inline-flex items-center gap-1.5">
                   <Hash className="h-3.5 w-3.5 text-primary" />
-                  Slug
+                  {t("admin.companyDetail.slug")}
                 </Label>
                 <Input
                   id="sub-draft-slug"
@@ -1724,24 +1763,24 @@ export default function AdminCompanyProfilePage() {
               <div className="space-y-2 xl:col-span-4">
               <Label htmlFor="sub-draft-category" className="inline-flex items-center gap-1.5">
                 <Tag className="h-3.5 w-3.5 text-primary" />
-                Category
+                {t("admin.companyDetail.category")}
               </Label>
                 <CategorySelect
                   id="sub-draft-category"
                   value={draft.categoryId}
                   options={categories}
                   onChange={(nextValue) => setDraft((p) => ({ ...p, categoryId: nextValue }))}
-                  emptyLabel="No category"
+                  emptyLabel={t("admin.companyDetail.noCategory")}
                 />
               </div>
               <div className="space-y-2 xl:col-span-12 xl:mt-1">
                 <Label htmlFor="sub-draft-description" className="inline-flex items-center gap-1.5">
                   <FileText className="h-3.5 w-3.5 text-primary" />
-                  Description
+                  {t("admin.companyDetail.description")}
                 </Label>
                 <Textarea
                   id="sub-draft-description"
-                  placeholder="Describe subscription value in detail..."
+                  placeholder={t("admin.companyDetail.subscriptionDescriptionPlaceholder")}
                   rows={5}
                   className="min-h-[140px] max-h-80"
                   value={draft.description}
@@ -1755,7 +1794,7 @@ export default function AdminCompanyProfilePage() {
                   className="h-11 w-full xl:w-[220px]"
                 >
                   <Plus className="h-4 w-4" />
-                  Add
+                  {t("admin.companyDetail.add")}
                 </Button>
               </div>
             </div>
@@ -1766,44 +1805,44 @@ export default function AdminCompanyProfilePage() {
             <Input
               value={subscriptionQuery}
               onChange={(e) => setSubscriptionQuery(e.target.value)}
-              placeholder="Search subscription by name, description, slug, period..."
+              placeholder={t("admin.companyDetail.subscriptionSearchPlaceholder")}
               className="pl-9"
             />
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Showing {filteredSubscriptions.length} of {subscriptions.length} subscriptions
+            {t("admin.companyDetail.showing")} {filteredSubscriptions.length} {t("admin.companyDetail.of")} {subscriptions.length} {t("admin.companyDetail.subscriptionsPlural")}
           </p>
 
           <div className="space-y-2.5">
             {filteredSubscriptions.map((sub) => (
               <div key={sub.uuid} className="rounded-xl border border-white/10 bg-muted/10 p-3.5">
                 <div className="mb-3 flex items-center justify-between gap-2 border-b border-white/10 pb-2">
-                  <p className="text-xs font-medium text-muted-foreground">Subscription #{sub.uuid.slice(0, 8)}</p>
+                  <p className="text-xs font-medium text-muted-foreground">{t("admin.companyDetail.subscription")} #{sub.uuid.slice(0, 8)}</p>
                   <Badge variant={sub.isActive ? "default" : "secondary"}>
-                    {sub.isActive ? "ACTIVE" : "INACTIVE"}
+                    {sub.isActive ? statusLabel("ACTIVE", t) : statusLabel("INACTIVE", t)}
                   </Badge>
                 </div>
                 <div className="mb-2 hidden grid-cols-12 gap-3 px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground xl:grid">
-                  <div className="col-span-2">Name</div>
-                  <div className="col-span-1">Price</div>
-                  <div className="col-span-1">Period</div>
-                  <div className="col-span-2">Renewal</div>
-                  <div className="col-span-1">Bonus days</div>
-                  <div className="col-span-2">Slug</div>
-                  <div className="col-span-3">Category</div>
+                  <div className="col-span-2">{t("admin.companyDetail.name")}</div>
+                  <div className="col-span-1">{t("admin.companyDetail.price")}</div>
+                  <div className="col-span-1">{t("admin.companyDetail.period")}</div>
+                  <div className="col-span-2">{t("admin.companyDetail.renewal")}</div>
+                  <div className="col-span-1">{t("admin.companyDetail.bonusDaysShort")}</div>
+                  <div className="col-span-2">{t("admin.companyDetail.slug")}</div>
+                  <div className="col-span-3">{t("admin.companyDetail.category")}</div>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
                   <div className="space-y-1 xl:col-span-2">
-                    <Label className="text-xs xl:hidden">Name</Label>
+                    <Label className="text-xs xl:hidden">{t("admin.companyDetail.name")}</Label>
                     <Input value={sub.name} onChange={(e) => setSubscriptions((prev) => prev.map((p) => p.uuid === sub.uuid ? { ...p, name: e.target.value } : p))} />
                   </div>
                   <div className="space-y-1 xl:col-span-1">
-                    <Label className="text-xs xl:hidden">Price</Label>
+                    <Label className="text-xs xl:hidden">{t("admin.companyDetail.price")}</Label>
                     <Input type="number" value={sub.price} onChange={(e) => setSubscriptions((prev) => prev.map((p) => p.uuid === sub.uuid ? { ...p, price: e.target.value } : p))} />
                   </div>
                   <div className="space-y-1 xl:col-span-1">
-                    <Label className="text-xs xl:hidden">Period value</Label>
+                    <Label className="text-xs xl:hidden">{t("admin.companyDetail.periodValue")}</Label>
                     <Input
                       type="number"
                       min={1}
@@ -1818,7 +1857,7 @@ export default function AdminCompanyProfilePage() {
                     />
                   </div>
                   <div className="space-y-1 xl:col-span-2">
-                    <Label className="text-xs xl:hidden">Renewal period</Label>
+                    <Label className="text-xs xl:hidden">{t("admin.companyDetail.renewalPeriod")}</Label>
                     <SelectField
                       value={sub.renewalUnit}
                       onChange={(e) =>
@@ -1831,13 +1870,13 @@ export default function AdminCompanyProfilePage() {
                         )
                       }
                     >
-                      <option value="week">week</option>
-                      <option value="month">month</option>
-                      <option value="year">year</option>
+                      <option value="week">{t("admin.companyDetail.week")}</option>
+                      <option value="month">{t("admin.companyDetail.month")}</option>
+                      <option value="year">{t("admin.companyDetail.year")}</option>
                     </SelectField>
                   </div>
                   <div className="space-y-1 xl:col-span-1">
-                    <Label className="text-xs xl:hidden">Bonus days</Label>
+                    <Label className="text-xs xl:hidden">{t("admin.companyDetail.bonusDaysShort")}</Label>
                     <Input
                       type="number"
                       min={0}
@@ -1854,11 +1893,11 @@ export default function AdminCompanyProfilePage() {
                     />
                   </div>
                   <div className="space-y-1 xl:col-span-2">
-                    <Label className="text-xs xl:hidden">Slug</Label>
+                    <Label className="text-xs xl:hidden">{t("admin.companyDetail.slug")}</Label>
                     <Input value={sub.slug} onChange={(e) => setSubscriptions((prev) => prev.map((p) => p.uuid === sub.uuid ? { ...p, slug: e.target.value } : p))} />
                   </div>
                   <div className="space-y-1 xl:col-span-3">
-                    <Label className="text-xs xl:hidden">Category</Label>
+                    <Label className="text-xs xl:hidden">{t("admin.companyDetail.category")}</Label>
                     <CategorySelect
                       value={sub.categoryId === null ? "" : sub.categoryId}
                       options={categories}
@@ -1871,11 +1910,11 @@ export default function AdminCompanyProfilePage() {
                           ),
                         )
                       }
-                      emptyLabel="No category"
+                      emptyLabel={t("admin.companyDetail.noCategory")}
                     />
                   </div>
                   <div className="space-y-1 xl:col-span-9">
-                    <Label className="text-xs">Description</Label>
+                    <Label className="text-xs">{t("admin.companyDetail.description")}</Label>
                     <Textarea
                       rows={4}
                       className="min-h-[120px] max-h-72"
@@ -1888,15 +1927,15 @@ export default function AdminCompanyProfilePage() {
                     />
                   </div>
                   <div className="flex items-end gap-2 xl:col-span-3 xl:justify-end">
-                    <Button variant="secondary" onClick={() => void saveSubscription(sub)} className="flex-1 xl:max-w-[150px]">Save</Button>
-                    <Button variant="destructive" onClick={() => void removeSubscription(sub.uuid)} className="flex-1 xl:max-w-[150px]">Delete</Button>
+                    <Button variant="secondary" onClick={() => void saveSubscription(sub)} className="flex-1 xl:max-w-[150px]">{t("admin.companyDetail.save")}</Button>
+                    <Button variant="destructive" onClick={() => void removeSubscription(sub.uuid)} className="flex-1 xl:max-w-[150px]">{t("admin.companyDetail.delete")}</Button>
                   </div>
                 </div>
               </div>
             ))}
             {filteredSubscriptions.length === 0 && (
               <div className="rounded-xl border border-white/10 bg-muted/10 p-5 text-center text-sm text-muted-foreground">
-                No subscriptions match your search.
+                {t("admin.companyDetail.noSubscriptionsMatch")}
               </div>
             )}
           </div>
@@ -1909,13 +1948,13 @@ export default function AdminCompanyProfilePage() {
             <CardContent className="space-y-3 py-4">
               <div className="text-sm">
                 <p className="font-medium">
-                  {hasDirty ? "Unsaved changes detected" : "Status"}
+                  {hasDirty ? t("admin.companyDetail.unsavedChangesDetected") : t("admin.companyDetail.status")}
                 </p>
                 {hasDirty && (
                   <p className="text-xs text-muted-foreground">
-                    {accountDirty && "Account "}
-                    {companyDirty && "Company profile "}
-                    {subscriptionsDirty && "Subscriptions "}
+                    {accountDirty && `${t("admin.companyDetail.sectionAccount")} `}
+                    {companyDirty && `${t("admin.companyDetail.sectionProfile")} `}
+                    {subscriptionsDirty && `${t("admin.companyDetail.sectionSubscriptions")} `}
                   </p>
                 )}
               </div>
@@ -1929,11 +1968,11 @@ export default function AdminCompanyProfilePage() {
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <Button variant="secondary" onClick={() => void discardAllChanges()}>
                     <RotateCcw className="h-4 w-4" />
-                    Discard
+                    {t("admin.companyDetail.discard")}
                   </Button>
                   <Button onClick={() => void saveAllChanges()}>
                     <Save className="h-4 w-4" />
-                    Save all
+                    {t("admin.companyDetail.saveAll")}
                   </Button>
                 </div>
               )}

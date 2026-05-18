@@ -97,10 +97,10 @@ export class AdminController {
   }
 
   @Patch("users/:uuid/role")
-  @ApiOperation({ summary: "Update user role (CLIENT/COMPANY/ADMIN)" })
+  @ApiOperation({ summary: "Update user role. ADMIN may assign MANAGER/SUPPORT; SUPER_ADMIN may assign any role." })
   @ApiBody({ type: UpdateRoleDto })
-  updateUserRole(@Param("uuid") uuid: string, @Body() dto: UpdateRoleDto) {
-    return this.adminService.updateUserRole(uuid, dto.role);
+  updateUserRole(@Param("uuid") uuid: string, @Body() dto: UpdateRoleDto, @CurrentUser() actor: RequestUser) {
+    return this.adminService.updateUserRole(uuid, dto.role, actor.userId);
   }
 
   @Get("users/:uuid")
@@ -141,8 +141,19 @@ export class AdminController {
 
   @Post("users/:uuid/reactivate-account")
   @ApiOperation({ summary: "Reactivate frozen account and clear deletion schedule" })
-  reactivateUserAccount(@Param("uuid") uuid: string) {
-    return this.adminService.reactivateUserAccountByUuid(uuid);
+  reactivateUserAccount(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    return this.adminService.reactivateUserAccountByUuid(uuid, actor.userId);
+  }
+
+  @Post("users/:uuid/block")
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: "Block user account, revoke refresh sessions and deny backend actions" })
+  blockUserAccount(
+    @Param("uuid") uuid: string,
+    @Body() body: { reason?: string },
+    @CurrentUser() actor: RequestUser,
+  ) {
+    return this.adminService.blockUserAccountByUuid(uuid, actor.userId, body?.reason);
   }
 
   @Get("subscriptions/stats")
