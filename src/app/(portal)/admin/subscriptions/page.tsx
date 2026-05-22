@@ -76,7 +76,7 @@ function emptyParticipant(share: number): PairParticipantForm {
 }
 
 export default function AdminSubscriptionsPage() {
-  const { locale, t } = useI18n("ru");
+  const { locale } = useI18n("ru");
   const createRef = useRef<HTMLDivElement | null>(null);
   const [stats, setStats] = useState<AdminSubscriptionStats | null>(null);
   const [categories, setCategories] = useState<AdminCategory[]>([]);
@@ -103,10 +103,6 @@ export default function AdminSubscriptionsPage() {
     emptyParticipant(50),
   ]);
 
-  useEffect(() => {
-    void refreshData();
-  }, []);
-
   async function refreshData() {
     const [nextStats, nextCategories, nextCompanies, nextBundles] = await Promise.all([
       adminSubscriptionStats(),
@@ -119,6 +115,10 @@ export default function AdminSubscriptionsPage() {
     setCompanies(nextCompanies.filter((row) => row.managedCompany));
     setBundles(nextBundles);
   }
+
+  useEffect(() => {
+    void refreshData();
+  }, []);
 
   const companyOptions = useMemo(
     () =>
