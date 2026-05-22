@@ -1,5 +1,6 @@
 jest.mock("@/lib/prisma", () => ({
   prisma: {
+    user: { findUnique: jest.fn() },
     companyVerificationApplication: {
       findUnique: jest.fn(),
       update: jest.fn(),
@@ -43,6 +44,14 @@ describe("admin company verification detail route", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedRequireAdminSession.mockResolvedValue({ userId: 1, email: "admin@test.local", role: "ADMIN" });
+    mockedPrisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      role: "ADMIN",
+      email: "admin@test.local",
+      permissions: [
+        { scope: "COMPANY_VERIFICATIONS", canView: true, canEdit: true, canApprove: true },
+      ],
+    } as never);
     mockedPrisma.passportVerificationFile.findMany.mockResolvedValue([]);
     mockedPrisma.passportVerificationFile.deleteMany.mockResolvedValue({ count: 0 } as never);
   });

@@ -7,8 +7,10 @@ import { QrCode, ShieldCheck } from "lucide-react";
 import { getTwaQr, type TwaQr } from "@/lib/api/twa-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 export default function ScanPage() {
+  const { t } = useI18n("ru");
   const [qr, setQr] = useState<TwaQr | null>(null);
 
   useEffect(() => {
@@ -52,9 +54,9 @@ export default function ScanPage() {
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/20">
           <QrCode className="h-9 w-9 text-primary" />
         </div>
-        <h1 className="text-xl font-semibold">Scan / QR</h1>
+        <h1 className="text-xl font-semibold">{t("client.scan.title")}</h1>
         <p className="mx-auto mt-1 max-w-[300px] text-sm text-muted-foreground">
-          Show your QR to a partner to earn or spend points.
+          {t("client.scan.subtitle")}
         </p>
       </motion.header>
 
@@ -62,15 +64,15 @@ export default function ScanPage() {
         <CardHeader className="border-b border-white/10 bg-white/[0.03] pb-3">
           <CardTitle className="flex items-center justify-center gap-2 text-base">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            Your loyalty QR
+            {t("client.scan.yourQr")}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-5">
           <div className="mx-auto flex aspect-square max-w-[240px] items-center justify-center rounded-2xl border border-white/10 bg-slate-50 p-3 shadow-lg shadow-black/20">
             {qr?.payload ? (
-              <canvas id="scan-user-qr" className="h-full w-full rounded-xl" aria-label="User QR" />
+              <canvas id="scan-user-qr" className="h-full w-full rounded-xl" aria-label={t("client.scan.userQr")} />
             ) : (
-              <span className="text-xs text-slate-500">Generating QR...</span>
+              <span className="text-xs text-slate-500">{t("client.scan.generating")}</span>
             )}
           </div>
           {qr?.payload && (
@@ -79,7 +81,7 @@ export default function ScanPage() {
             </p>
           )}
           <Button className="mt-5 w-full" variant="secondary" disabled>
-            Partner scanner coming soon
+            {t("client.scan.partnerComingSoon")}
           </Button>
         </CardContent>
       </Card>

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { changePassword } from "@/lib/api/auth-client";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 export function ChangePasswordDialog({
   open,
@@ -21,6 +22,7 @@ export function ChangePasswordDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useI18n("ru");
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -43,11 +45,11 @@ export function ChangePasswordDialog({
     e.preventDefault();
     setError(null);
     if (next.length < 8) {
-      setError("New password must be at least 8 characters.");
+      setError(t("client.account.passwordTooShort"));
       return;
     }
     if (next !== confirm) {
-      setError("New passwords do not match.");
+      setError(t("client.account.passwordsDoNotMatch"));
       return;
     }
     setLoading(true);
@@ -67,19 +69,17 @@ export function ChangePasswordDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="glass border-white/10">
         <DialogHeader>
-          <DialogTitle>Change password</DialogTitle>
-          <DialogDescription>
-            Your session stays signed in. Use a strong password you don&apos;t use elsewhere.
-          </DialogDescription>
+          <DialogTitle>{t("client.account.changePasswordTitle")}</DialogTitle>
+          <DialogDescription>{t("client.account.changePasswordDescription")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           {error && (
-            <p className="text-destructive text-sm" role="alert">
+            <p className="text-sm text-destructive" role="alert">
               {error}
             </p>
           )}
           <div className="space-y-2">
-            <Label htmlFor="cp-current">Current password</Label>
+            <Label htmlFor="cp-current">{t("client.account.currentPassword")}</Label>
             <Input
               id="cp-current"
               type="password"
@@ -91,7 +91,7 @@ export function ChangePasswordDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="cp-new">New password</Label>
+            <Label htmlFor="cp-new">{t("client.account.newPassword")}</Label>
             <Input
               id="cp-new"
               type="password"
@@ -104,7 +104,7 @@ export function ChangePasswordDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="cp-confirm">Confirm new password</Label>
+            <Label htmlFor="cp-confirm">{t("client.account.confirmNewPassword")}</Label>
             <Input
               id="cp-confirm"
               type="password"
@@ -118,10 +118,10 @@ export function ChangePasswordDialog({
           </div>
           <DialogFooter className="gap-2 pt-2 sm:gap-0">
             <Button type="button" variant="outline" className="glass border-white/10" onClick={() => handleOpenChange(false)}>
-              Cancel
+              {t("client.common.cancel")}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving…" : "Update password"}
+              {loading ? t("client.account.savingPassword") : t("client.account.updatePassword")}
             </Button>
           </DialogFooter>
         </form>

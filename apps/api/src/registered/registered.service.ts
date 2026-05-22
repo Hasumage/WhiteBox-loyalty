@@ -606,6 +606,7 @@ export class RegisteredService {
         name: company.name,
         description: company.description,
         isActive: company.isActive,
+        operatesOnline: company.operatesOnline,
         category: company.category,
         categories: company.categories.map((row) => row.category),
         locations: (company.locations ?? []).map((location) => ({

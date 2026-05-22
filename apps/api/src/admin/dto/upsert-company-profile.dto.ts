@@ -80,6 +80,14 @@ export class UpsertCompanyProfileDto {
   isActive?: boolean;
 
   @ApiPropertyOptional({
+    example: false,
+    description: "Whether the company works online or by delivery without physical public locations.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  operatesOnline?: boolean;
+
+  @ApiPropertyOptional({
     example: "INCLUDE_NO_BONUS",
     enum: ["EXCLUDE", "INCLUDE_NO_BONUS", "INCLUDE_WITH_BONUS"],
     description: "How subscription payments impact level spend and bonuses",

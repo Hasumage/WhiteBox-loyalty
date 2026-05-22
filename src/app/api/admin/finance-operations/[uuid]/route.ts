@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { FinanceOperationStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
+import { resolveEffectivePermission } from "@/lib/admin/access-control";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -26,15 +27,12 @@ export async function PATCH(
       email: true,
       permissions: {
         where: { scope: "FINANCE" },
-        select: { canApprove: true },
+        select: { scope: true, canView: true, canEdit: true, canApprove: true },
       },
     },
   });
-  const canApprove =
-    actor?.role === "SUPER_ADMIN" ||
-    actor?.role === "ADMIN" ||
-    Boolean(actor?.permissions[0]?.canApprove);
-  if (!actor || !canApprove) {
+  const financePermission = resolveEffectivePermission(actor?.role ?? "CLIENT", actor?.permissions[0] ?? null, "FINANCE");
+  if (!actor || !financePermission.canApprove) {
     return NextResponse.json({ message: "Finance approval is not allowed" }, { status: 403 });
   }
 

@@ -8,6 +8,7 @@ import {
   type LandingLead,
   type TelegramRecipient,
 } from "@/lib/telegram/telegram-service";
+import { checkTelegramDeliveryFire } from "@/lib/telegram/telegram-queue";
 
 export const LANDING_LEAD_MAX_FIELD_LENGTH = 1200;
 export const LANDING_LEAD_DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
@@ -259,6 +260,7 @@ export async function notifyLandingLead(params: {
           nextRetryAt: nextRetryAt(1),
         },
       });
+      await checkTelegramDeliveryFire().catch(() => undefined);
       failed += 1;
     }
   }
@@ -281,6 +283,7 @@ async function createMissingTelegramDeliveries(leadId: number, recipients: Teleg
       nextRetryAt: nextRetryAt(1),
     })),
   });
+  await checkTelegramDeliveryFire().catch(() => undefined);
 }
 
 export async function retryLeadNotifications(leadUuid: string) {

@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { AuditWorkspace, UserRole } from "@prisma/client";
+import { AuditWorkspace, PermissionScope, UserRole } from "@prisma/client";
 import { Response } from "express";
 import { CurrentUser, type RequestUser } from "../auth/decorators/current-user.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -26,6 +26,7 @@ import { CreateBackupDto } from "./dto/create-backup.dto";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { CreateCompanySubscriptionDto } from "./dto/create-company-subscription.dto";
 import { CreateAccountDto } from "./dto/create-account.dto";
+import { CreatePairedSubscriptionDto } from "./dto/create-paired-subscription.dto";
 import { CreatePromoCodeDto } from "./dto/create-promo-code.dto";
 import { RequestEmailChangeDto } from "./dto/request-email-change.dto";
 import { RestoreBackupDto } from "./dto/restore-backup.dto";
@@ -66,7 +67,8 @@ export class AdminController {
   @Post("accounts")
   @ApiOperation({ summary: "Create account with selected role" })
   @ApiBody({ type: CreateAccountDto })
-  createAccount(@Body() dto: CreateAccountDto) {
+  async createAccount(@Body() dto: CreateAccountDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
     return this.adminService.createAccount(dto);
   }
 
@@ -78,7 +80,8 @@ export class AdminController {
   @ApiQuery({ name: "limit", required: false, type: Number, example: 20 })
   @ApiQuery({ name: "sortBy", required: false, enum: ["name", "email", "role", "status", "createdAt"] })
   @ApiQuery({ name: "sortDir", required: false, enum: ["asc", "desc"] })
-  listUsers(
+  async listUsers(
+    @CurrentUser() actor: RequestUser,
     @Query("role") role?: UserRole,
     @Query("query") query?: string,
     @Query("page") page?: string,
@@ -86,6 +89,7 @@ export class AdminController {
     @Query("sortBy") sortBy?: "name" | "email" | "role" | "status" | "createdAt",
     @Query("sortDir") sortDir?: "asc" | "desc",
   ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canView");
     return this.adminService.listUsers(
       role,
       query,
@@ -99,111 +103,149 @@ export class AdminController {
   @Patch("users/:uuid/role")
   @ApiOperation({ summary: "Update user role. ADMIN may assign MANAGER/SUPPORT; SUPER_ADMIN may assign any role." })
   @ApiBody({ type: UpdateRoleDto })
-  updateUserRole(@Param("uuid") uuid: string, @Body() dto: UpdateRoleDto, @CurrentUser() actor: RequestUser) {
+  async updateUserRole(@Param("uuid") uuid: string, @Body() dto: UpdateRoleDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.SETTINGS, "canEdit");
     return this.adminService.updateUserRole(uuid, dto.role, actor.userId);
   }
 
   @Get("users/:uuid")
   @ApiOperation({ summary: "Get full user profile and relations by UUID" })
-  getUser(@Param("uuid") uuid: string) {
+  async getUser(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canView");
     return this.adminService.getUserByUuid(uuid);
   }
 
   @Patch("users/:uuid")
   @ApiOperation({ summary: "Update user fields by UUID (admin CRUD)" })
   @ApiBody({ type: UpdateUserDto })
-  updateUser(@Param("uuid") uuid: string, @Body() dto: UpdateUserDto, @CurrentUser() actor: RequestUser) {
+  async updateUser(@Param("uuid") uuid: string, @Body() dto: UpdateUserDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
     return this.adminService.updateUserByUuid(uuid, dto, actor.userId);
   }
 
   @Post("users/:uuid/email-change-request")
   @ApiOperation({ summary: "Send secure email-change confirmation link to new email" })
   @ApiBody({ type: RequestEmailChangeDto })
-  requestEmailChange(
+  async requestEmailChange(
     @Param("uuid") uuid: string,
     @Body() dto: RequestEmailChangeDto,
     @CurrentUser() actor: RequestUser,
   ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
     return this.adminService.requestEmailChange(uuid, actor.userId, dto.newEmail);
   }
 
   @Delete("users/:uuid")
   @ApiOperation({ summary: "Delete user by UUID" })
-  deleteUser(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+  async deleteUser(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canApprove");
     return this.adminService.deleteUserByUuid(uuid, actor.userId);
   }
 
   @Post("users/:uuid/force-logout")
   @ApiOperation({ summary: "Revoke all active refresh sessions for user" })
-  forceLogoutUser(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+  async forceLogoutUser(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
     return this.adminService.forceLogoutUserSessions(uuid, actor.userId);
   }
 
   @Post("users/:uuid/reactivate-account")
   @ApiOperation({ summary: "Reactivate frozen account and clear deletion schedule" })
-  reactivateUserAccount(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+  async reactivateUserAccount(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
     return this.adminService.reactivateUserAccountByUuid(uuid, actor.userId);
   }
 
   @Post("users/:uuid/block")
-  @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: "Block user account, revoke refresh sessions and deny backend actions" })
-  blockUserAccount(
+  @ApiOperation({ summary: "Block user account by admin policy, revoke refresh sessions and deny backend actions" })
+  async blockUserAccount(
     @Param("uuid") uuid: string,
     @Body() body: { reason?: string },
     @CurrentUser() actor: RequestUser,
   ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canApprove");
     return this.adminService.blockUserAccountByUuid(uuid, actor.userId, body?.reason);
   }
 
   @Get("subscriptions/stats")
   @ApiOperation({ summary: "Formal subscription statistics" })
-  subscriptionStats() {
+  async subscriptionStats(@CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.subscriptionStats();
+  }
+
+  @Get("subscriptions/bundles")
+  @ApiOperation({ summary: "List paired subscription bundles" })
+  async listSubscriptionBundles(@CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
+    return this.adminService.listSubscriptionBundles();
+  }
+
+  @Post("subscriptions/bundles")
+  @ApiOperation({ summary: "Create paired subscription bundle" })
+  @ApiBody({ type: CreatePairedSubscriptionDto })
+  async createPairedSubscription(@Body() dto: CreatePairedSubscriptionDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
+    return this.adminService.createPairedSubscription(dto, actor.userId);
+  }
+
+  @Get("subscriptions/search")
+  @ApiOperation({ summary: "Search ordinary and paired subscriptions by name, slug, company or category" })
+  @ApiQuery({ name: "query", required: false, type: String })
+  async searchSubscriptions(@Query("query") query: string | undefined, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
+    return this.adminService.searchSubscriptions(query);
   }
 
   @Get("subscriptions/:uuid")
   @ApiOperation({ summary: "Find subscription by UUID" })
-  findSubscription(@Param("uuid") uuid: string) {
+  async findSubscription(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.findSubscriptionByUuid(uuid);
   }
 
   @Get("promo-codes")
   @ApiOperation({ summary: "List promo codes and redemption stats" })
-  listPromoCodes() {
+  async listPromoCodes(@CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.listPromoCodes();
   }
 
   @Post("promo-codes")
   @ApiOperation({ summary: "Create promo code for points or subscription activation" })
   @ApiBody({ type: CreatePromoCodeDto })
-  createPromoCode(@Body() dto: CreatePromoCodeDto) {
+  async createPromoCode(@Body() dto: CreatePromoCodeDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
     return this.adminService.createPromoCode(dto);
   }
 
   @Patch("promo-codes/:id")
   @ApiOperation({ summary: "Update promo code" })
   @ApiBody({ type: CreatePromoCodeDto })
-  updatePromoCode(@Param("id") id: string, @Body() dto: Partial<CreatePromoCodeDto>) {
+  async updatePromoCode(@Param("id") id: string, @Body() dto: Partial<CreatePromoCodeDto>, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
     return this.adminService.updatePromoCode(Number(id), dto);
   }
 
   @Get("referral-campaign")
   @ApiOperation({ summary: "Get referral campaign rules and stats" })
-  getReferralCampaign() {
+  async getReferralCampaign(@CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.getReferralCampaignAdmin();
   }
 
   @Patch("referral-campaign")
   @ApiOperation({ summary: "Update referral campaign rules" })
   @ApiBody({ type: UpdateReferralCampaignDto })
-  updateReferralCampaign(@Body() dto: UpdateReferralCampaignDto) {
+  async updateReferralCampaign(@Body() dto: UpdateReferralCampaignDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
     return this.adminService.updateReferralCampaign(dto);
   }
 
   @Get("categories")
   @ApiOperation({ summary: "List categories" })
-  listCategories() {
+  async listCategories(@CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.listCategories();
   }
 
@@ -214,13 +256,15 @@ export class AdminController {
   @ApiQuery({ name: "tag", required: false, type: String })
   @ApiQuery({ name: "page", required: false, type: Number, example: 1 })
   @ApiQuery({ name: "limit", required: false, type: Number, example: 40 })
-  listAudit(
+  async listAudit(
+    @CurrentUser() actor: RequestUser,
     @Query("workspace") workspace?: AuditWorkspace,
     @Query("query") query?: string,
     @Query("tag") tag?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.AUDIT, "canView");
     return this.adminService.listAuditEvents({
       workspace: workspace ?? AuditWorkspace.MANAGER,
       query,
@@ -233,20 +277,23 @@ export class AdminController {
   @Post("audit")
   @ApiOperation({ summary: "Create manual audit event from admin UI" })
   @ApiBody({ type: CreateAuditEventDto })
-  createAudit(@Body() dto: CreateAuditEventDto, @CurrentUser() actor: RequestUser) {
+  async createAudit(@Body() dto: CreateAuditEventDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.AUDIT, "canEdit");
     return this.adminService.createManualAuditEvent(actor.userId, dto);
   }
 
   @Get("backups")
   @ApiOperation({ summary: "List database snapshots" })
-  listBackups() {
+  async listBackups(@CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.DATABASE, "canView");
     return this.adminService.listBackups();
   }
 
   @Post("backups")
   @ApiOperation({ summary: "Create database snapshot" })
   @ApiBody({ type: CreateBackupDto, required: false })
-  createBackup(@Body() dto: CreateBackupDto) {
+  async createBackup(@Body() dto: CreateBackupDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.DATABASE, "canEdit");
     return this.adminService.createBackup(dto);
   }
 
@@ -259,6 +306,7 @@ export class AdminController {
     @Body() dto: RestoreBackupDto,
     @CurrentUser() actor: RequestUser,
   ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.DATABASE, "canApprove");
     if (!dto.confirm) {
       throw new BadRequestException("Restore confirmation is required.");
     }
@@ -296,13 +344,15 @@ export class AdminController {
 
   @Delete("backups/:backupId")
   @ApiOperation({ summary: "Delete database snapshot" })
-  deleteBackup(@Param("backupId") backupId: string) {
+  async deleteBackup(@Param("backupId") backupId: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.DATABASE, "canEdit");
     return this.adminService.deleteBackup(backupId);
   }
 
   @Get("backups/:backupId/file")
   @ApiOperation({ summary: "Download database snapshot payload file" })
-  async downloadBackup(@Param("backupId") backupId: string, @Res() res: Response) {
+  async downloadBackup(@Param("backupId") backupId: string, @CurrentUser() actor: RequestUser, @Res() res: Response) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.DATABASE, "canView");
     const file = await this.adminService.getBackupFile(backupId);
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename=\"${file.fileName}\"`);
@@ -312,84 +362,97 @@ export class AdminController {
   @Post("categories")
   @ApiOperation({ summary: "Create category" })
   @ApiBody({ type: CreateCategoryDto })
-  createCategory(@Body() dto: CreateCategoryDto) {
+  async createCategory(@Body() dto: CreateCategoryDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
     return this.adminService.createCategory(dto);
   }
 
   @Patch("categories/:id")
   @ApiOperation({ summary: "Update category" })
   @ApiBody({ type: UpdateCategoryDto })
-  updateCategory(@Param("id") id: string, @Body() dto: UpdateCategoryDto) {
+  async updateCategory(@Param("id") id: string, @Body() dto: UpdateCategoryDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
     return this.adminService.updateCategory(Number(id), dto);
   }
 
   @Delete("categories/:id")
   @ApiOperation({ summary: "Delete category" })
-  deleteCategory(@Param("id") id: string) {
+  async deleteCategory(@Param("id") id: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canApprove");
     return this.adminService.deleteCategory(Number(id));
   }
 
   @Get("company-users")
   @ApiOperation({ summary: "List company-role users" })
   @ApiQuery({ name: "query", required: false, type: String })
-  listCompanyUsers(@Query("query") query?: string) {
+  async listCompanyUsers(@CurrentUser() actor: RequestUser, @Query("query") query?: string) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.listCompanyUsers(query);
   }
 
   @Get("company-users/:uuid")
   @ApiOperation({ summary: "Get company-role user with managed company and subscriptions" })
-  getCompanyUser(@Param("uuid") uuid: string) {
+  async getCompanyUser(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.getCompanyUserByUuid(uuid);
   }
 
   @Patch("company-users/:uuid")
   @ApiOperation({ summary: "Update company-role user account data" })
   @ApiBody({ type: UpdateCompanyUserDto })
-  updateCompanyUser(@Param("uuid") uuid: string, @Body() dto: UpdateCompanyUserDto) {
-    return this.adminService.updateCompanyUserByUuid(uuid, dto);
+  async updateCompanyUser(@Param("uuid") uuid: string, @Body() dto: UpdateCompanyUserDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
+    return this.adminService.updateCompanyUserByUuid(uuid, dto, actor.userId);
   }
 
   @Delete("company-users/:uuid")
   @ApiOperation({ summary: "Delete company-role user" })
-  deleteCompanyUser(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+  async deleteCompanyUser(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canApprove");
     return this.adminService.deleteCompanyUserByUuid(uuid, actor.userId);
   }
 
   @Put("company-users/:uuid/company-profile")
   @ApiOperation({ summary: "Create/update company profile for company-role user" })
   @ApiBody({ type: UpsertCompanyProfileDto })
-  upsertCompanyProfile(@Param("uuid") uuid: string, @Body() dto: UpsertCompanyProfileDto) {
-    return this.adminService.upsertCompanyProfile(uuid, dto);
+  async upsertCompanyProfile(@Param("uuid") uuid: string, @Body() dto: UpsertCompanyProfileDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
+    return this.adminService.upsertCompanyProfile(uuid, dto, actor.userId);
   }
 
   @Get("company-users/:uuid/subscriptions")
   @ApiOperation({ summary: "List subscriptions owned by company user" })
-  listCompanySubscriptions(@Param("uuid") uuid: string) {
+  async listCompanySubscriptions(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.listCompanySubscriptions(uuid);
   }
 
   @Post("company-users/:uuid/locations")
   @ApiOperation({ summary: "Create company location and resolve coordinates from address" })
   @ApiBody({ type: UpsertCompanyLocationDto })
-  createCompanyLocation(@Param("uuid") uuid: string, @Body() dto: UpsertCompanyLocationDto) {
-    return this.adminService.createCompanyLocation(uuid, dto);
+  async createCompanyLocation(@Param("uuid") uuid: string, @Body() dto: UpsertCompanyLocationDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
+    return this.adminService.createCompanyLocation(uuid, dto, actor.userId);
   }
 
   @Patch("company-users/:uuid/locations/:locationUuid")
   @ApiOperation({ summary: "Update company location and re-resolve coordinates when address changes" })
   @ApiBody({ type: UpsertCompanyLocationDto })
-  updateCompanyLocation(
+  async updateCompanyLocation(
     @Param("uuid") uuid: string,
     @Param("locationUuid") locationUuid: string,
     @Body() dto: UpsertCompanyLocationDto,
+    @CurrentUser() actor: RequestUser,
   ) {
-    return this.adminService.updateCompanyLocation(uuid, locationUuid, dto);
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
+    return this.adminService.updateCompanyLocation(uuid, locationUuid, dto, actor.userId);
   }
 
   @Delete("company-users/:uuid/locations/:locationUuid")
   @ApiOperation({ summary: "Delete company location" })
-  deleteCompanyLocation(@Param("uuid") uuid: string, @Param("locationUuid") locationUuid: string) {
-    return this.adminService.deleteCompanyLocation(uuid, locationUuid);
+  async deleteCompanyLocation(@Param("uuid") uuid: string, @Param("locationUuid") locationUuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canApprove");
+    return this.adminService.deleteCompanyLocation(uuid, locationUuid, actor.userId);
   }
 
   @Get("company-users/:uuid/clients")
@@ -403,7 +466,8 @@ export class AdminController {
     enum: ["name", "email", "balance", "earned", "spent", "level", "updatedAt"],
   })
   @ApiQuery({ name: "sortDir", required: false, enum: ["asc", "desc"] })
-  listCompanyClients(
+  async listCompanyClients(
+    @CurrentUser() actor: RequestUser,
     @Param("uuid") uuid: string,
     @Query("query") query?: string,
     @Query("page") page?: string,
@@ -412,6 +476,7 @@ export class AdminController {
     sortBy?: "name" | "email" | "balance" | "earned" | "spent" | "level" | "updatedAt",
     @Query("sortDir") sortDir?: "asc" | "desc",
   ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.listCompanyClients(
       uuid,
       query,
@@ -425,27 +490,32 @@ export class AdminController {
   @Post("company-users/:uuid/subscriptions")
   @ApiOperation({ summary: "Create subscription for company user (company required)" })
   @ApiBody({ type: CreateCompanySubscriptionDto })
-  createCompanySubscription(@Param("uuid") uuid: string, @Body() dto: CreateCompanySubscriptionDto) {
-    return this.adminService.createCompanySubscription(uuid, dto);
+  async createCompanySubscription(@Param("uuid") uuid: string, @Body() dto: CreateCompanySubscriptionDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
+    return this.adminService.createCompanySubscription(uuid, dto, actor.userId);
   }
 
   @Patch("company-users/:uuid/subscriptions/:subscriptionUuid")
   @ApiOperation({ summary: "Update company subscription" })
   @ApiBody({ type: UpdateCompanySubscriptionDto })
-  updateCompanySubscription(
+  async updateCompanySubscription(
     @Param("uuid") uuid: string,
     @Param("subscriptionUuid") subscriptionUuid: string,
     @Body() dto: UpdateCompanySubscriptionDto,
+    @CurrentUser() actor: RequestUser,
   ) {
-    return this.adminService.updateCompanySubscription(uuid, subscriptionUuid, dto);
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
+    return this.adminService.updateCompanySubscription(uuid, subscriptionUuid, dto, actor.userId);
   }
 
   @Delete("company-users/:uuid/subscriptions/:subscriptionUuid")
   @ApiOperation({ summary: "Delete company subscription" })
-  deleteCompanySubscription(
+  async deleteCompanySubscription(
     @Param("uuid") uuid: string,
     @Param("subscriptionUuid") subscriptionUuid: string,
+    @CurrentUser() actor: RequestUser,
   ) {
-    return this.adminService.deleteCompanySubscription(uuid, subscriptionUuid);
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canApprove");
+    return this.adminService.deleteCompanySubscription(uuid, subscriptionUuid, actor.userId);
   }
 }

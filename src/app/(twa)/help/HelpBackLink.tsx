@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 const DEFAULT_SECTION = "section-payments";
 
 export function HelpBackLink() {
+  const { t } = useI18n("ru");
   const searchParams = useSearchParams();
   const section = searchParams.get("section") ?? DEFAULT_SECTION;
   const href = `/settings#${encodeURIComponent(section)}`;
@@ -18,7 +20,7 @@ export function HelpBackLink() {
       scroll={false}
     >
       <ArrowLeft className="h-4 w-4" />
-      Back to profile
+      {t("client.help.backProfile")}
     </Link>
   );
 }

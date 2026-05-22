@@ -18,6 +18,8 @@ import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { interpolate } from "@/lib/i18n/format";
 
 const container = {
   hidden: { opacity: 0 },
@@ -48,6 +50,7 @@ function companyCategories(company: TwaCompany) {
 }
 
 export default function HomePage() {
+  const { t } = useI18n("ru");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [favoriteSlugs, setFavoriteSlugs] = useState<string[]>([]);
@@ -147,7 +150,7 @@ export default function HomePage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search partners..."
+            placeholder={t("client.home.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="glass border-white/10 pl-9 h-10 rounded-xl"
@@ -173,7 +176,7 @@ export default function HomePage() {
                 : "glass border border-white/10 text-muted-foreground hover:text-foreground"
             )}
           >
-            All
+            {t("client.common.all")}
           </button>
           {displayCategories.map((cat) => (
             <button
@@ -204,7 +207,7 @@ export default function HomePage() {
         className="mb-6"
       >
         <motion.div variants={item} className="mb-1 text-sm text-muted-foreground">
-          Total Balance
+          {t("client.home.totalBalance")}
         </motion.div>
         <motion.div
           variants={item}
@@ -217,7 +220,7 @@ export default function HomePage() {
             <p className="text-2xl font-bold tracking-tight tabular-nums">
               {totalBalance.toLocaleString()}
             </p>
-            <p className="text-xs text-muted-foreground">points across all shops</p>
+            <p className="text-xs text-muted-foreground">{t("client.home.pointsAcrossShops")}</p>
           </div>
         </motion.div>
       </motion.section>
@@ -231,17 +234,17 @@ export default function HomePage() {
       >
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-muted-foreground">
-            Active Subscriptions
+            {t("client.home.activeSubscriptions")}
           </h2>
           <div className="flex items-center gap-1">
             <Link href="/history">
               <Button variant="ghost" size="sm" className="text-muted-foreground text-xs h-8">
-                History
+                {t("client.home.history")}
               </Button>
             </Link>
             <Link href="/marketplace">
               <Button variant="ghost" size="sm" className="text-primary text-xs h-8">
-                All Subscriptions
+                {t("client.home.allSubscriptions")}
                 <ChevronRight className="h-4 w-4 ml-0.5" />
               </Button>
             </Link>
@@ -285,11 +288,11 @@ export default function HomePage() {
             variants={item}
             className="text-sm font-semibold text-muted-foreground"
           >
-            Loyalty Cards
+            {t("client.home.loyaltyCards")}
           </motion.h2>
           <Link href="/loyalty-cards">
             <Button variant="ghost" size="sm" className="text-primary text-xs h-8">
-              View All
+              {t("client.home.viewAll")}
               <ChevronRight className="h-4 w-4 ml-0.5" />
             </Button>
           </Link>
@@ -336,14 +339,16 @@ export default function HomePage() {
                       <p className="mb-2 text-xl font-bold tabular-nums text-primary">
                         {company.points.balance}
                         <span className="ml-1 text-sm font-normal text-muted-foreground">
-                          pts
+                          {t("client.common.pointsShort")}
                         </span>
                       </p>
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Next reward</span>
+                          <span>{t("client.home.nextReward")}</span>
                           <span>
-                            {company.level.next ? `${company.level.next.pointsToNext} pts left` : "Top level"}
+                            {company.level.next
+                              ? `${company.level.next.pointsToNext} ${t("client.common.ptsLeft")}`
+                              : t("client.common.topLevel")}
                           </span>
                         </div>
                         <Progress value={progressPercent} className="h-1.5" />
@@ -357,14 +362,14 @@ export default function HomePage() {
         </motion.div>
         {filteredCompanies.length === 0 && (
           <p className="text-center text-sm text-muted-foreground py-8">
-            No partners match your search.
+            {t("client.home.noPartnersSearch")}
           </p>
         )}
         {filteredCompanies.length > 0 && filteredCompanies.length > HOME_LOYALTY_CARDS_PREVIEW_LIMIT && (
           <div className="mt-3 text-center">
             <Link href="/loyalty-cards">
               <Button variant="outline" size="sm" className="glass border-white/10">
-                View all {filteredCompanies.length} partners
+                {interpolate(t("client.home.viewAllPartners"), { count: filteredCompanies.length })}
               </Button>
             </Link>
           </div>
@@ -385,8 +390,8 @@ export default function HomePage() {
                   <Store className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Explore all partners</p>
-                  <p className="text-xs text-muted-foreground">Find new places to earn rewards</p>
+                  <p className="text-sm font-medium">{t("client.home.explorePartners")}</p>
+                  <p className="text-xs text-muted-foreground">{t("client.home.explorePartnersSubtitle")}</p>
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />

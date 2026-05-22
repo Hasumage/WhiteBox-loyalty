@@ -3,19 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, MapPin, History, User, QrCode } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import type { TranslationKey } from "@/lib/i18n/dictionary";
 
 const navItems = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/map", label: "Map", icon: MapPin },
-  { href: "/scan", label: "Scan", icon: QrCode, isFab: true },
-  { href: "/history", label: "History", icon: History },
-  { href: "/settings", label: "Profile", icon: User },
-];
+  { href: "/", labelKey: "client.nav.home", icon: Home },
+  { href: "/map", labelKey: "client.nav.map", icon: MapPin },
+  { href: "/scan", labelKey: "client.nav.scan", icon: QrCode, isFab: true },
+  { href: "/history", labelKey: "client.nav.history", icon: History },
+  { href: "/settings", labelKey: "client.nav.profile", icon: User },
+] satisfies Array<{ href: string; labelKey: TranslationKey; icon: LucideIcon; isFab?: boolean }>;
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { t } = useI18n("ru");
   const isWallet = pathname.startsWith("/wallet/");
   const isSubscriptionDetail = pathname.startsWith("/marketplace/") && pathname !== "/marketplace";
   const hideNav = isWallet || isSubscriptionDetail;
@@ -36,7 +40,7 @@ export function BottomNav() {
           <Link
             href="/scan"
             className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-transform active:scale-95 hover:bg-primary/90"
-            aria-label="Scan QR"
+            aria-label={t("client.nav.scanQr")}
           >
             <QrCode className="h-7 w-7" strokeWidth={2.5} />
           </Link>
@@ -51,7 +55,7 @@ export function BottomNav() {
       >
         {navItems
           .filter((item) => !item.isFab)
-          .map(({ href, label, icon: Icon }) => {
+          .map(({ href, labelKey, icon: Icon }) => {
             const isActive =
               href === "/"
                 ? pathname === "/"
@@ -80,7 +84,7 @@ export function BottomNav() {
                 <span className="relative">
                   <Icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
                 </span>
-                <span className="relative text-[10px] font-medium">{label}</span>
+                <span className="relative text-[10px] font-medium">{t(labelKey)}</span>
               </Link>
             );
           })}

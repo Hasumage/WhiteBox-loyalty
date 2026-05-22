@@ -35,6 +35,7 @@ export type TwaCompany = {
   name: string;
   description: string | null;
   isActive: boolean;
+  operatesOnline: boolean;
   category: ApiCategory;
   categories: ApiCategory[];
   locations: Array<{
@@ -164,6 +165,25 @@ export type TwaProfile = {
   };
 };
 
+export type UserTelegramConnectionStatus = {
+  connected: boolean;
+  telegramId: string | null;
+  phoneNumber: string | null;
+  phoneVerifiedAt: string | null;
+  email: string;
+  name: string;
+  role: string;
+  accountStatus: string;
+  canConnect: boolean;
+  updatedAt: string;
+};
+
+export type UserTelegramLink = {
+  token: string;
+  expiresAt: string;
+  deepLink: string;
+};
+
 function apiBase(): string {
   const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
   return base.replace(/\/$/, "");
@@ -243,6 +263,51 @@ async function putJson<T>(path: string, body: unknown, fallbackMessage: string) 
   } catch (error) {
     return { ok: false as const, message: error instanceof Error ? error.message : fallbackMessage };
   }
+}
+
+async function nextApiJson<T>(path: string, options: RequestInit, fallbackMessage: string) {
+  try {
+    const res = await fetch(path, {
+      ...options,
+      headers: {
+        ...authHeaders(),
+        ...(options.headers ?? {}),
+      },
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+      return { ok: false as const, message: message ?? fallbackMessage };
+    }
+    return { ok: true as const, data: data as T };
+  } catch (error) {
+    return { ok: false as const, message: error instanceof Error ? error.message : fallbackMessage };
+  }
+}
+
+export async function getUserTelegramStatus() {
+  return nextApiJson<UserTelegramConnectionStatus>(
+    "/api/telegram/status",
+    { method: "GET" },
+    "Failed to check Telegram connection.",
+  );
+}
+
+export async function createUserTelegramLink() {
+  return nextApiJson<UserTelegramLink>(
+    "/api/telegram/link-token",
+    { method: "POST" },
+    "Failed to create Telegram link.",
+  );
+}
+
+export async function requestTelegramPhone() {
+  return nextApiJson<{ sent: boolean; queued?: boolean }>(
+    "/api/telegram/request-phone",
+    { method: "POST" },
+    "Failed to request Telegram phone.",
+  );
 }
 
 const dashboardFallback: TwaDashboard = {

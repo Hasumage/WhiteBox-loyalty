@@ -145,6 +145,30 @@ export async function login(body: {
   }
 }
 
+export async function loginWithTelegramMiniApp(
+  initData: string,
+): Promise<AuthTokensResponse | { message: string }> {
+  try {
+    const res = await fetch(`${apiBase()}/auth/telegram-mini-app`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initData }),
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        message: Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message ?? `Telegram login failed (HTTP ${res.status})`,
+      };
+    }
+    return data as AuthTokensResponse;
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
 function authHeaders(): HeadersInit {
   const t = getAccessToken();
   return {

@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
   X,
   Send,
+  ServerCrash,
   Shield,
   Tag,
   Users,
@@ -76,6 +77,7 @@ const adminMenu: AdminMenuSection[] = [
   {
     groupKey: "admin.nav.system",
     items: [
+      { href: "/admin/system-health", labelKey: "admin.nav.systemHealth", icon: ServerCrash },
       { href: "/admin/telegram", labelKey: "admin.nav.telegram", icon: Send },
       { href: "/admin/audit", labelKey: "admin.nav.audit", icon: Shield },
       { href: "/admin/database", labelKey: "admin.nav.database", icon: Database },

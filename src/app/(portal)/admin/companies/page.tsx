@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Globe2, MapPin } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -54,6 +56,7 @@ export default function AdminCompaniesPage() {
                   <th>{t("admin.companies.email")}</th>
                   <th>{t("admin.companies.uuid")}</th>
                   <th>{t("admin.companies.status")}</th>
+                  <th>{t("admin.companies.workMode")}</th>
                   <th>{t("admin.companies.companyProfile")}</th>
                   <th className="text-right">{t("admin.companies.actions")}</th>
                 </tr>
@@ -65,6 +68,19 @@ export default function AdminCompaniesPage() {
                     <td className="whitespace-nowrap">{c.email}</td>
                     <td className="font-mono text-xs">{c.uuid}</td>
                     <td>{c.accountStatus}</td>
+                    <td>
+                      {c.managedCompany?.operatesOnline ? (
+                        <Badge variant="outline" className="gap-1">
+                          <Globe2 className="h-3 w-3" />
+                          {t("admin.companies.online")}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {t("admin.companies.locations")}
+                        </Badge>
+                      )}
+                    </td>
                     <td>{c.managedCompany ? c.managedCompany.name : t("admin.companies.notConfigured")}</td>
                     <td className="text-right">
                       <Button asChild variant="secondary" size="sm">

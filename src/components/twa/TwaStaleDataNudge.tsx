@@ -5,11 +5,13 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
 export function TwaStaleDataNudge() {
   const pathname = usePathname();
+  const { t } = useI18n("ru");
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -33,15 +35,15 @@ export function TwaStaleDataNudge() {
                 <RefreshCw className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">Refresh your wallet?</p>
-                <p className="text-xs text-muted-foreground">You have been here a while. A quick refresh will sync balances and subscriptions.</p>
+                <p className="text-sm font-semibold">{t("client.stale.title")}</p>
+                <p className="text-xs text-muted-foreground">{t("client.stale.subtitle")}</p>
               </div>
               <Button size="sm" className="h-9 shrink-0" onClick={() => window.location.reload()}>
-                Refresh
+                {t("client.stale.refresh")}
               </Button>
               <button
                 type="button"
-                aria-label="Dismiss refresh reminder"
+                aria-label={t("client.stale.dismiss")}
                 onClick={() => setVisible(false)}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground"
               >

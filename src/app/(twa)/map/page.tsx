@@ -5,7 +5,7 @@ import * as ReactDOM from "react-dom";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bus, Car, ChevronRight, Crosshair, Filter, Footprints, LocateFixed, MapPin, Search } from "lucide-react";
+import { Bus, Car, ChevronRight, Crosshair, Filter, Footprints, LocateFixed, MapPin, Route, Search, X } from "lucide-react";
 import { getActiveTwaSubscriptions, getCachedActiveTwaSubscriptions, getCachedTwaCompanies, getTwaCompanies, type TwaCompany, type TwaUserSubscription } from "@/lib/api/twa-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { interpolate } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/format";
+import type { TranslationKey } from "@/lib/i18n/dictionary";
 
 const YANDEX_MAPS_SCRIPT_ID = "yandex-maps-js-api-v3";
 const YANDEX_MAP_CENTER: [number, number] = [37.6176, 55.7558];
@@ -77,10 +81,10 @@ type UserMapLocation = {
 
 type RouteMode = "auto" | "pedestrian" | "transit";
 
-const ROUTE_MODES: Array<{ key: RouteMode; label: string; yandex: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { key: "auto", label: "Auto", yandex: "auto", icon: Car },
-  { key: "pedestrian", label: "Walk", yandex: "pd", icon: Footprints },
-  { key: "transit", label: "Transit", yandex: "mt", icon: Bus },
+const ROUTE_MODES: Array<{ key: RouteMode; labelKey: TranslationKey; yandex: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { key: "auto", labelKey: "client.map.routeAuto", yandex: "auto", icon: Car },
+  { key: "pedestrian", labelKey: "client.map.routeWalk", yandex: "pd", icon: Footprints },
+  { key: "transit", labelKey: "client.map.routeTransit", yandex: "mt", icon: Bus },
 ];
 
 declare global {
@@ -192,8 +196,8 @@ function distanceKm(from: UserMapLocation | null, to: PartnerMapPoint["location"
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function formatDistance(km: number | null) {
-  if (km == null) return "Location off";
+function formatDistance(km: number | null, t: TranslateFn) {
+  if (km == null) return t("client.map.locationOff");
   if (km < 1) return `${Math.round(km * 1000)} m`;
   return `${km.toFixed(km < 10 ? 1 : 0)} km`;
 }
@@ -343,6 +347,7 @@ function PartnerMap({
   userLocation,
   activeCompanyIds,
   onClusterPreview,
+  selectedPreview,
 }: {
   points: PartnerMapPoint[];
   selectedId: string | null;
@@ -350,7 +355,9 @@ function PartnerMap({
   userLocation: UserMapLocation | null;
   activeCompanyIds: Set<number>;
   onClusterPreview: (points: PartnerMapPoint[]) => void;
+  selectedPreview?: React.ReactNode;
 }) {
+  const { t } = useI18n("ru");
   const markerItems = useMemo(() => buildMarkerItems(points, selectedId, 11), [points, selectedId]);
 
   return (
@@ -379,7 +386,7 @@ function PartnerMap({
               onClick={() => onClusterPreview(item.points)}
               className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full focus:outline-none focus:ring-2 focus:ring-primary"
               style={{ left: `${position.x}%`, top: `${position.y}%` }}
-              aria-label={`${item.points.length} locations cluster`}
+              aria-label={interpolate(t("client.map.locationsCluster"), { count: item.points.length })}
             >
               <motion.span
                 className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-emerald-300 bg-slate-950 text-sm font-bold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] ring-4 ring-slate-950/25"
@@ -420,8 +427,13 @@ function PartnerMap({
         );
       })}
       <div className="absolute bottom-2 left-2 right-2 rounded-lg bg-background/80 px-2 py-1.5 text-[10px] text-muted-foreground backdrop-blur">
-        Location density preview - {points.length} point{points.length !== 1 ? "s" : ""} - tap marker to preview
+        {interpolate(t("client.map.densityPreview"), { count: points.length })}
       </div>
+      {selectedPreview && (
+        <div className="pointer-events-auto absolute inset-x-3 bottom-10 z-20">
+          {selectedPreview}
+        </div>
+      )}
     </div>
   );
 }
@@ -434,6 +446,7 @@ function YandexPartnerMap({
   activeCompanyIds,
   nearMeFocusKey,
   onClusterPreview,
+  selectedPreview,
 }: {
   points: PartnerMapPoint[];
   selectedId: string | null;
@@ -443,7 +456,9 @@ function YandexPartnerMap({
   activeCompanyIds: Set<number>;
   nearMeFocusKey: number;
   onClusterPreview: (points: PartnerMapPoint[]) => void;
+  selectedPreview?: React.ReactNode;
 }) {
+  const { t } = useI18n("ru");
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY;
   const initialCenterSource = focusPoint ?? points[0] ?? null;
   const initialLocation: MapLocationState = {
@@ -457,8 +472,8 @@ function YandexPartnerMap({
   const animationFrameRef = useRef<number | null>(null);
   const [status, setStatus] = useState<MapStatus>(() =>
     apiKey
-      ? { state: "loading", message: "Loading Yandex Maps JS API v3 React components..." }
-      : { state: "missing-key", message: "NEXT_PUBLIC_YANDEX_MAPS_API_KEY is missing. Showing fallback map." },
+      ? { state: "loading", message: t("client.map.yandexLoading") }
+      : { state: "missing-key", message: t("client.map.yandexMissing") },
   );
   const markerItems = useMemo(() => buildMarkerItems(points, selectedId, mapLocation.zoom), [points, selectedId, mapLocation.zoom]);
 
@@ -495,14 +510,14 @@ function YandexPartnerMap({
       .then((reactifiedMaps) => {
         if (disposed) return;
         setMaps(reactifiedMaps);
-        setStatus({ state: "ready", message: `Yandex Maps React integration is active. Rendered ${points.length} location markers.` });
+        setStatus({ state: "ready", message: interpolate(t("client.map.yandexReady"), { count: points.length }) });
       })
       .catch((error: unknown) => {
         if (!disposed) {
           setMaps(null);
           setStatus({
             state: "fallback",
-            message: "Yandex Maps failed to initialize. Showing fallback map.",
+            message: t("client.map.yandexFailed"),
             details: stringifyUnknownError(error),
           });
         }
@@ -544,6 +559,7 @@ function YandexPartnerMap({
           userLocation={userLocation}
           activeCompanyIds={activeCompanyIds}
           onClusterPreview={onClusterPreview}
+          selectedPreview={selectedPreview}
         />
         <MapDiagnostics status={status} />
       </div>
@@ -597,7 +613,7 @@ function YandexPartnerMap({
                       });
                     }}
                     className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-emerald-300 bg-slate-950 text-sm font-bold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] ring-4 ring-slate-950/25 transition-transform focus:outline-none focus:ring-2 focus:ring-emerald-300 active:scale-95"
-                    aria-label={`${item.points.length} locations cluster`}
+                    aria-label={interpolate(t("client.map.locationsCluster"), { count: item.points.length })}
                   >
                     {item.points.length}
                   </button>
@@ -628,14 +644,20 @@ function YandexPartnerMap({
           })}
         </YMap>
         <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-background/80 px-2 py-1.5 text-[10px] text-muted-foreground backdrop-blur">
-          Yandex Maps React integration - {points.length} location point{points.length !== 1 ? "s" : ""}
+          {interpolate(t("client.map.yandexFooter"), { count: points.length })}
         </div>
+        {selectedPreview && (
+          <div className="pointer-events-auto absolute inset-x-3 bottom-10 z-20">
+            {selectedPreview}
+          </div>
+        )}
       </div>
       <MapDiagnostics status={status} />
     </div>
   );
 }
 function MapDiagnostics({ status }: { status: MapStatus }) {
+  const { t } = useI18n("ru");
   const tone =
     status.state === "ready"
       ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
@@ -646,20 +668,21 @@ function MapDiagnostics({ status }: { status: MapStatus }) {
   return (
     <div className={cn("rounded-xl border px-3 py-2 text-[11px] leading-relaxed", tone)}>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold">Map diagnostic</span>
+        <span className="font-semibold">{t("client.map.diagnostic")}</span>
         <span className="rounded-full bg-background/50 px-2 py-0.5 uppercase tracking-wide">{status.state}</span>
       </div>
       <p className="mt-1">{status.message}</p>
       {"details" in status && status.details && <pre className="mt-2 whitespace-pre-wrap text-[10px] opacity-90">{status.details}</pre>}
       {status.state !== "ready" && (
         <div className="mt-1 text-muted-foreground">
-          For local JS API v3, keep IP restrictions empty and use HTTP Referer like localhost:3000 or 127.0.0.1:3000.
+          {t("client.map.diagnosticHint")}
         </div>
       )}
     </div>
   );
 }
 function MapPageContent() {
+  const { t } = useI18n("ru");
   const searchParams = useSearchParams();
   const requestedCompany = searchParams.get("company");
   const requestedLocation = searchParams.get("location");
@@ -814,6 +837,77 @@ function MapPageContent() {
       .sort((a, b) => (a.distance ?? Number.POSITIVE_INFINITY) - (b.distance ?? Number.POSITIVE_INFINITY))
       .slice(0, 3);
   }, [selectedPoint, userLocation]);
+  const selectedPreview = selectedPartner && selectedPoint ? (
+    <motion.div
+      key={selectedPoint.id}
+      initial={{ y: 24, opacity: 0, scale: 0.98 }}
+      animate={{ y: 0, opacity: 1, scale: 1 }}
+      transition={{ type: "spring", bounce: 0.22, duration: 0.42 }}
+      className="rounded-[1.25rem] border border-white/15 bg-slate-950/94 p-2.5 text-white shadow-[0_18px_44px_rgba(0,0,0,0.52)] backdrop-blur-xl"
+    >
+      <div className="flex items-start gap-2.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/25">
+          <CategoryIcon iconName={categoryIconName(selectedPoint)} className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold leading-tight">{selectedPartner.name}</p>
+              <p className="mt-0.5 truncate text-[11px] text-white/55">
+                {selectedPoint.location.title ?? selectedPoint.location.city ?? t("client.map.partnerLocation")}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/8 text-white/70 transition hover:bg-white/12 hover:text-white"
+              aria-label={t("client.map.closePartnerMenu")}
+              onClick={() => {
+                setSelectedPointId("");
+                setClusterPreviewPoints([]);
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <p className="line-clamp-1 text-[11px] leading-relaxed text-white/68">{selectedPoint.location.address}</p>
+          {selectedPartner.description && (
+            <p className="line-clamp-1 text-[11px] leading-relaxed text-white/45">{selectedPartner.description}</p>
+          )}
+        </div>
+      </div>
+      <div className="mt-2.5 flex items-center gap-2">
+        <Badge
+          variant="outline"
+          className={cn(
+            "h-8 shrink-0 border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75",
+            isLocationOpenNow(selectedPoint.location) && "border-emerald-300/25 bg-emerald-500/10 text-emerald-100",
+          )}
+        >
+          {selectedPoint.location.openTime}-{selectedPoint.location.closeTime}
+        </Badge>
+        <Badge variant="outline" className="h-8 shrink-0 border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75">
+          {formatDistance(selectedDistance, t)}
+        </Badge>
+        <Badge variant="outline" className="h-8 shrink-0 border-white/10 bg-white/[0.06] px-2 text-[10px] text-white/75">
+          {selectedPartner.points.balance} {t("client.common.pointsShort")}
+        </Badge>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <Button asChild size="sm" variant="secondary" className="h-8 rounded-xl text-xs">
+          <a href={routeHref(selectedPoint.location, "auto", userLocation)} target="_blank" rel="noreferrer">
+            <Route className="mr-1.5 h-3.5 w-3.5" />
+            {t("client.map.route")}
+          </a>
+        </Button>
+        <Button asChild size="sm" className="h-8 rounded-xl text-xs">
+          <Link href={`/wallet/${selectedPartner.id}`}>
+            {t("client.map.openCard")}
+            <ChevronRight className="ml-1 h-3.5 w-3.5" />
+          </Link>
+        </Button>
+      </div>
+    </motion.div>
+  ) : null;
 
   return (
     <motion.div
@@ -825,7 +919,7 @@ function MapPageContent() {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold">Map</h1>
+          <h1 className="text-lg font-semibold">{t("client.map.title")}</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -836,18 +930,18 @@ function MapPageContent() {
             disabled={geoStatus === "requesting"}
           >
             <Crosshair className="mr-1 h-4 w-4" />
-            {geoStatus === "requesting" ? "Locating" : geoStatus === "ready" ? "You" : "Locate"}
+            {geoStatus === "requesting" ? t("client.map.locating") : geoStatus === "ready" ? t("client.map.you") : t("client.map.locate")}
           </Button>
           <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" size="sm" className="glass border-white/10">
                 <Filter className="mr-1 h-4 w-4" />
-                Categories
+                {t("client.common.categories")}
               </Button>
             </SheetTrigger>
           <SheetContent side="bottom" className="rounded-t-2xl pb-[env(safe-area-inset-bottom)]">
             <SheetHeader>
-              <SheetTitle>Filter by category</SheetTitle>
+              <SheetTitle>{t("client.map.filterByCategory")}</SheetTitle>
             </SheetHeader>
             <ScrollArea className="mt-4 h-[240px] pr-4">
               <div className="flex flex-col gap-2">
@@ -862,7 +956,7 @@ function MapPageContent() {
                     selectedCategory === null ? "bg-primary text-primary-foreground" : "bg-muted/50 hover:bg-muted",
                   )}
                 >
-                  All categories
+                  {t("client.common.allCategories")}
                 </button>
                 {categories.map((category) => (
                   <button
@@ -899,7 +993,7 @@ function MapPageContent() {
               setSearchQuery(event.target.value);
               setClusterPreviewPoints([]);
             }}
-            placeholder="Search companies, addresses, categories..."
+            placeholder={t("client.map.searchPlaceholder")}
             className="h-11 rounded-2xl border-white/10 bg-muted/20 pl-9"
           />
         </div>
@@ -924,19 +1018,19 @@ function MapPageContent() {
                   <span className="block truncate text-sm font-semibold">{point.company.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">{point.location.address}</span>
                 </span>
-                <span className="shrink-0 text-xs text-muted-foreground">{formatDistance(distanceKm(userLocation, point.location))}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{formatDistance(distanceKm(userLocation, point.location), t)}</span>
               </button>
             ))}
             {searchMatches.length === 0 && (
-              <p className="px-3 py-3 text-sm text-muted-foreground">No matching map points.</p>
+              <p className="px-3 py-3 text-sm text-muted-foreground">{t("client.map.noMatchingPoints")}</p>
             )}
           </div>
         )}
         {geoStatus === "denied" && (
-          <p className="text-xs text-amber-200">Geolocation is blocked by the browser. Routes will open from destination only.</p>
+          <p className="text-xs text-amber-200">{t("client.map.geoBlocked")}</p>
         )}
         {geoStatus === "unavailable" && (
-          <p className="text-xs text-amber-200">Geolocation is unavailable in this browser.</p>
+          <p className="text-xs text-amber-200">{t("client.map.geoUnavailable")}</p>
         )}
       </div>
 
@@ -944,7 +1038,7 @@ function MapPageContent() {
         <p className="mb-2 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <CategoryIcon iconName={selectedCategoryData.icon ?? "Circle"} className="h-4 w-4 text-primary" />
-            Showing: {selectedCategoryData.name}
+            {interpolate(t("client.map.showing"), { category: selectedCategoryData.name })}
           </span>
         </p>
       )}
@@ -952,9 +1046,9 @@ function MapPageContent() {
       <div className="mb-3 rounded-2xl border border-white/10 bg-muted/10 p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold">Map points</p>
+            <p className="text-sm font-semibold">{t("client.map.pointsTitle")}</p>
             <p className="text-xs text-muted-foreground">
-              {locationPoints.length} visible point{locationPoints.length !== 1 ? "s" : ""} from {filteredPartners.length} partner{filteredPartners.length !== 1 ? "s" : ""}
+              {interpolate(t("client.map.pointsVisible"), { points: locationPoints.length, partners: filteredPartners.length })}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -970,19 +1064,19 @@ function MapPageContent() {
                 }}
               >
                 <LocateFixed className="mr-1 h-3.5 w-3.5" />
-                Near me
+                {t("client.map.nearMe")}
               </Button>
             )}
-            <Badge variant="outline">{nearMeOnly ? "near" : pointMode}</Badge>
+            <Badge variant="outline">{nearMeOnly ? t("client.map.near") : pointMode}</Badge>
           </div>
         </div>
         <div className="hide-scrollbar flex gap-2 overflow-x-auto overflow-y-hidden pb-1 touch-pan-x">
           {[
-            ["all", "All points"],
-            ["main", "Main only"],
-            ["open", "Open now"],
-            ["visited", "My points"],
-            ["subscriptions", "Active subs"],
+            ["all", t("client.map.allPoints")],
+            ["main", t("client.map.mainOnly")],
+            ["open", t("client.map.openNow")],
+            ["visited", t("client.map.myPoints")],
+            ["subscriptions", t("client.map.activeSubs")],
           ].map(([key, label]) => (
             <Button
               key={key}
@@ -997,9 +1091,9 @@ function MapPageContent() {
         </div>
         <div className="hide-scrollbar mt-2 flex gap-2 overflow-x-auto overflow-y-hidden pb-1 touch-pan-x">
           {[
-            ["name", "Sort: name"],
-            ["points", "Sort: points"],
-            ["branches", "Sort: branches"],
+            ["name", t("client.map.sortName")],
+            ["points", t("client.map.sortPoints")],
+            ["branches", t("client.map.sortBranches")],
           ].map(([key, label]) => (
             <Button
               key={key}
@@ -1026,6 +1120,7 @@ function MapPageContent() {
         activeCompanyIds={activeCompanyIds}
         nearMeFocusKey={nearMeFocusKey}
         onClusterPreview={(points) => setClusterPreviewPoints(points)}
+        selectedPreview={selectedPreview}
       />
 
       {clusterPreviewPoints.length > 0 && (
@@ -1033,12 +1128,12 @@ function MapPageContent() {
           <CardContent className="space-y-4 px-4 pb-4 pt-3.5">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold">Cluster addresses</p>
+                <p className="text-sm font-semibold">{t("client.map.clusterAddresses")}</p>
                 <p className="text-xs text-muted-foreground">
-                  {clusterPreviewPoints.length} point{clusterPreviewPoints.length !== 1 ? "s" : ""} in this area
+                  {interpolate(t("client.map.pointsInArea"), { count: clusterPreviewPoints.length })}
                 </p>
               </div>
-              <Badge variant="outline">first {Math.min(10, clusterPreviewPoints.length)}</Badge>
+              <Badge variant="outline">{interpolate(t("client.map.firstCount"), { count: Math.min(10, clusterPreviewPoints.length) })}</Badge>
             </div>
             <div className="space-y-3">
               {clusterPreviewPoints.slice(0, 10).map((point) => (
@@ -1060,7 +1155,7 @@ function MapPageContent() {
                     <span className="block truncate text-sm font-medium">{point.company.name}</span>
                     <span className="block truncate text-xs text-muted-foreground">{point.location.address}</span>
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{formatDistance(distanceKm(userLocation, point.location))}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{formatDistance(distanceKm(userLocation, point.location), t)}</span>
                 </button>
               ))}
             </div>
@@ -1087,7 +1182,7 @@ function MapPageContent() {
                       </span>
                       <div className="min-w-0">
                         <p className="truncate text-base font-semibold">{selectedPartner.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">{selectedPoint.location.title ?? selectedPoint.location.city ?? "Partner location"}</p>
+                        <p className="truncate text-xs text-muted-foreground">{selectedPoint.location.title ?? selectedPoint.location.city ?? t("client.map.partnerLocation")}</p>
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1106,7 +1201,7 @@ function MapPageContent() {
                       isLocationOpenNow(selectedPoint.location) && "border-emerald-300/30 bg-emerald-500/10 text-emerald-200",
                     )}
                   >
-                    {isLocationOpenNow(selectedPoint.location) ? "Open now" : "Closed"}
+                    {isLocationOpenNow(selectedPoint.location) ? t("client.map.openNow") : t("client.map.closed")}
                   </Badge>
                 </div>
 
@@ -1114,16 +1209,16 @@ function MapPageContent() {
                   <p className="line-clamp-2 text-sm text-foreground">{selectedPoint.location.address}</p>
                   <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                     <div className="rounded-xl bg-background/40 p-2">
-                      <p className="text-muted-foreground">Hours</p>
+                      <p className="text-muted-foreground">{t("client.map.hours")}</p>
                       <p className="mt-0.5 font-semibold">{selectedPoint.location.openTime}-{selectedPoint.location.closeTime}</p>
                     </div>
                     <div className="rounded-xl bg-background/40 p-2">
-                      <p className="text-muted-foreground">Distance</p>
-                      <p className="mt-0.5 font-semibold">{formatDistance(selectedDistance)}</p>
+                      <p className="text-muted-foreground">{t("client.map.distance")}</p>
+                      <p className="mt-0.5 font-semibold">{formatDistance(selectedDistance, t)}</p>
                     </div>
                     <div className="rounded-xl bg-background/40 p-2">
-                      <p className="text-muted-foreground">Points</p>
-                      <p className="mt-0.5 font-semibold">{selectedPartner.points.balance} pts</p>
+                      <p className="text-muted-foreground">{t("client.map.points")}</p>
+                      <p className="mt-0.5 font-semibold">{selectedPartner.points.balance} {t("client.common.pointsShort")}</p>
                     </div>
                   </div>
                   {selectedPartner.description && (
@@ -1138,7 +1233,7 @@ function MapPageContent() {
                       <Button key={mode.key} asChild size="sm" variant="secondary" className="h-10">
                         <a href={routeHref(selectedPoint.location, mode.key, userLocation)} target="_blank" rel="noreferrer">
                           <Icon className="mr-1 h-4 w-4" />
-                          {mode.label}
+                          {t(mode.labelKey)}
                         </a>
                       </Button>
                     );
@@ -1148,7 +1243,7 @@ function MapPageContent() {
                 <div className="flex gap-2">
                   <Button asChild className="flex-1">
                     <Link href={`/wallet/${selectedPartner.id}`}>
-                      Open card
+                      {t("client.map.openCard")}
                       <ChevronRight className="ml-1 h-4 w-4" />
                     </Link>
                   </Button>
@@ -1156,7 +1251,7 @@ function MapPageContent() {
 
                 {nearestSameCompany.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">Nearby locations from this partner</p>
+                    <p className="text-xs font-semibold text-muted-foreground">{t("client.map.nearbyPartnerLocations")}</p>
                     {nearestSameCompany.map(({ location, distance }) => (
                       <Link
                         key={location.uuid}
@@ -1164,10 +1259,10 @@ function MapPageContent() {
                         className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs transition-colors hover:bg-white/[0.06]"
                       >
                         <span className="min-w-0">
-                          <span className="block truncate font-medium">{location.title ?? "Branch"}</span>
+                          <span className="block truncate font-medium">{location.title ?? t("client.common.branch")}</span>
                           <span className="block truncate text-muted-foreground">{location.address}</span>
                         </span>
-                        <span className="ml-2 shrink-0 text-muted-foreground">{formatDistance(distance)}</span>
+                        <span className="ml-2 shrink-0 text-muted-foreground">{formatDistance(distance, t)}</span>
                       </Link>
                     ))}
                   </div>
@@ -1179,7 +1274,7 @@ function MapPageContent() {
       </AnimatePresence>
 
       {locationPoints.length === 0 && (
-        <p className="mt-4 text-center text-sm text-muted-foreground">No saved company locations match these filters.</p>
+        <p className="mt-4 text-center text-sm text-muted-foreground">{t("client.map.noSavedLocations")}</p>
       )}
     </motion.div>
   );

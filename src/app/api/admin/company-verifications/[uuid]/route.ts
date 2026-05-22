@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { CompanyVerificationStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminScope } from "@/lib/admin/require-admin-scope";
 import { deletePassportFilesForApplication } from "@/lib/company-onboarding/passport-storage";
 import { prisma } from "@/lib/prisma";
 
@@ -54,9 +55,8 @@ export async function GET(
 ) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
-  if (session.role === "SUPPORT") {
-    return NextResponse.json({ message: "Support users cannot access passport verification requests" }, { status: 403 });
-  }
+  const access = await requireAdminScope(session, "COMPANY_VERIFICATIONS", "canView");
+  if (!access.ok) return access.response;
 
   const uuid = await readUuid(context.params);
   const application = await getApplication(uuid);
@@ -73,9 +73,8 @@ export async function PATCH(
 ) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
-  if (session.role === "SUPPORT") {
-    return NextResponse.json({ message: "Support users cannot access passport verification requests" }, { status: 403 });
-  }
+  const access = await requireAdminScope(session, "COMPANY_VERIFICATIONS", "canEdit");
+  if (!access.ok) return access.response;
 
   const uuid = await readUuid(context.params);
   const body = (await request.json().catch(() => ({}))) as { status?: CompanyVerificationStatus };

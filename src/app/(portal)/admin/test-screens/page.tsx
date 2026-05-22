@@ -1,4 +1,4 @@
-﻿import { Award, CalendarHeart, Crown, Medal, QrCode, Sparkles, Trophy, UsersRound } from "lucide-react";
+﻿import { Award, CalendarHeart, Crown, Handshake, Medal, QrCode, Sparkles, Trophy, TrendingUp, UsersRound } from "lucide-react";
 import { ConceptLinkCard, ConceptPageShell } from "./concept-components";
 
 const screens = [
@@ -44,6 +44,18 @@ const screens = [
     description: "Пробный дружелюбный персонаж в духе Duolingo, но под WhiteBox.",
     icon: Sparkles,
   },
+  {
+    href: "/admin/test-screens/business-model",
+    title: "Бизнес модель",
+    description: "Комиссия с подписок, 999 ₽ floor, налоги, платежи, затраты и сценарии рентабельности.",
+    icon: TrendingUp,
+  },
+  {
+    href: "/admin/test-screens/club",
+    title: "Клуб",
+    description: "Приватное сообщество предпринимателей: интро, коллаборации, доверие и сделки внутри WhiteBox.",
+    icon: Handshake,
+  },
 ];
 
 export default function TestScreensPage() {
@@ -72,3 +84,8 @@ export default function TestScreensPage() {
     </ConceptPageShell>
   );
 }
+
+
+
+
+

@@ -8,9 +8,11 @@ import {
   AuditLevel,
   AuditResult,
   AuditWorkspace,
+  PermissionScope,
   PromoCodeRewardType,
   Prisma,
   ReferralInviteStatus,
+  SubscriptionBundleStatus,
   SubscriptionSpendPolicy,
   UserRole,
 } from "@prisma/client";
@@ -20,6 +22,7 @@ import { MaintenanceStateService } from "../maintenance/maintenance-state.servic
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { CreateCompanySubscriptionDto } from "./dto/create-company-subscription.dto";
+import { CreatePairedSubscriptionDto } from "./dto/create-paired-subscription.dto";
 import { CreatePromoCodeDto } from "./dto/create-promo-code.dto";
 import { CreateAccountDto } from "./dto/create-account.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -41,6 +44,8 @@ export class AdminService {
     "Company",
     "CompanyLocation",
     "Subscription",
+    "SubscriptionBundle",
+    "SubscriptionBundleParticipant",
     "CompanyCategory",
     "CompanyLevelRule",
     "UserFavoriteCategory",
@@ -126,6 +131,15 @@ export class AdminService {
       baseValue,
       (slug) => this.prisma.subscription.findUnique({ where: { slug }, select: { id: true } }),
       "subscription",
+      excludeId,
+    );
+  }
+
+  private async createUniqueSubscriptionBundleSlug(baseValue: string, excludeId?: number) {
+    return this.createUniqueSlug(
+      baseValue,
+      (slug) => this.prisma.subscriptionBundle.findUnique({ where: { slug }, select: { id: true } }),
+      "bundle",
       excludeId,
     );
   }
@@ -236,6 +250,36 @@ export class AdminService {
         linkUrl: input.linkUrl?.trim() || null,
         linkLabel: input.linkLabel?.trim() || null,
       },
+    });
+  }
+
+  private async recordManagerCompanyChangeWarning(
+    actorUserId: number | undefined,
+    input: {
+      action: string;
+      details: string;
+      targetUuid?: string | null;
+      targetLabel?: string | null;
+      category?: AuditCategory;
+    },
+  ) {
+    if (!actorUserId) return;
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { id: true, role: true, email: true },
+    });
+    if (!actor || actor.role !== UserRole.MANAGER) return;
+    await this.createAuditEvent({
+      workspace: AuditWorkspace.MANAGER,
+      category: input.category ?? AuditCategory.SYSTEM,
+      level: AuditLevel.WARN,
+      action: input.action,
+      details: input.details,
+      actorUserId: actor.id,
+      actorLabel: actor.email,
+      targetUuid: input.targetUuid,
+      targetLabel: input.targetLabel,
+      tags: ["WARNING", "MANAGER_CHANGE", "REVIEW_REQUIRED"],
     });
   }
 
@@ -403,6 +447,8 @@ export class AdminService {
       companies,
       companyLocations,
       subscriptions,
+      subscriptionBundles,
+      subscriptionBundleParticipants,
       companyCategories,
       companyLevelRules,
       userFavoriteCategories,
@@ -425,6 +471,8 @@ export class AdminService {
       this.prisma.company.findMany({ orderBy: { id: "asc" } }),
       this.prisma.companyLocation.findMany({ orderBy: { id: "asc" } }),
       this.prisma.subscription.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.subscriptionBundle.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.subscriptionBundleParticipant.findMany({ orderBy: { id: "asc" } }),
       this.prisma.companyCategory.findMany({ orderBy: { id: "asc" } }),
       this.prisma.companyLevelRule.findMany({ orderBy: { id: "asc" } }),
       this.prisma.userFavoriteCategory.findMany({ orderBy: { id: "asc" } }),
@@ -449,6 +497,8 @@ export class AdminService {
       Company: companies,
       CompanyLocation: companyLocations,
       Subscription: subscriptions,
+      SubscriptionBundle: subscriptionBundles,
+      SubscriptionBundleParticipant: subscriptionBundleParticipants,
       CompanyCategory: companyCategories,
       CompanyLevelRule: companyLevelRules,
       UserFavoriteCategory: userFavoriteCategories,
@@ -611,6 +661,8 @@ export class AdminService {
           id: number;
           uuid: string;
           telegramId: string | null;
+          phoneNumber?: string | null;
+          phoneVerifiedAt?: string | null;
           name: string;
           email: string;
           role: UserRole;
@@ -625,6 +677,8 @@ export class AdminService {
         Company: Array<Record<string, unknown>>;
         CompanyLocation?: Array<Record<string, unknown>>;
         Subscription: Array<Record<string, unknown>>;
+        SubscriptionBundle?: Array<Record<string, unknown>>;
+        SubscriptionBundleParticipant?: Array<Record<string, unknown>>;
         CompanyCategory: Array<Record<string, unknown>>;
         CompanyLevelRule: Array<Record<string, unknown>>;
         UserFavoriteCategory: Array<Record<string, unknown>>;
@@ -671,6 +725,7 @@ export class AdminService {
       await tx.userCompany.deleteMany();
       await tx.promoCodeRedemption.deleteMany();
       await tx.referralInvite.deleteMany();
+      await tx.subscriptionBundleParticipant.deleteMany();
       await tx.userProfilePreference.deleteMany();
       await tx.userFavoriteCategory.deleteMany();
       await tx.referralCampaign.deleteMany();
@@ -678,6 +733,7 @@ export class AdminService {
       await tx.companyCategory.deleteMany();
       await tx.companyLocation.deleteMany();
       await tx.promoCode.deleteMany();
+      await tx.subscriptionBundle.deleteMany();
       await tx.subscription.deleteMany();
       await tx.company.deleteMany();
       await tx.category.deleteMany();
@@ -707,6 +763,14 @@ export class AdminService {
       }
       if (tables.Subscription.length) {
         await tx.subscription.createMany({ data: tables.Subscription as never });
+      }
+      if (tables.SubscriptionBundle?.length) {
+        await tx.subscriptionBundle.createMany({ data: tables.SubscriptionBundle as never });
+      }
+      if (tables.SubscriptionBundleParticipant?.length) {
+        await tx.subscriptionBundleParticipant.createMany({
+          data: tables.SubscriptionBundleParticipant as never,
+        });
       }
       if (tables.CompanyCategory.length) {
         await tx.companyCategory.createMany({ data: tables.CompanyCategory as never });
@@ -1016,6 +1080,107 @@ export class AdminService {
     return adminWorkspaceRoles.has(role);
   }
 
+  private defaultPermissionForRole(role: UserRole | string, scope: PermissionScope) {
+    if (role === UserRole.SUPER_ADMIN) return { canView: true, canEdit: true, canApprove: true };
+    if (role === UserRole.ADMIN) {
+      if (scope === PermissionScope.FINANCE || scope === PermissionScope.DATABASE) {
+        return { canView: false, canEdit: false, canApprove: false };
+      }
+      return { canView: true, canEdit: true, canApprove: scope !== PermissionScope.TELEGRAM };
+    }
+    if (role === UserRole.MANAGER) {
+      if (scope === PermissionScope.USERS) return { canView: true, canEdit: false, canApprove: false };
+      if (scope === PermissionScope.COMPANIES) return { canView: true, canEdit: true, canApprove: false };
+      if (scope === PermissionScope.COMPANY_VERIFICATIONS) return { canView: true, canEdit: true, canApprove: true };
+      if (scope === PermissionScope.SUPPORT) return { canView: true, canEdit: true, canApprove: false };
+      if (scope === PermissionScope.AUDIT || scope === PermissionScope.TELEGRAM) {
+        return { canView: true, canEdit: false, canApprove: false };
+      }
+    }
+    if (role === UserRole.SUPPORT) {
+      if (scope === PermissionScope.USERS) return { canView: true, canEdit: false, canApprove: false };
+      if (scope === PermissionScope.SUPPORT) return { canView: true, canEdit: true, canApprove: false };
+    }
+    return { canView: false, canEdit: false, canApprove: false };
+  }
+
+  private clampPermissionToRole(
+    role: UserRole | string,
+    scope: PermissionScope,
+    input: { canView?: boolean; canEdit?: boolean; canApprove?: boolean },
+  ) {
+    if (role === UserRole.SUPER_ADMIN) return { canView: true, canEdit: true, canApprove: true };
+    const next = {
+      canView: input.canView === true,
+      canEdit: input.canEdit === true,
+      canApprove: input.canApprove === true,
+    };
+    if (next.canEdit || next.canApprove) next.canView = true;
+    if (role === UserRole.ADMIN) return next;
+    if (role === UserRole.MANAGER) {
+      if (scope === PermissionScope.FINANCE || scope === PermissionScope.SETTINGS) {
+        return { canView: false, canEdit: false, canApprove: false };
+      }
+      if (scope === PermissionScope.DATABASE) return { canView: next.canView, canEdit: false, canApprove: false };
+      return next;
+    }
+    if (role === UserRole.SUPPORT) {
+      if (
+        scope === PermissionScope.FINANCE ||
+        scope === PermissionScope.SETTINGS ||
+        scope === PermissionScope.COMPANY_VERIFICATIONS
+      ) {
+        return { canView: false, canEdit: false, canApprove: false };
+      }
+      if (scope === PermissionScope.DATABASE || scope === PermissionScope.AUDIT || scope === PermissionScope.TELEGRAM) {
+        return { canView: next.canView, canEdit: false, canApprove: false };
+      }
+      return { canView: next.canView, canEdit: next.canEdit, canApprove: false };
+    }
+    return { canView: false, canEdit: false, canApprove: false };
+  }
+
+  async assertAdminPermission(
+    actorUserId: number,
+    scope: PermissionScope,
+    action: "canView" | "canEdit" | "canApprove",
+  ) {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: {
+        id: true,
+        role: true,
+        permissions: {
+          where: { scope },
+          select: { canView: true, canEdit: true, canApprove: true },
+        },
+      },
+    });
+    if (!actor) throw new ForbiddenException("Actor account was not found");
+    const explicit = actor.permissions[0];
+    const permission = explicit
+      ? this.clampPermissionToRole(actor.role, scope, explicit)
+      : this.defaultPermissionForRole(actor.role, scope);
+    if (!permission[action]) {
+      throw new ForbiddenException(`${scope} ${action.replace("can", "").toLowerCase()} access is not allowed`);
+    }
+  }
+
+  private assertCanChangeBlockedStatus(actorRole: UserRole, targetRole: UserRole) {
+    if (actorRole === UserRole.SUPER_ADMIN && targetRole !== UserRole.SUPER_ADMIN) return;
+    if (actorRole === UserRole.ADMIN && targetRole !== UserRole.SUPER_ADMIN && targetRole !== UserRole.ADMIN) {
+      return;
+    }
+
+    if (targetRole === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException("SUPER_ADMIN accounts cannot be blocked");
+    }
+    if (targetRole === UserRole.ADMIN) {
+      throw new ForbiddenException("ADMIN accounts can be blocked only by a SUPER_ADMIN policy decision");
+    }
+    throw new ForbiddenException("Only ADMIN or SUPER_ADMIN can block or unblock accounts");
+  }
+
   async updateUserRole(uuid: string, role: UserRole, actorUserId: number) {
     const actor = await this.prisma.user.findUnique({
       where: { id: actorUserId },
@@ -1252,18 +1417,19 @@ export class AdminService {
       if (statusChanges && !actor) {
         throw new ForbiddenException("Actor account was not found");
       }
-      if (
-        statusChanges &&
-        this.isAdminWorkspaceRole(existing.role) &&
-        actor?.role !== UserRole.SUPER_ADMIN
-      ) {
-        throw new ForbiddenException("Only SUPER_ADMIN can freeze, block or reactivate admin workspace accounts");
-      }
       const touchesBlockedStatus =
         nextStatusValue === "BLOCKED" ||
         (String(existing.accountStatus) === "BLOCKED" && nextStatusValue !== "BLOCKED");
-      if (touchesBlockedStatus && actor?.role !== UserRole.SUPER_ADMIN) {
-        throw new ForbiddenException("Only SUPER_ADMIN can block or unblock accounts");
+      if (touchesBlockedStatus && actor) {
+        this.assertCanChangeBlockedStatus(actor.role, existing.role);
+      }
+      if (
+        statusChanges &&
+        !touchesBlockedStatus &&
+        this.isAdminWorkspaceRole(existing.role) &&
+        actor?.role !== UserRole.SUPER_ADMIN
+      ) {
+        throw new ForbiddenException("Only SUPER_ADMIN can freeze or reactivate admin workspace accounts");
       }
       updateData.accountStatus = nextStatus;
       if (nextStatus === AccountStatus.BLOCKED || nextStatus === AccountStatus.ACTIVE) {
@@ -1347,15 +1513,13 @@ export class AdminService {
       this.prisma.user.findUnique({ where: { id: actorUserId }, select: { id: true, role: true, email: true } }),
       this.prisma.user.findUnique({ where: { uuid }, select: { id: true, uuid: true, email: true, name: true, role: true, accountStatus: true } }),
     ]);
-    if (!actor || actor.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException("Only SUPER_ADMIN can block accounts");
+    if (!actor) {
+      throw new ForbiddenException("Actor account was not found");
     }
     if (!target) {
       throw new NotFoundException("User not found");
     }
-    if (target.id === actor.id) {
-      throw new BadRequestException("You cannot block your own super admin account");
-    }
+    this.assertCanChangeBlockedStatus(actor.role, target.role);
 
     const cleanReason = reason?.trim().slice(0, 1000) || "No reason provided.";
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -1628,6 +1792,7 @@ export class AdminService {
               slug: true,
               name: true,
               isActive: true,
+              operatesOnline: true,
               category: { select: { id: true, name: true } },
               categories: {
                 select: {
@@ -1692,6 +1857,7 @@ export class AdminService {
             ? {
                 ...row.managedCompany,
                 categories: [],
+                operatesOnline: false,
                 subscriptionSpendPolicy: SubscriptionSpendPolicy.EXCLUDE,
                 levelRules: [],
               }
@@ -1742,12 +1908,12 @@ export class AdminService {
     return user;
   }
 
-  async updateCompanyUserByUuid(uuid: string, dto: UpdateCompanyUserDto) {
+  async updateCompanyUserByUuid(uuid: string, dto: UpdateCompanyUserDto, actorUserId?: number) {
     const user = await this.prisma.user.findUnique({ where: { uuid } });
     if (!user || user.role !== UserRole.COMPANY) {
       throw new NotFoundException("Company user not found");
     }
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { uuid },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
@@ -1766,6 +1932,14 @@ export class AdminService {
       },
       include: { managedCompany: true },
     });
+    await this.recordManagerCompanyChangeWarning(actorUserId, {
+      action: "Manager changed company user account",
+      details: `Manager updated company user fields: ${Object.keys(dto).join(", ") || "unknown"}.`,
+      targetUuid: uuid,
+      targetLabel: updated.managedCompany?.name ?? updated.name,
+      category: AuditCategory.USER,
+    });
+    return updated;
   }
 
   async deleteCompanyUserByUuid(uuid: string, actorUserId: number) {
@@ -1787,7 +1961,7 @@ export class AdminService {
     return { success: true as const };
   }
 
-  async upsertCompanyProfile(uuid: string, dto: UpsertCompanyProfileDto) {
+  async upsertCompanyProfile(uuid: string, dto: UpsertCompanyProfileDto, actorUserId?: number) {
     const user = await this.requireCompanyUser(uuid);
     const categoryIds = this.normalizeCompanyCategoryIds(dto);
     const levelRules = this.normalizeLevelRules(
@@ -1821,7 +1995,7 @@ export class AdminService {
     }
 
     if (user.managedCompany) {
-      return this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const company = await tx.company.update({
           where: { id: user.managedCompany!.id },
           data: {
@@ -1832,6 +2006,7 @@ export class AdminService {
             pointsPerReward: minRedeem,
             subscriptionSpendPolicy,
             isActive: dto.isActive ?? true,
+            operatesOnline: dto.operatesOnline ?? user.managedCompany!.operatesOnline ?? false,
           },
         });
         await tx.companyCategory.deleteMany({ where: { companyId: company.id } });
@@ -1858,9 +2033,16 @@ export class AdminService {
           },
         });
       });
+      await this.recordManagerCompanyChangeWarning(actorUserId, {
+        action: "Manager changed company profile",
+        details: `Manager updated company profile "${dto.name}". Admin review is recommended.`,
+        targetUuid: uuid,
+        targetLabel: result?.name ?? dto.name,
+      });
+      return result;
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
           name: dto.name.trim(),
@@ -1870,6 +2052,7 @@ export class AdminService {
           pointsPerReward: minRedeem,
           subscriptionSpendPolicy,
           isActive: dto.isActive ?? true,
+          operatesOnline: dto.operatesOnline ?? false,
           ownerUserId: user.id,
         },
       });
@@ -1895,6 +2078,13 @@ export class AdminService {
         },
       });
     });
+    await this.recordManagerCompanyChangeWarning(actorUserId, {
+      action: "Manager created company profile",
+      details: `Manager created company profile "${dto.name}". Admin review is recommended.`,
+      targetUuid: uuid,
+      targetLabel: result?.name ?? dto.name,
+    });
+    return result;
   }
 
   async listCompanySubscriptions(companyUserUuid: string) {
@@ -2043,7 +2233,7 @@ export class AdminService {
     }
   }
 
-  async createCompanyLocation(companyUserUuid: string, dto: UpsertCompanyLocationDto) {
+  async createCompanyLocation(companyUserUuid: string, dto: UpsertCompanyLocationDto, actorUserId?: number) {
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
       throw new BadRequestException("Company profile must exist before adding locations.");
@@ -2076,6 +2266,12 @@ export class AdminService {
       },
     });
     if (location.isMain) await this.ensureSingleMainLocation(user.managedCompany.id, location.id);
+    await this.recordManagerCompanyChangeWarning(actorUserId, {
+      action: "Manager created company location",
+      details: `Manager added location "${location.title ?? location.address}".`,
+      targetUuid: companyUserUuid,
+      targetLabel: user.managedCompany.name,
+    });
     return location;
   }
 
@@ -2083,6 +2279,7 @@ export class AdminService {
     companyUserUuid: string,
     locationUuid: string,
     dto: UpsertCompanyLocationDto,
+    actorUserId?: number,
   ) {
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
@@ -2123,10 +2320,16 @@ export class AdminService {
       },
     });
     if (location.isMain) await this.ensureSingleMainLocation(user.managedCompany.id, location.id);
+    await this.recordManagerCompanyChangeWarning(actorUserId, {
+      action: "Manager changed company location",
+      details: `Manager updated location "${location.title ?? location.address}".`,
+      targetUuid: locationUuid,
+      targetLabel: user.managedCompany.name,
+    });
     return location;
   }
 
-  async deleteCompanyLocation(companyUserUuid: string, locationUuid: string) {
+  async deleteCompanyLocation(companyUserUuid: string, locationUuid: string, actorUserId?: number) {
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
       throw new BadRequestException("Company profile must exist before deleting locations.");
@@ -2145,6 +2348,12 @@ export class AdminService {
         await this.prisma.companyLocation.update({ where: { id: nextMain.id }, data: { isMain: true } });
       }
     }
+    await this.recordManagerCompanyChangeWarning(actorUserId, {
+      action: "Manager deleted company location",
+      details: `Manager deleted location "${existing.title ?? existing.address}".`,
+      targetUuid: locationUuid,
+      targetLabel: user.managedCompany.name,
+    });
     return { success: true as const };
   }
 
@@ -2305,7 +2514,7 @@ export class AdminService {
     };
   }
 
-  async createCompanySubscription(companyUserUuid: string, dto: CreateCompanySubscriptionDto) {
+  async createCompanySubscription(companyUserUuid: string, dto: CreateCompanySubscriptionDto, actorUserId?: number) {
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
       throw new BadRequestException("Company profile must exist before creating subscriptions.");
@@ -2329,7 +2538,7 @@ export class AdminService {
       dto.renewalPeriod?.trim() ||
       this.buildRenewalLabel(renewalValue, renewalUnit, promoBonusDays);
 
-    return this.prisma.subscription.create({
+    const subscription = await this.prisma.subscription.create({
       data: {
         name: dto.name.trim(),
         slug,
@@ -2345,12 +2554,21 @@ export class AdminService {
       },
       include: { category: true, company: true },
     });
+    await this.recordManagerCompanyChangeWarning(actorUserId, {
+      action: "Manager created company subscription",
+      details: `Manager created subscription "${subscription.name}" for ${subscription.price.toString()}.`,
+      targetUuid: subscription.uuid,
+      targetLabel: subscription.name,
+      category: AuditCategory.SUBSCRIPTION,
+    });
+    return subscription;
   }
 
   async updateCompanySubscription(
     companyUserUuid: string,
     subscriptionUuid: string,
     dto: UpdateCompanySubscriptionDto,
+    actorUserId?: number,
   ) {
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
@@ -2386,7 +2604,7 @@ export class AdminService {
     const nextRenewalLabel =
       dto.renewalPeriod?.trim() ??
       this.buildRenewalLabel(nextRenewalValue, nextRenewalUnit, nextPromoBonusDays);
-    return this.prisma.subscription.update({
+    const subscription = await this.prisma.subscription.update({
       where: { uuid: subscriptionUuid },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
@@ -2404,9 +2622,17 @@ export class AdminService {
       },
       include: { category: true, company: true },
     });
+    await this.recordManagerCompanyChangeWarning(actorUserId, {
+      action: "Manager changed company subscription",
+      details: `Manager updated subscription "${subscription.name}". Changed fields: ${Object.keys(dto).join(", ") || "unknown"}.`,
+      targetUuid: subscription.uuid,
+      targetLabel: subscription.name,
+      category: AuditCategory.SUBSCRIPTION,
+    });
+    return subscription;
   }
 
-  async deleteCompanySubscription(companyUserUuid: string, subscriptionUuid: string) {
+  async deleteCompanySubscription(companyUserUuid: string, subscriptionUuid: string, actorUserId?: number) {
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
       throw new BadRequestException("Company profile must exist before managing subscriptions.");
@@ -2418,7 +2644,267 @@ export class AdminService {
       throw new NotFoundException("Subscription not found for this company user.");
     }
     await this.prisma.subscription.delete({ where: { uuid: subscriptionUuid } });
+    await this.recordManagerCompanyChangeWarning(actorUserId, {
+      action: "Manager deleted company subscription",
+      details: `Manager deleted subscription "${sub.name}".`,
+      targetUuid: subscriptionUuid,
+      targetLabel: sub.name,
+      category: AuditCategory.SUBSCRIPTION,
+    });
     return { success: true as const };
+  }
+
+  private serializeSubscriptionBundle(row: {
+    id: number;
+    uuid: string;
+    slug: string;
+    name: string;
+    description: string;
+    price: Prisma.Decimal;
+    renewalPeriod: string;
+    renewalValue: number;
+    renewalUnit: string;
+    promoBonusDays: number;
+    status: SubscriptionBundleStatus;
+    isActive: boolean;
+    categoryId: number | null;
+    createdAt: Date;
+    updatedAt: Date;
+    category?: { id: number; slug: string; name: string; icon: string } | null;
+    participants: Array<{
+      id: number;
+      companyId: number;
+      benefitTitle: string;
+      benefitDescription: string;
+      fulfillmentNote: string | null;
+      revenueSharePercent: Prisma.Decimal;
+      sortOrder: number;
+      company: { id: number; slug: string; name: string; isActive: boolean };
+    }>;
+  }) {
+    return {
+      ...row,
+      price: row.price.toString(),
+      participants: row.participants
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((participant) => ({
+          ...participant,
+          revenueSharePercent: participant.revenueSharePercent.toString(),
+        })),
+    };
+  }
+
+  async listSubscriptionBundles() {
+    const bundles = await this.prisma.subscriptionBundle.findMany({
+      orderBy: { updatedAt: "desc" },
+      include: {
+        category: { select: { id: true, slug: true, name: true, icon: true } },
+        participants: {
+          include: { company: { select: { id: true, slug: true, name: true, isActive: true } } },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
+    });
+    return bundles.map((bundle) => this.serializeSubscriptionBundle(bundle));
+  }
+
+  async searchSubscriptions(query?: string) {
+    const q = query?.trim();
+    const textFilter = q
+      ? {
+          contains: q,
+          mode: Prisma.QueryMode.insensitive,
+        }
+      : undefined;
+
+    const subscriptionWhere: Prisma.SubscriptionWhereInput = textFilter
+      ? {
+          OR: [
+            { name: textFilter },
+            { slug: textFilter },
+            { description: textFilter },
+            { company: { name: textFilter } },
+            { category: { name: textFilter } },
+          ],
+        }
+      : {};
+
+    const bundleWhere: Prisma.SubscriptionBundleWhereInput = textFilter
+      ? {
+          OR: [
+            { name: textFilter },
+            { slug: textFilter },
+            { description: textFilter },
+            { category: { name: textFilter } },
+            { participants: { some: { company: { name: textFilter } } } },
+            { participants: { some: { benefitTitle: textFilter } } },
+            { participants: { some: { benefitDescription: textFilter } } },
+          ],
+        }
+      : {};
+
+    const [subscriptions, bundles] = await Promise.all([
+      this.prisma.subscription.findMany({
+        where: subscriptionWhere,
+        orderBy: { updatedAt: "desc" },
+        take: 10,
+        include: {
+          company: { select: { id: true, slug: true, name: true } },
+          category: { select: { id: true, slug: true, name: true, icon: true } },
+        },
+      }),
+      this.prisma.subscriptionBundle.findMany({
+        where: bundleWhere,
+        orderBy: { updatedAt: "desc" },
+        take: 10,
+        include: {
+          category: { select: { id: true, slug: true, name: true, icon: true } },
+          participants: {
+            include: { company: { select: { id: true, slug: true, name: true, isActive: true } } },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
+      }),
+    ]);
+
+    const ordinaryItems = subscriptions.map((subscription) => ({
+      type: "subscription" as const,
+      uuid: subscription.uuid,
+      slug: subscription.slug,
+      name: subscription.name,
+      description: subscription.description,
+      price: subscription.price.toString(),
+      renewalPeriod: subscription.renewalPeriod,
+      isActive: subscription.isActive,
+      status: subscription.isActive ? "ACTIVE" : "INACTIVE",
+      updatedAt: subscription.updatedAt.toISOString(),
+      company: subscription.company,
+      category: subscription.category,
+      participants: [],
+    }));
+
+    const bundleItems = bundles.map((bundle) => {
+      const serialized = this.serializeSubscriptionBundle(bundle);
+      return {
+        type: "bundle" as const,
+        uuid: serialized.uuid,
+        slug: serialized.slug,
+        name: serialized.name,
+        description: serialized.description,
+        price: serialized.price,
+        renewalPeriod: serialized.renewalPeriod,
+        isActive: serialized.isActive,
+        status: serialized.status,
+        updatedAt: serialized.updatedAt.toISOString(),
+        company: null,
+        category: serialized.category ?? null,
+        participants: serialized.participants.map((participant) => ({
+          companyId: participant.companyId,
+          companyName: participant.company.name,
+          benefitTitle: participant.benefitTitle,
+          revenueSharePercent: participant.revenueSharePercent,
+        })),
+      };
+    });
+
+    return {
+      items: [...ordinaryItems, ...bundleItems]
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 12),
+    };
+  }
+
+  async createPairedSubscription(dto: CreatePairedSubscriptionDto, actorUserId?: number) {
+    const participants = dto.participants.map((participant, index) => ({
+      companyId: Number(participant.companyId),
+      benefitTitle: participant.benefitTitle.trim(),
+      benefitDescription: participant.benefitDescription.trim(),
+      fulfillmentNote: participant.fulfillmentNote?.trim() || null,
+      revenueSharePercent: Number(participant.revenueSharePercent),
+      sortOrder: index + 1,
+    }));
+
+    const uniqueCompanyIds = [...new Set(participants.map((participant) => participant.companyId))];
+    if (uniqueCompanyIds.length !== participants.length) {
+      throw new BadRequestException("Each company can participate in a paired subscription only once.");
+    }
+    if (uniqueCompanyIds.length < 2) {
+      throw new BadRequestException("A paired subscription requires at least two companies.");
+    }
+
+    const shareTotal = participants.reduce((sum, participant) => sum + participant.revenueSharePercent, 0);
+    if (Math.round(shareTotal * 100) !== 10000) {
+      throw new BadRequestException("Revenue shares must add up to 100%.");
+    }
+
+    const companies = await this.prisma.company.findMany({
+      where: { id: { in: uniqueCompanyIds } },
+      select: { id: true },
+    });
+    if (companies.length !== uniqueCompanyIds.length) {
+      throw new NotFoundException("One or more companies were not found.");
+    }
+
+    if (dto.categoryId) {
+      const category = await this.prisma.category.findUnique({ where: { id: dto.categoryId } });
+      if (!category) throw new NotFoundException("Category not found");
+    }
+
+    const slug = await this.createUniqueSubscriptionBundleSlug(dto.slug || dto.name);
+    if (!slug) throw new BadRequestException("Paired subscription slug is invalid.");
+
+    const renewalValue = dto.renewalValue ?? 1;
+    const renewalUnit = this.parseRenewalUnit(dto.renewalUnit ?? "month");
+    const promoBonusDays = Math.max(0, dto.promoBonusDays ?? 0);
+    const renewalPeriod = this.buildRenewalLabel(renewalValue, renewalUnit, promoBonusDays);
+    const isActive = dto.isActive ?? false;
+
+    const bundle = await this.prisma.subscriptionBundle.create({
+      data: {
+        name: dto.name.trim(),
+        slug,
+        description: dto.description.trim(),
+        price: new Prisma.Decimal(dto.price),
+        renewalPeriod,
+        renewalValue,
+        renewalUnit,
+        promoBonusDays,
+        isActive,
+        status: isActive ? SubscriptionBundleStatus.ACTIVE : SubscriptionBundleStatus.DRAFT,
+        categoryId: dto.categoryId ?? null,
+        participants: {
+          create: participants.map((participant) => ({
+            companyId: participant.companyId,
+            benefitTitle: participant.benefitTitle,
+            benefitDescription: participant.benefitDescription,
+            fulfillmentNote: participant.fulfillmentNote,
+            revenueSharePercent: new Prisma.Decimal(participant.revenueSharePercent),
+            sortOrder: participant.sortOrder,
+          })),
+        },
+      },
+      include: {
+        category: { select: { id: true, slug: true, name: true, icon: true } },
+        participants: {
+          include: { company: { select: { id: true, slug: true, name: true, isActive: true } } },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
+    });
+
+    await this.createAuditEvent({
+      workspace: AuditWorkspace.MANAGER,
+      category: AuditCategory.SUBSCRIPTION,
+      level: AuditLevel.INFO,
+      action: "Paired subscription created",
+      details: `Created paired subscription "${bundle.name}" with ${participants.length} companies and 100% revenue split.`,
+      actorUserId,
+      targetUuid: bundle.uuid,
+      targetLabel: bundle.name,
+      tags: ["PAIRED_SUBSCRIPTION", "SUBSCRIPTION_BUNDLE"],
+    });
+
+    return this.serializeSubscriptionBundle(bundle);
   }
 
   async listPromoCodes() {

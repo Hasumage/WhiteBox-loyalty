@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
@@ -29,6 +29,9 @@ import {
   type AdminCompanyVerificationApplication,
   type AdminCompanyVerificationStatus,
 } from "@/lib/api/admin-client";
+import type { TranslationKey } from "@/lib/i18n/dictionary";
+import type { Locale } from "@/lib/i18n/shared";
+import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
 
 function statusClass(status: AdminCompanyVerificationStatus) {
@@ -39,13 +42,23 @@ function statusClass(status: AdminCompanyVerificationStatus) {
   return "border-white/10 bg-white/[0.05] text-muted-foreground";
 }
 
-function employmentLabel(value: AdminCompanyVerificationApplication["employmentType"]) {
-  return value === "SELF_EMPLOYED" ? "Self-employed" : "Individual entrepreneur";
+function employmentLabelKey(value: AdminCompanyVerificationApplication["employmentType"]): TranslationKey {
+  return value === "SELF_EMPLOYED"
+    ? "admin.verifications.selfEmployed"
+    : "admin.verifications.individualEntrepreneur";
 }
 
-function formatDate(value: string | null | undefined) {
+function statusLabelKey(status: AdminCompanyVerificationStatus): TranslationKey {
+  if (status === "SUBMITTED") return "admin.common.submitted";
+  if (status === "REVIEWING") return "admin.common.reviewing";
+  if (status === "APPROVED") return "admin.common.approved";
+  if (status === "REJECTED") return "admin.common.rejected";
+  return "admin.verifications.detail.draft";
+}
+
+function formatDate(value: string | null | undefined, locale: Locale) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function Field({
@@ -82,6 +95,7 @@ export default function CompanyVerificationDetailPage({
   params: Promise<{ uuid: string }>;
 }) {
   const { uuid } = use(params);
+  const { locale, t } = useI18n("ru");
   const [application, setApplication] = useState<AdminCompanyVerificationApplication | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -123,7 +137,7 @@ export default function CompanyVerificationDetailPage({
     const result = await adminUpdateCompanyVerification(uuid, { status });
     if (result.ok) {
       setApplication(result.data);
-      setNotice(`Status updated to ${status}.`);
+      setNotice(`${t("admin.verifications.detail.statusUpdated")}: ${t(statusLabelKey(status))}.`);
       const audit = await adminListAuditEvents({ workspace: "MANAGER", query: uuid, tag: "USER", limit: 20 });
       if (audit.ok) setAuditRows(audit.data.items);
     } else {
@@ -133,17 +147,17 @@ export default function CompanyVerificationDetailPage({
   }
 
   if (loading) {
-    return <Card className="border-white/10 bg-white/[0.04] p-6 text-muted-foreground">Loading verification request...</Card>;
+    return <Card className="border-white/10 bg-white/[0.04] p-6 text-muted-foreground">{t("admin.verifications.loading")}</Card>;
   }
 
   if (!application) {
     return (
       <div className="space-y-4">
         <Button asChild variant="secondary">
-          <Link href="/admin/company-verifications"><ArrowLeft className="h-4 w-4" /> Back to verifications</Link>
+          <Link href="/admin/company-verifications"><ArrowLeft className="h-4 w-4" /> {t("admin.verifications.detail.back")}</Link>
         </Button>
         <div className="rounded-xl border border-red-400/25 bg-red-500/10 p-4 text-sm text-red-100">
-          {error || "Company verification request not found."}
+          {error || t("admin.verifications.detail.notFound")}
         </div>
       </div>
     );
@@ -154,26 +168,26 @@ export default function CompanyVerificationDetailPage({
       <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
         <div>
           <Button asChild variant="secondary">
-            <Link href="/admin/company-verifications"><ArrowLeft className="h-4 w-4" /> Back to verifications</Link>
+            <Link href="/admin/company-verifications"><ArrowLeft className="h-4 w-4" /> {t("admin.verifications.detail.back")}</Link>
           </Button>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-tight">{application.companyName}</h1>
-            <Badge variant="outline" className={statusClass(application.status)}>{application.status}</Badge>
+            <Badge variant="outline" className={statusClass(application.status)}>{t(statusLabelKey(application.status))}</Badge>
           </div>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            {application.uuid} · submitted {formatDate(application.createdAt)}
+            {application.uuid} · {t("admin.common.submitted").toLowerCase()} {formatDate(application.createdAt, locale)}
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" disabled={saving} onClick={() => updateStatus("REVIEWING")}>
-            <Clock3 className="h-4 w-4" /> Mark reviewing
+            <Clock3 className="h-4 w-4" /> {t("admin.verifications.detail.markReviewing")}
           </Button>
           <Button disabled={saving} onClick={() => updateStatus("APPROVED")}>
-            <CheckCircle2 className="h-4 w-4" /> Approve
+            <CheckCircle2 className="h-4 w-4" /> {t("admin.verifications.detail.approve")}
           </Button>
           <Button variant="destructive" disabled={saving} onClick={() => updateStatus("REJECTED")}>
-            <XCircle className="h-4 w-4" /> Reject
+            <XCircle className="h-4 w-4" /> {t("admin.verifications.detail.reject")}
           </Button>
         </div>
       </div>
@@ -191,69 +205,69 @@ export default function CompanyVerificationDetailPage({
 
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="overflow-hidden border-white/10 bg-card/70 p-0">
-          <CardHeader className="border-b border-white/10 bg-white/[0.035]">
+          <CardHeader className="border-b border-white/10 bg-white/[0.035] px-8 pb-5 pt-8">
             <CardTitle className="flex items-center gap-2">
-              <BriefcaseBusiness className="h-5 w-5" /> Company request
+              <BriefcaseBusiness className="h-5 w-5" /> {t("admin.verifications.detail.companyRequest")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 p-5 sm:grid-cols-2">
-            <Field label="Company" value={application.companyName} icon={BriefcaseBusiness} />
-            <Field label="Employment type" value={employmentLabel(application.employmentType)} icon={BadgeCheck} />
+          <CardContent className="grid gap-4 px-8 pb-8 pt-6 sm:grid-cols-2">
+            <Field label={t("admin.common.company")} value={application.companyName} icon={BriefcaseBusiness} />
+            <Field label={t("admin.verifications.detail.employmentType")} value={t(employmentLabelKey(application.employmentType))} icon={BadgeCheck} />
             <Field
-              label="Identity mode"
-              value={application.identityVerificationMode === "FULL" ? "Full verification" : "Deferred / test access"}
+              label={t("admin.verifications.detail.identityMode")}
+              value={application.identityVerificationMode === "FULL" ? t("admin.verifications.fullVerification") : t("admin.verifications.detail.deferredTestAccess")}
               icon={ShieldCheck}
             />
-            <Field label="Business category" value={application.businessCategory} icon={FileBadge2} />
-            <Field label="Linked company" value={application.company ? `${application.company.name} (${application.company.slug})` : "-"} icon={ShieldCheck} />
-            <Field label="Company active" value={application.company?.isActive ? "Yes" : "No"} icon={application.company?.isActive ? ShieldCheck : ShieldX} />
-            <Field label="Admin notified" value={formatDate(application.adminNotifiedAt)} icon={Mail} />
+            <Field label={t("admin.verifications.detail.businessCategory")} value={application.businessCategory} icon={FileBadge2} />
+            <Field label={t("admin.verifications.detail.linkedCompany")} value={application.company ? `${application.company.name} (${application.company.slug})` : "-"} icon={ShieldCheck} />
+            <Field label={t("admin.verifications.detail.companyActive")} value={application.company?.isActive ? t("admin.verifications.detail.yes") : t("admin.verifications.detail.no")} icon={application.company?.isActive ? ShieldCheck : ShieldX} />
+            <Field label={t("admin.verifications.detail.adminNotified")} value={formatDate(application.adminNotifiedAt, locale)} icon={Mail} />
           </CardContent>
         </Card>
 
         <Card className="overflow-hidden border-white/10 bg-card/70 p-0">
-          <CardHeader className="border-b border-white/10 bg-white/[0.035]">
+          <CardHeader className="border-b border-white/10 bg-white/[0.035] px-8 pb-5 pt-8">
             <CardTitle className="flex items-center gap-2">
-              <UserRound className="h-5 w-5" /> Contact
+              <UserRound className="h-5 w-5" /> {t("admin.verifications.detail.contact")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 p-5">
-            <Field label="Contact name" value={application.contactName} icon={UserRound} />
-            <Field label="Email" value={application.contactEmail} icon={Mail} href={`mailto:${application.contactEmail}`} />
+          <CardContent className="grid gap-4 px-8 pb-8 pt-6">
+            <Field label={t("admin.verifications.detail.contactName")} value={application.contactName} icon={UserRound} />
+            <Field label={t("admin.users.email")} value={application.contactEmail} icon={Mail} href={`mailto:${application.contactEmail}`} />
             <Field label="Telegram" value={application.contactTelegram} icon={Phone} href={telegramHref} />
-            <Field label="IP / User agent" value={`${application.ipAddress ?? "-"} / ${application.userAgent ?? "-"}`} icon={MapPin} />
+            <Field label={t("admin.verifications.detail.ipUserAgent")} value={`${application.ipAddress ?? "-"} / ${application.userAgent ?? "-"}`} icon={MapPin} />
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
         <Card className="overflow-hidden border-white/10 bg-card/70 p-0">
-          <CardHeader className="border-b border-white/10 bg-white/[0.035]">
+          <CardHeader className="border-b border-white/10 bg-white/[0.035] px-8 pb-5 pt-8">
             <CardTitle className="flex items-center gap-2">
-              <FileBadge2 className="h-5 w-5" /> Legal verification data
+              <FileBadge2 className="h-5 w-5" /> {t("admin.verifications.detail.legalData")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 p-5 sm:grid-cols-2">
-            <Field label="Legal full name" value={application.legalFullName} />
-            <Field label="Birth date" value={formatDate(application.birthDate)} />
-            <Field label="INN" value={application.legalInn} />
-            <Field label="Passport last 4" value={application.passportLast4} />
-            <Field label="Consent accepted" value={formatDate(application.consentAcceptedAt)} />
+          <CardContent className="grid gap-4 px-8 pb-8 pt-6 sm:grid-cols-2">
+            <Field label={t("admin.verifications.detail.legalFullName")} value={application.legalFullName} />
+            <Field label={t("admin.verifications.detail.birthDate")} value={formatDate(application.birthDate, locale)} />
+            <Field label={t("admin.verifications.inn")} value={application.legalInn} />
+            <Field label={t("admin.verifications.detail.passportLast4")} value={application.passportLast4} />
+            <Field label={t("admin.verifications.detail.consentAccepted")} value={formatDate(application.consentAcceptedAt, locale)} />
             <Field
-              label="Passport photo safety"
+              label={t("admin.verifications.detail.passportPhotoSafety")}
               value={
                 passportFile
-                  ? `Encrypted file attached · ${Math.round(passportFile.size / 1024)} KB · ${passportFile.mimeType}`
-                  : `No active passport file · cleanup: ${formatDate(application.passportDataDeletedAt)}`
+                  ? `${t("admin.verifications.detail.encryptedFileAttached")} · ${Math.round(passportFile.size / 1024)} KB · ${passportFile.mimeType}`
+                  : `${t("admin.verifications.detail.noActivePassportFile")} · ${t("admin.verifications.detail.cleanup")}: ${formatDate(application.passportDataDeletedAt, locale)}`
               }
             />
             {application.identityVerificationMode === "DEFERRED" && (
-              <Field label="Deferred verification reason" value={application.verificationDeferralReason} />
+              <Field label={t("admin.verifications.detail.deferralReason")} value={application.verificationDeferralReason} />
             )}
             {passportFile && (
               <Button asChild variant="secondary" className="sm:col-span-2">
                 <a href={`/api/admin/company-verifications/${application.uuid}/passport-photo`} target="_blank" rel="noreferrer">
-                  <ShieldCheck className="h-4 w-4" /> Open encrypted passport photo
+                  <ShieldCheck className="h-4 w-4" /> {t("admin.verifications.detail.openPassportPhoto")}
                 </a>
               </Button>
             )}
@@ -261,32 +275,32 @@ export default function CompanyVerificationDetailPage({
         </Card>
 
         <Card className="overflow-hidden border-white/10 bg-card/70 p-0">
-          <CardHeader className="border-b border-white/10 bg-white/[0.035]">
+          <CardHeader className="border-b border-white/10 bg-white/[0.035] px-8 pb-5 pt-8">
             <CardTitle className="flex items-center gap-2">
-              <Banknote className="h-5 w-5" /> Payout details
+              <Banknote className="h-5 w-5" /> {t("admin.verifications.detail.payoutDetails")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 p-5 sm:grid-cols-2">
+          <CardContent className="grid gap-4 px-8 pb-8 pt-6 sm:grid-cols-2">
             <Field
-              label="Status"
-              value="Deferred. Payout fields depend on business type and will be requested after verification."
+              label={t("admin.common.status")}
+              value={t("admin.verifications.detail.payoutDeferred")}
             />
-            <Field label="Reviewed at" value={formatDate(application.company?.verificationReviewedAt)} />
+            <Field label={t("admin.verifications.detail.reviewedAt")} value={formatDate(application.company?.verificationReviewedAt, locale)} />
           </CardContent>
         </Card>
       </div>
 
       <Card className="overflow-hidden border-white/10 bg-card/70 p-0">
-        <CardHeader className="cursor-pointer border-b border-white/10 bg-white/[0.035]" onClick={() => setShowAudit((value) => !value)}>
+        <CardHeader className="cursor-pointer border-b border-white/10 bg-white/[0.035] px-8 pb-5 pt-8" onClick={() => setShowAudit((value) => !value)}>
           <CardTitle className="flex items-center justify-between text-lg">
-            <span className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Verification audit trail</span>
-            <span className="text-sm text-muted-foreground">{showAudit ? "Hide" : "Show"}</span>
+            <span className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> {t("admin.verifications.detail.auditTrail")}</span>
+            <span className="text-sm text-muted-foreground">{showAudit ? t("admin.verifications.detail.hide") : t("admin.verifications.detail.show")}</span>
           </CardTitle>
         </CardHeader>
         {showAudit && (
-          <CardContent className="space-y-3 p-5">
+          <CardContent className="space-y-3 px-8 pb-8 pt-6">
             {auditRows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No verification audit events yet.</p>
+              <p className="text-sm text-muted-foreground">{t("admin.verifications.detail.noAudit")}</p>
             ) : (
               auditRows.map((row) => (
                 <div key={row.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
@@ -295,7 +309,7 @@ export default function CompanyVerificationDetailPage({
                     <Badge variant="outline">{row.level}</Badge>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {new Date(row.createdAt).toLocaleString()} · {row.actorLabel}
+                    {formatDate(row.createdAt, locale)} · {row.actorLabel}
                   </p>
                   {row.details && <p className="mt-2 text-sm text-muted-foreground">{row.details}</p>}
                 </div>

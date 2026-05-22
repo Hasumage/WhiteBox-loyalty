@@ -5,45 +5,52 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
-function ConfirmEmailChangeContent() {
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-  const message = token
-    ? "Email change confirmation is not active yet."
-    : "Email change confirmation is not active yet. Missing token.";
+function EmailChangeShell({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n("ru");
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center px-4 py-10">
-      <Card className="w-full max-w-xl glass border-white/10">
+    <div className="flex min-h-[100dvh] items-center justify-center px-4 py-10">
+      <Card className="glass w-full max-w-xl border-white/10">
         <CardHeader>
-          <CardTitle className="text-xl">Email Change Confirmation</CardTitle>
+          <CardTitle className="text-xl">{t("client.auth.emailChangeTitle")}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-muted-foreground">{message}</p>
-          <Button asChild>
-            <Link href="/login">Go to login</Link>
-          </Button>
-        </CardContent>
+        <CardContent className="space-y-4">{children}</CardContent>
       </Card>
     </div>
   );
 }
 
+function ConfirmEmailChangeContent() {
+  const searchParams = useSearchParams();
+  const { t } = useI18n("ru");
+  const token = searchParams.get("token");
+  const message = token ? t("client.auth.emailChangeInactive") : t("client.auth.emailChangeMissingToken");
+
+  return (
+    <EmailChangeShell>
+      <p className="text-muted-foreground">{message}</p>
+      <Button asChild>
+        <Link href="/login">{t("client.auth.goLogin")}</Link>
+      </Button>
+    </EmailChangeShell>
+  );
+}
+
+function ConfirmEmailFallback() {
+  const { t } = useI18n("ru");
+
+  return (
+    <EmailChangeShell>
+      <p className="text-muted-foreground">{t("client.auth.emailConfirmationInactive")}</p>
+    </EmailChangeShell>
+  );
+}
+
 export default function ConfirmEmailChangePage() {
   return (
-    <Suspense fallback={(
-      <div className="min-h-[100dvh] flex items-center justify-center px-4 py-10">
-        <Card className="w-full max-w-xl glass border-white/10">
-          <CardHeader>
-            <CardTitle className="text-xl">Email Change Confirmation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">Email confirmation is not active yet.</p>
-          </CardContent>
-        </Card>
-      </div>
-    )}>
+    <Suspense fallback={<ConfirmEmailFallback />}>
       <ConfirmEmailChangeContent />
     </Suspense>
   );

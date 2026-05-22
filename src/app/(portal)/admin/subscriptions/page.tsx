@@ -1,479 +1,622 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
-  AlertTriangle,
-  ArrowUpRight,
-  BadgeCheck,
-  CalendarDays,
+  ArrowRight,
   CircleDollarSign,
   Crown,
-  Gauge,
+  Handshake,
   Layers3,
-  Repeat2,
-  ShieldAlert,
+  Plus,
+  Search,
   Sparkles,
+  SplitSquareHorizontal,
+  Store,
   Target,
-  TrendingUp,
   Users,
-  Zap,
+  Wand2,
 } from "lucide-react";
+import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CategorySelect } from "@/components/ui/category-select";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  adminFindSubscriptionByUuid,
+  adminCreatePairedSubscription,
+  adminListCategories,
+  adminListCompanyUsers,
+  adminListPairedSubscriptions,
+  adminSearchSubscriptions,
   adminSubscriptionStats,
+  type AdminCategory,
+  type AdminCompanyUser,
+  type AdminPairedSubscription,
+  type AdminSubscriptionSearchItem,
   type AdminSubscriptionStats,
 } from "@/lib/api/admin-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
 
-type ForecastScenario = "base" | "optimistic" | "risk";
-type SlaState = "on_track" | "at_risk" | "off_track";
+type PeriodUnit = "week" | "month" | "year";
+
+type PairParticipantForm = {
+  companyId: string;
+  benefitTitle: string;
+  benefitDescription: string;
+  fulfillmentNote: string;
+  revenueSharePercent: string;
+};
+
+const selectClass =
+  "h-11 w-full rounded-xl border border-white/10 bg-black/40 px-3 text-sm outline-none transition focus:border-cyan-200/50 focus:ring-2 focus:ring-cyan-200/10";
 
 function formatNumber(value: number, locale: string) {
   return new Intl.NumberFormat(locale).format(value);
 }
 
-function formatRevenue(value: number, locale: string) {
-  return new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(value);
+function formatMoney(value: number | string, locale: string) {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value || 0));
 }
 
-function formatDateTime(value: string | undefined, locale: string, fallback: string) {
-  if (!value) return fallback;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return fallback;
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+function periodLabel(value: number, unit: PeriodUnit, bonusDays: number) {
+  const unitLabel = unit === "week" ? "нед." : unit === "month" ? "мес." : "год";
+  return `${value} ${unitLabel}${bonusDays > 0 ? ` + ${bonusDays} дней бонусом` : ""}`;
 }
 
-function slaBadgeClass(sla: SlaState) {
-  if (sla === "on_track") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
-  if (sla === "at_risk") return "bg-amber-500/15 text-amber-200 border-amber-500/40";
-  return "bg-rose-500/15 text-rose-200 border-rose-500/40";
+function emptyParticipant(share: number): PairParticipantForm {
+  return {
+    companyId: "",
+    benefitTitle: "",
+    benefitDescription: "",
+    fulfillmentNote: "",
+    revenueSharePercent: String(share),
+  };
 }
 
 export default function AdminSubscriptionsPage() {
   const { locale, t } = useI18n("ru");
+  const createRef = useRef<HTMLDivElement | null>(null);
   const [stats, setStats] = useState<AdminSubscriptionStats | null>(null);
-  const [uuid, setUuid] = useState("");
-  const [result, setResult] = useState<{
-    uuid: string;
-    name: string;
-    slug: string;
-    description: string;
-  } | null>(null);
-  const [scenario, setScenario] = useState<ForecastScenario>("base");
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [companies, setCompanies] = useState<AdminCompanyUser[]>([]);
+  const [bundles, setBundles] = useState<AdminPairedSubscription[]>([]);
+  const [subscriptionQuery, setSubscriptionQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<AdminSubscriptionSearchItem[]>([]);
+  const [searchingSubscriptions, setSearchingSubscriptions] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [pair, setPair] = useState({
+    name: "",
+    description: "",
+    price: "",
+    slug: "",
+    renewalValue: "1",
+    renewalUnit: "month" as PeriodUnit,
+    promoBonusDays: "0",
+    categoryId: "",
+    isActive: false,
+  });
+  const [participants, setParticipants] = useState<PairParticipantForm[]>([
+    emptyParticipant(50),
+    emptyParticipant(50),
+  ]);
 
   useEffect(() => {
-    void (async () => setStats(await adminSubscriptionStats()))();
+    void refreshData();
   }, []);
 
-  async function onFind() {
-    setResult(await adminFindSubscriptionByUuid(uuid));
+  async function refreshData() {
+    const [nextStats, nextCategories, nextCompanies, nextBundles] = await Promise.all([
+      adminSubscriptionStats(),
+      adminListCategories(),
+      adminListCompanyUsers(),
+      adminListPairedSubscriptions(),
+    ]);
+    setStats(nextStats);
+    setCategories(nextCategories);
+    setCompanies(nextCompanies.filter((row) => row.managedCompany));
+    setBundles(nextBundles);
   }
 
-  const selectedForecast = useMemo(() => {
-    if (!stats) {
-      return { days30: 0, days90: 0 };
-    }
-    return stats.forecast[scenario];
-  }, [scenario, stats]);
+  const companyOptions = useMemo(
+    () =>
+      companies
+        .map((row) => ({
+          userUuid: row.uuid,
+          email: row.email,
+          company: row.managedCompany!,
+        }))
+        .sort((a, b) => a.company.name.localeCompare(b.company.name)),
+    [companies],
+  );
 
-  const kpiCards = [
+  const shareTotal = participants.reduce(
+    (sum, participant) => sum + Number(participant.revenueSharePercent || 0),
+    0,
+  );
+  const selectedCompanyIds = participants.map((participant) => participant.companyId).filter(Boolean);
+  const hasDuplicateCompanies = new Set(selectedCompanyIds).size !== selectedCompanyIds.length;
+
+  async function onFind() {
+    setSearchingSubscriptions(true);
+    const items = await adminSearchSubscriptions(subscriptionQuery);
+    setSearchResults(items);
+    setSearchingSubscriptions(false);
+  }
+
+  function patchParticipant(index: number, patch: Partial<PairParticipantForm>) {
+    setParticipants((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  }
+
+  function applySharePreset(first: number, second: number) {
+    setParticipants((current) =>
+      current.map((row, index) => ({
+        ...row,
+        revenueSharePercent: String(index === 0 ? first : index === 1 ? second : 0),
+      })),
+    );
+  }
+
+  async function createPair() {
+    setMessage(null);
+    const preparedParticipants = participants.map((participant) => ({
+      companyId: Number(participant.companyId),
+      benefitTitle: participant.benefitTitle.trim(),
+      benefitDescription: participant.benefitDescription.trim(),
+      fulfillmentNote: participant.fulfillmentNote.trim(),
+      revenueSharePercent: Number(participant.revenueSharePercent || 0),
+    }));
+    if (!pair.name.trim() || !pair.description.trim() || Number(pair.price) < 0) {
+      setMessage("Заполните название, описание и цену парной подписки.");
+      return;
+    }
+    if (preparedParticipants.some((participant) => !participant.companyId || !participant.benefitTitle || !participant.benefitDescription)) {
+      setMessage("Для каждой компании нужны компания, преимущество и описание вклада.");
+      return;
+    }
+    if (hasDuplicateCompanies) {
+      setMessage("В парной подписке компания не может повторяться.");
+      return;
+    }
+    if (Math.round(shareTotal * 100) !== 10000) {
+      setMessage("Доли дохода должны давать ровно 100%.");
+      return;
+    }
+
+    setCreating(true);
+    const res = await adminCreatePairedSubscription({
+      name: pair.name,
+      description: pair.description,
+      price: Number(pair.price || 0),
+      slug: pair.slug || undefined,
+      renewalValue: Number(pair.renewalValue || 1),
+      renewalUnit: pair.renewalUnit,
+      promoBonusDays: Number(pair.promoBonusDays || 0),
+      categoryId: pair.categoryId ? Number(pair.categoryId) : undefined,
+      isActive: pair.isActive,
+      participants: preparedParticipants,
+    });
+    setCreating(false);
+    if (!res.ok) {
+      setMessage(res.message);
+      return;
+    }
+    setMessage("Парная подписка создана. Сначала держим её в админке, потом спокойно подключим клиентский путь покупки.");
+    setBundles((current) => [res.data, ...current]);
+    setPair({
+      name: "",
+      description: "",
+      price: "",
+      slug: "",
+      renewalValue: "1",
+      renewalUnit: "month",
+      promoBonusDays: "0",
+      categoryId: "",
+      isActive: false,
+    });
+    setParticipants([emptyParticipant(50), emptyParticipant(50)]);
+  }
+
+  const statCards = [
     {
-      label: t("admin.subscriptions.totalSubscriptions"),
-      value: formatNumber(stats?.total ?? 0, locale),
-      hint: t("admin.subscriptions.totalHint"),
-      icon: Layers3,
-      accent: "from-sky-500/20 to-cyan-500/10",
-    },
-    {
-      label: t("admin.subscriptions.activeNow"),
+      label: "Активные назначения",
       value: formatNumber(stats?.active ?? 0, locale),
-      hint: `${stats?.activeRatePercent ?? 0}${t("admin.subscriptions.ofTotal")}`,
-      icon: Activity,
-      accent: "from-emerald-500/20 to-lime-500/10",
+      hint: `${stats?.activeRatePercent ?? 0}% от всех назначений`,
+      icon: Users,
     },
     {
-      label: t("admin.subscriptions.monthlyRevenue"),
-      value: formatRevenue(stats?.estimatedMonthlyRevenue ?? 0, locale),
-      hint: t("admin.subscriptions.monthlyRevenueHint"),
+      label: "Каталог подписок",
+      value: formatNumber(stats?.catalog?.totalPlans ?? 0, locale),
+      hint: `${stats?.catalog?.activePlans ?? 0} активных офферов`,
+      icon: Layers3,
+    },
+    {
+      label: "Оценка MRR",
+      value: formatMoney(stats?.estimatedMonthlyRevenue ?? 0, locale),
+      hint: "по активным подпискам",
       icon: CircleDollarSign,
-      accent: "from-amber-500/20 to-orange-500/10",
     },
     {
-      label: t("admin.subscriptions.avgRevenue"),
-      value: formatRevenue(stats?.averageMonthlyRevenuePerActive ?? 0, locale),
-      hint: t("admin.subscriptions.avgRevenueHint"),
-      icon: TrendingUp,
-      accent: "from-violet-500/20 to-fuchsia-500/10",
+      label: "Парные подписки",
+      value: formatNumber(bundles.length, locale),
+      hint: "совместные офферы партнёров",
+      icon: Handshake,
     },
-  ] as const;
+  ];
 
   return (
     <div className="space-y-5">
-      <Card className="glass border-white/10 overflow-hidden">
+      <Card className="glass overflow-hidden border-white/10">
         <CardContent className="relative p-6">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.2),transparent_40%),radial-gradient(circle_at_85%_30%,rgba(16,185,129,0.16),transparent_35%)]" />
-          <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(34,211,238,0.18),transparent_35%),radial-gradient(circle_at_80%_25%,rgba(255,255,255,0.12),transparent_30%)]" />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-muted-foreground">
-                <Gauge className="h-3.5 w-3.5" />
-                {t("admin.subscriptions.badge")}
+              <p className="inline-flex items-center gap-2 rounded-full border border-cyan-200/25 bg-cyan-300/10 px-3 py-1 text-xs uppercase tracking-[0.25em] text-cyan-100">
+                <Sparkles className="h-3.5 w-3.5" />
+                Subscription command center
               </p>
-              <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-                {t("admin.subscriptions.title")}
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {t("admin.subscriptions.description")}
+              <h1 className="mt-4 text-3xl font-semibold tracking-tight">Управление подписками</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                Обычные подписки остаются в профиле компании, а здесь собраны аналитика, поиск по названию и новая зона для парных подписок: две компании, два вклада, честное распределение дохода.
               </p>
             </div>
-            <Badge variant="outline" className="w-fit border-white/20 bg-white/5 text-xs">
-              {t("admin.common.updated")}: {formatDateTime(stats?.generatedAt, locale, t("admin.common.notAvailable"))}
-            </Badge>
+            <Button className="w-fit gap-2 rounded-xl" onClick={() => createRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+              <Plus className="h-4 w-4" />
+              Создать парную подписку
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {kpiCards.map((item) => (
-          <Card key={item.label} className="glass border-white/10 overflow-hidden">
-            <CardContent className="relative py-5">
-              <div className={cn("absolute inset-0 bg-gradient-to-br opacity-90", item.accent)} />
-              <div className="relative">
-                <div className="mb-3 inline-flex rounded-lg border border-white/20 bg-black/20 p-2">
-                  <item.icon className="h-4 w-4 text-foreground" />
-                </div>
-                <p className="text-xs text-muted-foreground">{item.label}</p>
-                <p className="text-2xl font-semibold">{item.value}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((item) => (
+          <Card key={item.label} className="glass border-white/10">
+            <CardContent className="p-5">
+              <div className="mb-4 inline-flex rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-3 text-cyan-100">
+                <item.icon className="h-5 w-5" />
               </div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{item.label}</p>
+              <p className="mt-2 text-3xl font-semibold">{item.value}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-3">
-        <Card className="glass border-white/10 xl:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Target className="h-4 w-4 text-primary" />
-              {t("admin.subscriptions.kpiSla")}
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <Card className="glass border-white/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Target className="h-5 w-5 text-cyan-100" />
+              Текущий пульс системы
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">{t("admin.subscriptions.autoRenewRate")}</p>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[11px] border",
-                    slaBadgeClass(stats?.kpi?.sla?.autoRenew ?? "off_track"),
-                  )}
-                >
-                  {(stats?.kpi?.sla?.autoRenew ?? t("admin.common.notAvailable")).replace("_", " ")}
-                </Badge>
-              </div>
-              <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  {t("admin.subscriptions.actual")}: {stats?.kpi?.actual?.autoRenewRatePercent ?? 0}% / {t("admin.subscriptions.target")}:{" "}
-                  {stats?.kpi?.targets?.autoRenewRatePercent ?? 0}%
-                </span>
-                <span>{stats?.kpi?.attainment?.autoRenewPercent ?? 0}% {t("admin.subscriptions.attainment")}</span>
-              </div>
-              <Progress
-                value={Math.min(100, stats?.kpi?.attainment?.autoRenewPercent ?? 0)}
-                className="h-2.5 bg-sky-500/20 [&>div]:bg-sky-400"
-              />
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm text-muted-foreground">Автопродление</p>
+              <p className="mt-2 text-2xl font-semibold">{stats?.autoRenewRatePercent ?? 0}%</p>
+              <p className="mt-1 text-xs text-muted-foreground">{stats?.autoRenewEnabled ?? 0} активных</p>
             </div>
-
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">{t("admin.subscriptions.churnRate")}</p>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[11px] border",
-                    slaBadgeClass(stats?.kpi?.sla?.churn ?? "off_track"),
-                  )}
-                >
-                  {(stats?.kpi?.sla?.churn ?? t("admin.common.notAvailable")).replace("_", " ")}
-                </Badge>
-              </div>
-              <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  {t("admin.subscriptions.actual")}: {stats?.kpi?.actual?.churnRatePercent ?? 0}% / {t("admin.subscriptions.targetMax")}:{" "}
-                  {stats?.kpi?.targets?.churnRatePercent ?? 0}%
-                </span>
-                <span>{stats?.kpi?.attainment?.churnPercent ?? 0}% {t("admin.subscriptions.attainment")}</span>
-              </div>
-              <Progress
-                value={Math.min(100, stats?.kpi?.attainment?.churnPercent ?? 0)}
-                className="h-2.5 bg-emerald-500/20 [&>div]:bg-emerald-400"
-              />
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm text-muted-foreground">Риск оттока</p>
+              <p className="mt-2 text-2xl font-semibold">{stats?.churnRatePercent ?? 0}%</p>
+              <p className="mt-1 text-xs text-muted-foreground">за 30 дней</p>
             </div>
-
-            <div className="grid gap-2 sm:grid-cols-3 text-sm">
-              <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
-                <p className="text-xs text-muted-foreground">{t("admin.subscriptions.autoRenewEnabled")}</p>
-                <p className="mt-1 font-semibold">{formatNumber(stats?.autoRenewEnabled ?? 0, locale)}</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
-                <p className="text-xs text-muted-foreground">{t("admin.subscriptions.expiring7")}</p>
-                <p className="mt-1 font-semibold">{formatNumber(stats?.expiringIn7Days ?? 0, locale)}</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
-                <p className="text-xs text-muted-foreground">{t("admin.subscriptions.churned30")}</p>
-                <p className="mt-1 font-semibold">{formatNumber(stats?.churnedIn30Days ?? 0, locale)}</p>
-              </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm text-muted-foreground">Истекают скоро</p>
+              <p className="mt-2 text-2xl font-semibold">{stats?.expiringIn7Days ?? 0}</p>
+              <p className="mt-1 text-xs text-muted-foreground">в ближайшие 7 дней</p>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass border-white/10">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldAlert className="h-4 w-4 text-primary" />
-              {t("admin.subscriptions.concentrationRisk")}
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Search className="h-5 w-5 text-cyan-100" />
+              Поиск подписок
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-              <p className="text-xs text-muted-foreground">{t("admin.subscriptions.diversificationScore")}</p>
-              <p className="mt-1 text-2xl font-semibold">{stats?.concentration?.score ?? 0}</p>
-              <Progress
-                value={stats?.concentration?.score ?? 0}
-                className="mt-2 h-2.5 bg-violet-500/20 [&>div]:bg-violet-400"
+          <CardContent>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                placeholder="Название, slug, компания или категория"
+                value={subscriptionQuery}
+                onChange={(event) => setSubscriptionQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void onFind();
+                }}
               />
+              <Button variant="secondary" className="gap-2 rounded-xl" onClick={onFind} disabled={searchingSubscriptions}>
+                <Search className={cn("h-4 w-4", searchingSubscriptions && "animate-pulse")} />
+                {searchingSubscriptions ? "Ищу..." : "Найти"}
+              </Button>
             </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{t("admin.subscriptions.top3Share")}</span>
-                <span className="font-semibold">
-                  {stats?.concentration?.top3SubscriberSharePercent ?? 0}%
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{t("admin.subscriptions.top1RevenueShare")}</span>
-                <span className="font-semibold">
-                  {stats?.concentration?.top1RevenueSharePercent ?? 0}%
-                </span>
-              </div>
+            <div className="mt-4 space-y-2">
+              {searchResults.map((item) => (
+                <div key={`${item.type}-${item.uuid}`} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold">{item.name}</p>
+                        <Badge className={item.type === "bundle" ? "bg-cyan-300 text-black" : "bg-white/10 text-white"}>
+                          {item.type === "bundle" ? "Парная" : "Обычная"}
+                        </Badge>
+                        {item.category && (
+                          <Badge variant="outline" className="gap-1.5 border-white/15 bg-white/5">
+                            <CategoryIcon iconName={item.category.icon} className="h-3.5 w-3.5 text-cyan-100" />
+                            {item.category.name}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-1 truncate text-muted-foreground">
+                        {item.company?.name ?? (item.participants.map((participant) => participant.companyName).join(" + ") || item.slug)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{formatMoney(item.price, locale)}</p>
+                      <p className="text-xs text-muted-foreground">{item.renewalPeriod}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-muted-foreground">{item.description}</p>
+                </div>
+              ))}
+              {!searchingSubscriptions && subscriptionQuery && searchResults.length === 0 && (
+                <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-muted-foreground">
+                  Ничего не найдено. Попробуйте название подписки, компании, категории или slug.
+                </p>
+              )}
+              {!subscriptionQuery && searchResults.length === 0 && (
+                <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-muted-foreground">
+                  Введите название подписки, компании, категории или slug. Поиск покажет и обычные, и парные подписки.
+                </p>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {t("admin.subscriptions.riskHint")}
-            </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-3">
-        <Card className="glass border-white/10 xl:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4 text-primary" />
-              {t("admin.subscriptions.forecast")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { key: "base", label: t("admin.subscriptions.base"), icon: Gauge },
-                  { key: "optimistic", label: t("admin.subscriptions.optimistic"), icon: ArrowUpRight },
-                  { key: "risk", label: t("admin.subscriptions.risk"), icon: AlertTriangle },
-                ] as const
-              ).map((option) => (
-                <Button
-                  key={option.key}
-                  type="button"
-                  size="sm"
-                  variant={scenario === option.key ? "default" : "outline"}
-                  className={cn(
-                    "gap-1.5",
-                    scenario === option.key ? "" : "border-white/20 bg-white/5"
-                  )}
-                  onClick={() => setScenario(option.key)}
-                >
-                  <option.icon className="h-3.5 w-3.5" />
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <p className="text-xs text-muted-foreground">{t("admin.subscriptions.projected30")}</p>
-                <p className="mt-1 text-2xl font-semibold">{formatRevenue(selectedForecast.days30, locale)}</p>
+      <div ref={createRef} className="scroll-mt-6 rounded-[1.7rem] bg-gradient-to-r from-cyan-300/70 via-white/35 to-emerald-300/70 p-px">
+      <Card className="glass overflow-hidden border-0">
+        <CardHeader className="border-b border-white/10 bg-[radial-gradient(circle_at_10%_0%,rgba(34,211,238,0.2),transparent_34%),linear-gradient(90deg,rgba(34,211,238,0.1),rgba(255,255,255,0.035))] pt-7">
+          <CardTitle className="flex flex-wrap items-center gap-3 text-xl">
+            <span className="inline-flex rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-2 text-cyan-100">
+              <SplitSquareHorizontal className="h-5 w-5" />
+            </span>
+            Создать парную подписку
+            <Badge className="rounded-full bg-white text-black">Admin only</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5 p-5">
+          <div className="grid gap-3 xl:grid-cols-[1fr_0.7fr]">
+            <div className="space-y-3 rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1 text-sm font-semibold">
+                  Название
+                  <Input value={pair.name} maxLength={80} placeholder="Кофе + фитнес на месяц" onChange={(event) => setPair({ ...pair, name: event.target.value })} />
+                </label>
+                <label className="space-y-1 text-sm font-semibold">
+                  Цена
+                  <Input value={pair.price} inputMode="decimal" placeholder="1990" onChange={(event) => setPair({ ...pair, price: event.target.value.replace(/[^0-9.]/g, "") })} />
+                </label>
+                <label className="space-y-1 text-sm font-semibold">
+                  Slug
+                  <Input value={pair.slug} maxLength={80} placeholder="auto if empty" onChange={(event) => setPair({ ...pair, slug: event.target.value })} />
+                </label>
+                <label className="space-y-1 text-sm font-semibold">
+                  Категория
+                  <CategorySelect
+                    value={pair.categoryId ? Number(pair.categoryId) : ""}
+                    onChange={(nextValue) => setPair({ ...pair, categoryId: nextValue === "" ? "" : String(nextValue) })}
+                    options={categories}
+                    emptyLabel="Без категории"
+                    searchPlaceholder="Найти категорию..."
+                    emptySearchLabel="Категории не найдены"
+                    triggerClassName="h-11 rounded-xl border-white/10 bg-black/40 shadow-none focus-visible:ring-cyan-200/10"
+                    dropdownClassName="rounded-2xl border-cyan-200/20 bg-[#080d12]/95 shadow-2xl shadow-cyan-950/30"
+                  />
+                </label>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <p className="text-xs text-muted-foreground">{t("admin.subscriptions.projected90")}</p>
-                <p className="mt-1 text-2xl font-semibold">{formatRevenue(selectedForecast.days90, locale)}</p>
+              <label className="block space-y-1 text-sm font-semibold">
+                Описание совместной ценности
+                <Textarea
+                  className="min-h-28 resize-y rounded-2xl"
+                  value={pair.description}
+                  maxLength={1000}
+                  placeholder="Почему клиенту выгодно купить именно этот совместный набор?"
+                  onChange={(event) => setPair({ ...pair, description: event.target.value })}
+                />
+              </label>
+            </div>
+
+            <div className="space-y-3 rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="grid grid-cols-3 gap-2">
+                <label className="space-y-1 text-sm font-semibold">
+                  Срок
+                  <Input value={pair.renewalValue} inputMode="numeric" onChange={(event) => setPair({ ...pair, renewalValue: event.target.value.replace(/\D/g, "") || "1" })} />
+                </label>
+                <label className="space-y-1 text-sm font-semibold col-span-2">
+                  Период
+                  <select className={selectClass} value={pair.renewalUnit} onChange={(event) => setPair({ ...pair, renewalUnit: event.target.value as PeriodUnit })}>
+                    <option value="week">Неделя</option>
+                    <option value="month">Месяц</option>
+                    <option value="year">Год</option>
+                  </select>
+                </label>
               </div>
+              <label className="block space-y-1 text-sm font-semibold">
+                Бонусные дни
+                <Input value={pair.promoBonusDays} inputMode="numeric" onChange={(event) => setPair({ ...pair, promoBonusDays: event.target.value.replace(/\D/g, "") || "0" })} />
+              </label>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition",
+                  pair.isActive ? "border-emerald-300/40 bg-emerald-400/10" : "border-white/10 bg-black/20",
+                )}
+                onClick={() => setPair({ ...pair, isActive: !pair.isActive })}
+              >
+                <span>
+                  <span className="block font-semibold">{pair.isActive ? "Сразу активировать" : "Сохранить черновиком"}</span>
+                  <span className="text-xs text-muted-foreground">{periodLabel(Number(pair.renewalValue || 1), pair.renewalUnit, Number(pair.promoBonusDays || 0))}</span>
+                </span>
+                <Badge className={pair.isActive ? "bg-emerald-300 text-black" : "bg-white/10 text-white"}>{pair.isActive ? "ACTIVE" : "DRAFT"}</Badge>
+              </button>
             </div>
+          </div>
 
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-muted-foreground">
-              {t("admin.subscriptions.assumptions")}: {t("admin.subscriptions.growthSignal")} {stats?.forecast?.assumptions?.startedGrowthPercent ?? 0}
-              %, {t("admin.subscriptions.churn")} {stats?.forecast?.assumptions?.churnRatePercent ?? 0}%.
-            </div>
-          </CardContent>
-        </Card>
+          <div className="grid gap-4 xl:grid-cols-2">
+            {participants.map((participant, index) => (
+              <div key={index} className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/20 p-4">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-300/70 via-white/50 to-emerald-300/70" />
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="flex items-center gap-2 text-lg font-semibold">
+                    <Store className="h-5 w-5 text-cyan-100" />
+                    Компания {index + 1}
+                  </h3>
+                  <Badge variant="outline" className="border-white/15 bg-white/5">{participant.revenueSharePercent || 0}% дохода</Badge>
+                </div>
+                <div className="space-y-3">
+                  <label className="block space-y-1 text-sm font-semibold">
+                    Партнёр
+                    <select className={selectClass} value={participant.companyId} onChange={(event) => patchParticipant(index, { companyId: event.target.value })}>
+                      <option value="">Выберите компанию</option>
+                      {companyOptions.map((option) => (
+                        <option key={option.company.id} value={option.company.id}>
+                          {option.company.name} · {option.email}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block space-y-1 text-sm font-semibold">
+                    Что даёт компания
+                    <Input value={participant.benefitTitle} maxLength={120} placeholder="Пачка кофе / тренировка / консультация" onChange={(event) => patchParticipant(index, { benefitTitle: event.target.value })} />
+                  </label>
+                  <label className="block space-y-1 text-sm font-semibold">
+                    Описание вклада
+                    <Textarea className="min-h-24 rounded-2xl" value={participant.benefitDescription} maxLength={800} placeholder="Расскажите, какую ценность получает клиент от этой компании." onChange={(event) => patchParticipant(index, { benefitDescription: event.target.value })} />
+                  </label>
+                  <label className="block space-y-1 text-sm font-semibold">
+                    Операционная заметка
+                    <Input value={participant.fulfillmentNote} maxLength={180} placeholder="Например: доставка до 3 дней" onChange={(event) => patchParticipant(index, { fulfillmentNote: event.target.value })} />
+                  </label>
+                  <label className="block space-y-1 text-sm font-semibold">
+                    Доля дохода, %
+                    <Input value={participant.revenueSharePercent} inputMode="decimal" onChange={(event) => patchParticipant(index, { revenueSharePercent: event.target.value.replace(/[^0-9.]/g, "") })} />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
 
-        <Card className="glass border-white/10">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Zap className="h-4 w-4 text-primary" />
-              {t("admin.subscriptions.growthPulse")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-              <p className="text-xs text-muted-foreground">{t("admin.subscriptions.started30")}</p>
-              <p className="mt-1 text-xl font-semibold">{formatNumber(stats?.startedIn30Days ?? 0, locale)}</p>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-              <p className="text-xs text-muted-foreground">{t("admin.subscriptions.previousPeriod")}</p>
-              <p className="mt-1 text-xl font-semibold">
-                {formatNumber(stats?.startedInPrevious30Days ?? 0, locale)}
+          <div className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold">Распределение дохода: {shareTotal}%</p>
+              <p className={cn("text-xs", shareTotal === 100 && !hasDuplicateCompanies ? "text-emerald-200" : "text-amber-200")}>
+                {shareTotal === 100 && !hasDuplicateCompanies
+                  ? "Можно сохранять: доли сходятся, партнёры уникальны."
+                  : "Проверьте, чтобы сумма была 100%, а компании не повторялись."}
               </p>
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-3">
-              <span className="text-muted-foreground">{t("admin.subscriptions.growthDelta")}</span>
-              <span
-                className={cn(
-                  "font-semibold",
-                  (stats?.startedGrowthPercent ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"
-                )}
-              >
-                {(stats?.startedGrowthPercent ?? 0) >= 0 ? "+" : ""}
-                {stats?.startedGrowthPercent ?? 0}%
-              </span>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" className="glass border-white/10" onClick={() => applySharePreset(50, 50)}>50 / 50</Button>
+              <Button type="button" variant="outline" className="glass border-white/10" onClick={() => applySharePreset(60, 40)}>60 / 40</Button>
+              <Button type="button" variant="outline" className="glass border-white/10" onClick={() => applySharePreset(70, 30)}>70 / 30</Button>
+              <Button type="button" className="gap-2 rounded-xl" disabled={creating} onClick={createPair}>
+                <Wand2 className="h-4 w-4" />
+                {creating ? "Создаём..." : "Создать парную подписку"}
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          {message && <div className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">{message}</div>}
+        </CardContent>
+      </Card>
       </div>
 
       <Card className="glass border-white/10">
         <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Crown className="h-4 w-4 text-primary" />
-              {t("admin.subscriptions.topActive")}
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Handshake className="h-5 w-5 text-cyan-100" />
+            Парные подписки
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {stats?.topSubscriptions?.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="pb-2 pr-3">{t("admin.subscriptions.plan")}</th>
-                    <th className="pb-2 pr-3">{t("admin.common.company")}</th>
-                    <th className="pb-2 pr-3">{t("admin.subscriptions.slug")}</th>
-                    <th className="pb-2 pr-3 text-right">{t("admin.subscriptions.activeSubscribers")}</th>
-                    <th className="pb-2 text-right">{t("admin.subscriptions.monthlyRevenue")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.topSubscriptions.map((row, index) => (
-                    <tr key={row.uuid} className="border-t border-white/10 hover:bg-white/5 transition-colors">
-                      <td className="py-2 pr-3">
-                        <div className="inline-flex items-center gap-2 font-medium">
-                          {index === 0 && <BadgeCheck className="h-4 w-4 text-emerald-300" />}
-                          {row.name}
+          {bundles.length ? (
+            <div className="grid gap-3">
+              {bundles.map((bundle) => (
+                <div key={bundle.uuid} className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-xl font-semibold">{bundle.name}</h3>
+                        <Badge className={bundle.isActive ? "bg-emerald-300 text-black" : "bg-white/10 text-white"}>{bundle.status}</Badge>
+                        {bundle.category && <Badge variant="outline" className="border-white/15 bg-white/5">{bundle.category.icon} {bundle.category.name}</Badge>}
+                      </div>
+                      <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{bundle.description}</p>
+                    </div>
+                    <div className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 px-4 py-3 text-right">
+                      <p className="text-xs uppercase tracking-[0.2em] text-cyan-100/70">Цена</p>
+                      <p className="text-2xl font-semibold">{formatMoney(bundle.price, locale)}</p>
+                      <p className="text-xs text-muted-foreground">{bundle.renewalPeriod}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    {bundle.participants.map((participant) => (
+                      <div key={participant.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <p className="font-semibold">{participant.company.name}</p>
+                          <Badge variant="outline" className="border-white/15 bg-white/5">{participant.revenueSharePercent}%</Badge>
                         </div>
-                      </td>
-                      <td className="py-2 pr-3 text-muted-foreground">
-                        {row.companyName ?? t("admin.subscriptions.globalCatalog")}
-                      </td>
-                      <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">
-                        {row.slug}
-                      </td>
-                      <td className="py-2 pr-3 text-right">{formatNumber(row.activeSubscribers, locale)}</td>
-                      <td className="py-2 text-right">{formatRevenue(row.estimatedMonthlyRevenue, locale)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        <p className="font-medium text-cyan-50">{participant.benefitTitle}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{participant.benefitDescription}</p>
+                        {participant.fulfillmentNote && (
+                          <p className="mt-2 text-xs text-muted-foreground">Операции: {participant.fulfillmentNote}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">{t("admin.subscriptions.noActive")}</p>
+            <div className="rounded-3xl border border-dashed border-white/15 bg-white/[0.03] p-8 text-center text-sm text-muted-foreground">
+              Парных подписок пока нет. Самое время собрать первый красивый совместный оффер.
+            </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 xl:grid-cols-2">
-        <Card className="glass border-white/10">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-4 w-4 text-primary" />
-              {t("admin.subscriptions.catalogSnapshot")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-2 text-sm">
-            <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
-              <p className="text-xs text-muted-foreground">{t("admin.subscriptions.totalPlans")}</p>
-              <p className="mt-1 font-semibold">{formatNumber(stats?.catalog?.totalPlans ?? 0, locale)}</p>
+      <Card className="glass border-white/10">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Crown className="h-5 w-5 text-cyan-100" />
+            Топ обычных подписок
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {stats?.topSubscriptions?.length ? (
+            <div className="grid gap-2">
+              {stats.topSubscriptions.map((row) => (
+                <div key={row.uuid} className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{row.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{row.companyName ?? "Глобальный каталог"} · {row.slug}</p>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span>{row.activeSubscribers} активных</span>
+                    <span className="font-semibold">{formatMoney(row.estimatedMonthlyRevenue, locale)}</span>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
-              <p className="text-xs text-muted-foreground">{t("admin.subscriptions.activePlans")}</p>
-              <p className="mt-1 font-semibold">{formatNumber(stats?.catalog?.activePlans ?? 0, locale)}</p>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
-              <p className="text-xs text-muted-foreground">{t("admin.subscriptions.companyLinked")}</p>
-              <p className="mt-1 font-semibold">
-                {formatNumber(stats?.catalog?.companyLinkedPlans ?? 0, locale)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
-              <p className="text-xs text-muted-foreground">{t("admin.subscriptions.categoryLinked")}</p>
-              <p className="mt-1 font-semibold">
-                {formatNumber(stats?.catalog?.categoryLinkedPlans ?? 0, locale)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass border-white/10">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarDays className="h-4 w-4 text-primary" />
-              {t("admin.subscriptions.findByUuid")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row">
-              <Input
-                placeholder={t("admin.subscriptions.uuidPlaceholder")}
-                value={uuid}
-                onChange={(e) => setUuid(e.target.value)}
-              />
-              <Button variant="secondary" onClick={onFind} className="sm:min-w-24">
-                <Repeat2 className="mr-1 h-4 w-4" />
-                {t("admin.common.find")}
-              </Button>
-            </div>
-            {result && (
-              <div className="rounded-lg border border-white/10 bg-muted/10 p-3 text-sm">
-                <p className="font-semibold">{result.name}</p>
-                <p className="text-muted-foreground">{t("admin.subscriptions.slug")}: {result.slug}</p>
-                <p className="font-mono text-xs">{result.uuid}</p>
-                <p className="mt-1 text-muted-foreground">{result.description}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Пока нет активных обычных подписок.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

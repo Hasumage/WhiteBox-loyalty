@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { clearStoredSession, freezeAccount } from "@/lib/api/auth-client";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { interpolate } from "@/lib/i18n/format";
 
 const BALLOON_COUNT = 5;
 
@@ -25,6 +27,7 @@ export function DeleteAccountDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
+  const { t } = useI18n("ru");
   const [popped, setPopped] = useState<Set<number>>(() => new Set());
   const [confirmText, setConfirmText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -67,20 +70,19 @@ export function DeleteAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="glass border-destructive/30 max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="glass max-h-[90dvh] overflow-y-auto border-destructive/30">
         <DialogHeader>
-          <DialogTitle className="text-destructive">Schedule account removal</DialogTitle>
-          <DialogDescription>
-            Your account will be <strong>frozen</strong>, not deleted immediately. You have{" "}
-            <strong>5 days</strong> to sign in and reactivate; afterward, your account and data are
-            permanently deleted. Pop every balloon first so this isn&apos;t accidental.
-          </DialogDescription>
+          <DialogTitle className="text-destructive">{t("client.account.deleteTitle")}</DialogTitle>
+          <DialogDescription>{t("client.account.deleteDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
           <div>
-            <p className="text-muted-foreground mb-3 text-sm font-medium">
-              Mini-game: pop all {BALLOON_COUNT} balloons ({popped.size}/{BALLOON_COUNT})
+            <p className="mb-3 text-sm font-medium text-muted-foreground">
+              {interpolate(t("client.account.deleteGame"), {
+                done: popped.size,
+                total: BALLOON_COUNT,
+              })}
             </p>
             <div className="flex min-h-[120px] flex-wrap items-center justify-center gap-3 rounded-xl border border-white/10 bg-muted/20 p-4">
               {Array.from({ length: BALLOON_COUNT }, (_, i) => (
@@ -91,11 +93,9 @@ export function DeleteAccountDialog({
                   onClick={() => popBalloon(i)}
                   className={cn(
                     "flex h-16 w-14 items-center justify-center rounded-full text-4xl transition-all",
-                    popped.has(i)
-                      ? "scale-0 opacity-0"
-                      : "bg-primary/20 hover:scale-105 active:scale-95",
+                    popped.has(i) ? "scale-0 opacity-0" : "bg-primary/20 hover:scale-105 active:scale-95",
                   )}
-                  aria-label={`Pop balloon ${i + 1}`}
+                  aria-label={interpolate(t("client.account.popBalloon"), { number: i + 1 })}
                 >
                   🎈
                 </button>
@@ -110,7 +110,7 @@ export function DeleteAccountDialog({
             )}
           >
             <label htmlFor="delete-confirm" className="text-sm font-medium">
-              Type <span className="font-mono text-destructive">DELETE</span> to confirm
+              {t("client.account.typeDelete")} <span className="font-mono text-destructive">DELETE</span>
             </label>
             <Input
               id="delete-confirm"
@@ -123,7 +123,7 @@ export function DeleteAccountDialog({
             />
           </div>
           {error && (
-            <p className="text-destructive text-sm" role="alert">
+            <p className="text-sm text-destructive" role="alert">
               {error}
             </p>
           )}
@@ -136,15 +136,10 @@ export function DeleteAccountDialog({
             className="glass border-white/10"
             onClick={() => handleOpenChange(false)}
           >
-            Cancel
+            {t("client.common.cancel")}
           </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={!canSubmit || loading}
-            onClick={handleFreeze}
-          >
-            {loading ? "Scheduling…" : "Freeze account"}
+          <Button type="button" variant="destructive" disabled={!canSubmit || loading} onClick={handleFreeze}>
+            {loading ? t("client.account.scheduling") : t("client.account.freezeAccount")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -2,14 +2,19 @@
 
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 export function TwaLoadingScreen({
-  title = "Preparing your wallet",
-  subtitle = "Syncing balances, subscriptions and partner cards.",
+  title,
+  subtitle,
 }: {
   title?: string;
   subtitle?: string;
 }) {
+  const { t } = useI18n("ru");
+  const displayTitle = title ?? t("client.common.loadingWallet");
+  const displaySubtitle = subtitle ?? t("client.common.loadingWalletSubtitle");
+
   return (
     <div className="flex min-h-full items-center justify-center px-6 pb-24 pt-8">
       <motion.div
@@ -66,8 +71,8 @@ export function TwaLoadingScreen({
 
         <div className="relative z-10">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-white/45">WhiteBox</p>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
-          <p className="mx-auto mt-2 max-w-[17rem] text-sm leading-relaxed text-white/58">{subtitle}</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-white">{displayTitle}</h1>
+          <p className="mx-auto mt-2 max-w-[17rem] text-sm leading-relaxed text-white/58">{displaySubtitle}</p>
         </div>
 
         <div className="relative mt-7 flex items-center gap-2" aria-hidden>

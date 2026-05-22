@@ -18,16 +18,31 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const companyVerificationCount = await prisma.companyVerificationApplication.count({
-    where: { status: { in: OPEN_VERIFICATION_STATUSES } },
-  });
+  const [companyVerificationCount, telegramQueueFailed, developerCriticalCount] = await Promise.all([
+    prisma.companyVerificationApplication.count({
+      where: { status: { in: OPEN_VERIFICATION_STATUSES } },
+    }),
+    prisma.telegramMessageQueue.count({
+      where: { status: "FAILED" },
+    }),
+    prisma.auditEvent.count({
+      where: {
+        workspace: "DEVELOPER",
+        level: { in: ["WARN", "CRITICAL"] },
+      },
+    }),
+  ]);
+
+  const systemIssueCount = telegramQueueFailed + developerCriticalCount;
 
   return NextResponse.json({
     items: {
       "/admin/company-verifications": companyVerificationCount,
+      "/admin/system-health": systemIssueCount,
     },
     sections: {
       "admin.nav.usersPartners": companyVerificationCount,
+      "admin.nav.system": systemIssueCount,
     },
   });
 }

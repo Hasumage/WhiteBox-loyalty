@@ -10,7 +10,29 @@ import { ConfirmEmailChangeDto } from "./dto/confirm-email-change.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { TelegramMiniAppLoginDto } from "./dto/telegram-mini-app-login.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+
+function loginContextFromRequest(req: Request): LoginContext {
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const ipAddress = Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : forwardedFor?.split(",")[0]?.trim() || req.ip || null;
+  return {
+    ipAddress,
+    countryCode:
+      (req.headers["cf-ipcountry"] as string | undefined) ??
+      (req.headers["x-country-code"] as string | undefined) ??
+      null,
+    city: (req.headers["x-city"] as string | undefined) ?? null,
+    userAgent: req.headers["user-agent"] ?? null,
+    deviceLabel:
+      (req.headers["sec-ch-ua-platform"] as string | undefined) ??
+      (req.headers["x-device-label"] as string | undefined) ??
+      null,
+    requestId: (req.headers["x-request-id"] as string | undefined) ?? null,
+  };
+}
 
 @ApiTags("auth")
 @Controller("auth")
@@ -33,26 +55,20 @@ export class AuthController {
   @UseGuards(AuthGuard("local"))
   @ApiOperation({ summary: "Login (local email/password)" })
   async login(@Req() req: Request & { user: User }) {
-    const forwardedFor = req.headers["x-forwarded-for"];
-    const ipAddress = Array.isArray(forwardedFor)
-      ? forwardedFor[0]
-      : forwardedFor?.split(",")[0]?.trim() || req.ip || null;
-    const ctx: LoginContext = {
-      ipAddress,
-      countryCode:
-        (req.headers["cf-ipcountry"] as string | undefined) ??
-        (req.headers["x-country-code"] as string | undefined) ??
-        null,
-      city: (req.headers["x-city"] as string | undefined) ?? null,
-      userAgent: req.headers["user-agent"] ?? null,
-      deviceLabel:
-        (req.headers["sec-ch-ua-platform"] as string | undefined) ??
-        (req.headers["x-device-label"] as string | undefined) ??
-        null,
-      requestId: (req.headers["x-request-id"] as string | undefined) ?? null,
-    };
+    const ctx = loginContextFromRequest(req);
     await this.auth.recordLoginEvent(req.user.id, ctx);
     return this.auth.issueTokens(req.user);
+  }
+
+  @Post("telegram-mini-app")
+  @ApiBody({ type: TelegramMiniAppLoginDto })
+  @ApiOperation({
+    summary: "Login from Telegram Mini App",
+    description:
+      "Validates Telegram Mini App initData with the bot token, finds a linked WhiteBox account by telegramId, and issues the regular access + refresh tokens.",
+  })
+  telegramMiniAppLogin(@Req() req: Request, @Body() dto: TelegramMiniAppLoginDto) {
+    return this.auth.loginWithTelegramMiniApp(dto.initData, loginContextFromRequest(req));
   }
 
   @Post("refresh")

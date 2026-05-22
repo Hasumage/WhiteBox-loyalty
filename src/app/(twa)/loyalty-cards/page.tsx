@@ -16,6 +16,7 @@ import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 const item = {
   hidden: { opacity: 0, y: 8 },
@@ -28,6 +29,7 @@ function companyCategories(company: TwaCompany) {
 }
 
 export default function LoyaltyCardsPage() {
+  const { t } = useI18n("ru");
   const [dashboard, setDashboard] = useState<TwaDashboard | null>(null);
   const [favoriteSlugs, setFavoriteSlugs] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export default function LoyaltyCardsPage() {
   }, [loyaltyCompanies, searchQuery, selectedCategory]);
 
   if (loading && !dashboard) {
-    return <TwaLoadingScreen title="Loading loyalty cards" subtitle="Preparing partners where you have earned points." />;
+    return <TwaLoadingScreen title={t("client.cards.loadingTitle")} subtitle={t("client.cards.loadingSubtitle")} />;
   }
 
   return (
@@ -109,7 +111,7 @@ export default function LoyaltyCardsPage() {
         className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        {t("client.common.back")}
       </Link>
 
       <div className="mb-4 flex items-start gap-3">
@@ -117,9 +119,9 @@ export default function LoyaltyCardsPage() {
           <Wallet className="h-6 w-6" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold">Loyalty Cards</h1>
+          <h1 className="text-xl font-semibold">{t("client.cards.title")}</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Companies where you have earned points
+            {t("client.cards.subtitle")}
           </p>
         </div>
       </div>
@@ -127,7 +129,7 @@ export default function LoyaltyCardsPage() {
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search your loyalty cards..."
+          placeholder={t("client.cards.searchPlaceholder")}
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           className="glass h-10 rounded-xl border-white/10 pl-9"
@@ -145,7 +147,7 @@ export default function LoyaltyCardsPage() {
               : "glass border border-white/10 text-muted-foreground hover:text-foreground",
           )}
         >
-          All
+          {t("client.common.all")}
         </button>
         {categories.map((category) => (
           <button
@@ -208,16 +210,16 @@ export default function LoyaltyCardsPage() {
                     <div className="mb-2 flex items-end justify-between gap-3">
                       <p className="text-xl font-bold tabular-nums text-primary">
                         {company.points.balance}
-                        <span className="ml-1 text-sm font-normal text-muted-foreground">pts</span>
+                        <span className="ml-1 text-sm font-normal text-muted-foreground">{t("client.common.pointsShort")}</span>
                       </p>
                       <span className="text-xs text-muted-foreground">
-                        earned {company.points.totalEarnedPoints}
+                        {t("client.cards.earned")} {company.points.totalEarnedPoints}
                       </span>
                     </div>
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{company.level.current?.levelName ?? "Member"}</span>
-                        <span>{company.level.next ? `${company.level.next.pointsToNext} pts left` : "Top level"}</span>
+                        <span>{company.level.current?.levelName ?? t("client.common.member")}</span>
+                        <span>{company.level.next ? `${company.level.next.pointsToNext} ${t("client.common.ptsLeft")}` : t("client.common.topLevel")}</span>
                       </div>
                       <Progress value={company.level.progressPercent} className="h-1.5" />
                     </div>
@@ -229,12 +231,12 @@ export default function LoyaltyCardsPage() {
         })}
       </ul>
 
-      {loading && filteredCompanies.length > 0 && <p className="py-4 text-center text-xs text-muted-foreground">Refreshing loyalty cards...</p>}
+      {loading && filteredCompanies.length > 0 && <p className="py-4 text-center text-xs text-muted-foreground">{t("client.cards.refreshing")}</p>}
       {!loading && filteredCompanies.length === 0 && (
         <div className="py-12 text-center">
-          <p className="text-sm text-muted-foreground">No loyalty cards match your filters.</p>
+          <p className="text-sm text-muted-foreground">{t("client.cards.empty")}</p>
           <Button asChild variant="outline" size="sm" className="glass mt-4 border-white/10">
-            <Link href="/companies">Explore all partners</Link>
+            <Link href="/companies">{t("client.cards.explorePartners")}</Link>
           </Button>
         </div>
       )}

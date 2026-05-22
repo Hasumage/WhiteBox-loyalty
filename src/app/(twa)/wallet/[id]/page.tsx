@@ -13,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { formatPlanPrice as formatLocalizedPlanPrice, interpolate } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/format";
 
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -22,9 +25,8 @@ function isExpiringSoon(date: string | null) {
   return diff > 0 && diff <= 14 * 24 * 60 * 60 * 1000;
 }
 
-function formatPlanPrice(plan: TwaSubscriptionPlan) {
-  const unit = plan.renewalUnit || "month";
-  return `$${plan.price}/${unit}`;
+function formatPlanPrice(plan: TwaSubscriptionPlan, t: TranslateFn) {
+  return formatLocalizedPlanPrice(plan.price, plan.renewalUnit, t);
 }
 
 function companyCategorySlugs(company: TwaCompany) {
@@ -65,6 +67,7 @@ function routeHref(location: TwaCompany["locations"][number]) {
 }
 
 export default function WalletPage() {
+  const { locale, t } = useI18n("ru");
   const params = useParams();
   const id = String(params.id ?? "");
   const [companies, setCompanies] = useState<TwaCompany[]>([]);
@@ -102,7 +105,7 @@ export default function WalletPage() {
   );
 
   if (loading && companies.length === 0) {
-    return <TwaLoadingScreen title="Loading partner card" subtitle="Syncing balances, locations and subscriptions." />;
+    return <TwaLoadingScreen title={t("client.wallet.loadingTitle")} subtitle={t("client.wallet.loadingSubtitle")} />;
   }
 
   if (!company) {
@@ -112,9 +115,9 @@ export default function WalletPage() {
         animate={{ opacity: 1 }}
         className="flex min-h-full flex-col items-center justify-center px-6"
       >
-        <p className="mb-4 text-muted-foreground">Company not found.</p>
+        <p className="mb-4 text-muted-foreground">{t("client.wallet.notFound")}</p>
         <Button asChild variant="secondary">
-          <Link href="/">Back to Home</Link>
+          <Link href="/">{t("client.common.backHome")}</Link>
         </Button>
       </motion.div>
     );
@@ -141,7 +144,7 @@ export default function WalletPage() {
         className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        {t("client.common.back")}
       </Link>
 
       <motion.section
@@ -161,12 +164,12 @@ export default function WalletPage() {
         </div>
         <p className="text-4xl font-bold tracking-tight tabular-nums text-primary">
           {company.points.balance}
-          <span className="ml-2 text-lg font-normal text-muted-foreground">pts</span>
+          <span className="ml-2 text-lg font-normal text-muted-foreground">{t("client.common.pointsShort")}</span>
         </p>
         <div className="mt-3 space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{company.level.current?.levelName ?? "Member"}</span>
-            <span>{company.level.next ? `${company.level.next.pointsToNext} pts left` : "Top level"}</span>
+            <span>{company.level.current?.levelName ?? t("client.common.member")}</span>
+            <span>{company.level.next ? `${company.level.next.pointsToNext} ${t("client.common.ptsLeft")}` : t("client.common.topLevel")}</span>
           </div>
           <Progress value={progressPercent} className="h-2" />
         </div>
@@ -184,17 +187,17 @@ export default function WalletPage() {
               <div className="flex items-start gap-2">
                 <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                 <div>
-                  <CardTitle className="text-sm font-semibold">Locations</CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">Where you can use this partner card.</p>
+                  <CardTitle className="text-sm font-semibold">{t("client.wallet.locations")}</CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">{t("client.wallet.locationsSubtitle")}</p>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3">
                 <div className="mb-1 flex items-center gap-2">
-                  <Badge className="h-5 px-1.5 text-[10px]">Main</Badge>
+                  <Badge className="h-5 px-1.5 text-[10px]">{t("client.wallet.main")}</Badge>
                   {mainLocation.precision && (
-                    <span className="text-[10px] text-muted-foreground">precision: {mainLocation.precision}</span>
+                    <span className="text-[10px] text-muted-foreground">{t("client.wallet.precision")}: {mainLocation.precision}</span>
                   )}
                 </div>
                 <div className="flex items-start justify-between gap-3">
@@ -205,18 +208,18 @@ export default function WalletPage() {
                       <Clock3 className="h-3 w-3" />
                       {mainLocation.openTime ?? "09:00"}-{mainLocation.closeTime ?? "21:00"}
                       <span className={cn("font-medium", isLocationOpenNow(mainLocation) ? "text-emerald-300" : "text-muted-foreground")}>
-                        {isLocationOpenNow(mainLocation) ? "Open now" : "Closed now"}
+                        {isLocationOpenNow(mainLocation) ? t("client.wallet.openNow") : t("client.wallet.closedNow")}
                       </span>
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col gap-2">
                     <Button asChild size="sm" variant="secondary" className="h-8">
-                      <Link href={mapLocationHref(company, mainLocation.uuid)}>Map</Link>
+                      <Link href={mapLocationHref(company, mainLocation.uuid)}>{t("client.wallet.map")}</Link>
                     </Button>
                     <Button asChild size="sm" className="h-8">
                       <a href={routeHref(mainLocation)} target="_blank" rel="noreferrer">
                         <Navigation className="mr-1 h-3.5 w-3.5" />
-                        Route
+                        {t("client.wallet.route")}
                       </a>
                     </Button>
                   </div>
@@ -228,7 +231,7 @@ export default function WalletPage() {
                   <div className="flex items-start gap-2">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{location.title ?? "Branch"}</p>
+                      <p className="truncate text-sm font-medium">{location.title ?? t("client.common.branch")}</p>
                       <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{location.address}</p>
                       <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                         <Clock3 className="h-3 w-3" />
@@ -237,12 +240,12 @@ export default function WalletPage() {
                     </div>
                     <div className="flex shrink-0 flex-col gap-2">
                       <Button asChild size="sm" variant="secondary" className="h-8">
-                        <Link href={mapLocationHref(company, location.uuid)}>Map</Link>
+                        <Link href={mapLocationHref(company, location.uuid)}>{t("client.wallet.map")}</Link>
                       </Button>
                       <Button asChild size="sm" className="h-8">
                         <a href={routeHref(location)} target="_blank" rel="noreferrer">
                           <Navigation className="mr-1 h-3.5 w-3.5" />
-                          Route
+                          {t("client.wallet.route")}
                         </a>
                       </Button>
                     </div>
@@ -252,7 +255,9 @@ export default function WalletPage() {
 
               {branchLocations.length > 3 && (
                 <p className="text-center text-xs text-muted-foreground">
-                  +{branchLocations.length - 3} more location{branchLocations.length - 3 === 1 ? "" : "s"} on the map
+                  {branchLocations.length - 3 === 1
+                    ? t("client.wallet.moreLocation")
+                    : interpolate(t("client.wallet.moreLocations"), { count: branchLocations.length - 3 })}
                 </p>
               )}
             </CardContent>
@@ -270,26 +275,26 @@ export default function WalletPage() {
           <CardHeader className="flex flex-row items-center gap-2 pb-2">
             <Award className="h-5 w-5 text-primary" />
             <div>
-              <CardTitle className="text-sm font-semibold">Company level</CardTitle>
-              <p className="text-xs text-muted-foreground">Spend-based status at {company.name}</p>
+              <CardTitle className="text-sm font-semibold">{t("client.wallet.companyLevel")}</CardTitle>
+              <p className="text-xs text-muted-foreground">{interpolate(t("client.wallet.spendStatus"), { company: company.name })}</p>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs text-muted-foreground">Current</p>
-                  <p className="text-lg font-semibold">{company.level.current?.levelName ?? "Member"}</p>
+                  <p className="text-xs text-muted-foreground">{t("client.wallet.current")}</p>
+                  <p className="text-lg font-semibold">{company.level.current?.levelName ?? t("client.common.member")}</p>
                 </div>
                 <Badge className="gap-1">
                   <Sparkles className="h-3 w-3" />
-                  {company.level.current?.cashbackPercent ?? 0}% cashback
+                  {company.level.current?.cashbackPercent ?? 0}% {t("client.wallet.cashback")}
                 </Badge>
               </div>
               <div className="mt-3 space-y-1">
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{company.level.totalSpentPoints} level pts</span>
-                  <span>{company.level.next ? `${company.level.next.minTotalSpend} next` : "Maxed"}</span>
+                  <span>{company.level.totalSpentPoints} {t("client.wallet.levelPts")}</span>
+                  <span>{company.level.next ? `${company.level.next.minTotalSpend} ${t("client.wallet.next")}` : t("client.wallet.maxed")}</span>
                 </div>
                 <Progress value={company.level.progressPercent} className="h-2" />
               </div>
@@ -313,7 +318,7 @@ export default function WalletPage() {
                   >
                     <div>
                       <p className="font-medium">{rule.levelName}</p>
-                      <p className="text-xs text-muted-foreground">from {rule.minTotalSpend} level pts</p>
+                      <p className="text-xs text-muted-foreground">{interpolate(t("client.wallet.fromLevelPts"), { count: rule.minTotalSpend })}</p>
                     </div>
                     <span className="text-xs font-medium text-primary">{rule.cashbackPercent}%</span>
                   </div>
@@ -337,10 +342,10 @@ export default function WalletPage() {
                 <div>
                   <CardTitle className="flex items-center gap-2 text-base font-semibold">
                     <CircleDollarSign className="h-5 w-5 text-primary" />
-                    Partner subscriptions
+                    {t("client.wallet.partnerSubscriptions")}
                   </CardTitle>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Plans connected to {company.name} and its categories.
+                    {interpolate(t("client.wallet.partnerSubscriptionsSubtitle"), { company: company.name })}
                   </p>
                 </div>
                 <Badge variant="secondary" className="shrink-0">
@@ -363,11 +368,11 @@ export default function WalletPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="truncate text-sm font-semibold">{sub.name}</p>
-                          {sub.isOwned && <Badge className="h-5 shrink-0 px-1.5 text-[10px]">Active</Badge>}
+                          {sub.isOwned && <Badge className="h-5 shrink-0 px-1.5 text-[10px]">{t("client.common.active")}</Badge>}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
                           <Badge variant="secondary" className="text-[10px] font-normal">
-                            {formatPlanPrice(sub)}
+                            {formatPlanPrice(sub, t)}
                           </Badge>
                           {sub.category && (
                             <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
@@ -394,13 +399,14 @@ export default function WalletPage() {
           <Card className={cn("glass border-amber-500/30 bg-amber-500/5")}>
             <CardHeader className="flex flex-row items-center gap-2 pb-2">
               <AlertCircle className="h-5 w-5 text-amber-400" />
-              <h2 className="text-sm font-semibold text-amber-200">Expiring soon</h2>
+              <h2 className="text-sm font-semibold text-amber-200">{t("client.wallet.expiringSoon")}</h2>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                <span className="font-semibold text-amber-200">{company.points.expiringPoints} pts</span>{" "}
-                expire on {company.points.expiringDate ? new Date(company.points.expiringDate).toLocaleDateString() : ""}.
-                Use them before they are gone.
+                {interpolate(t("client.wallet.expiringCopy"), {
+                  points: company.points.expiringPoints ?? 0,
+                  date: company.points.expiringDate ? new Date(company.points.expiringDate).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US") : "",
+                })}
               </p>
             </CardContent>
           </Card>

@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { CompanyEmploymentType, IdentityVerificationMode } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
-import { escapeTelegramHtml, sendTelegramMessage } from "@/lib/telegram/telegram-service";
+import { sendTelegramMessageQueued } from "@/lib/telegram/telegram-queue";
+import { escapeTelegramHtml } from "@/lib/telegram/telegram-service";
 import { encryptPassportData, type EncryptedPassportData, type ManualPassportData } from "./passport-data";
 import type { StoredPassportUpload } from "./passport-storage";
 
@@ -351,14 +352,20 @@ export async function notifyAdminsAboutCompanyApplication(applicationUuid: strin
   for (const admin of admins) {
     if (!admin.telegramId) continue;
     try {
-      await sendTelegramMessage({
+      const delivery = await sendTelegramMessageQueued({
         botToken,
         chatId: admin.telegramId.toString(),
         text,
         parseMode: "HTML",
         proxyUrl: process.env.TELEGRAM_PROXY_URL,
+        recipientRole: "admin",
+        recipientLabel: admin.name || admin.email || "admin",
+        source: "company-verification",
+        sourceId: application.uuid,
+        priority: 20,
+        throwOnFailure: false,
       });
-      sent += 1;
+      if (delivery.ok) sent += 1;
     } catch {
       // Keep application submission successful even if one admin notification fails.
     }

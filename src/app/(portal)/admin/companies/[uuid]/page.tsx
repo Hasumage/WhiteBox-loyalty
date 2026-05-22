@@ -12,6 +12,7 @@ import {
   ChevronUp,
   CircleDollarSign,
   Gift,
+  Globe2,
   Hash,
   FileText,
   MapPin,
@@ -74,8 +75,9 @@ type CompanyProfileForm = {
     levelName: string;
     minTotalSpend: number;
     cashbackPercent: number;
-  }>;
+  }>; 
   isActive: boolean;
+  operatesOnline: boolean;
 };
 
 type SubscriptionDraft = {
@@ -360,6 +362,7 @@ export default function AdminCompanyProfilePage() {
         subscriptionSpendPolicy: user.managedCompany?.subscriptionSpendPolicy ?? "EXCLUDE",
         levelRules: normalizeLevelRules(user.managedCompany?.levelRules),
         isActive: user.managedCompany?.isActive ?? true,
+        operatesOnline: user.managedCompany?.operatesOnline ?? false,
       });
       setSubscriptions(user.managedCompany?.subscriptions ?? []);
       setLocations((user.managedCompany?.locations ?? []).map(normalizeLocation));
@@ -380,6 +383,7 @@ export default function AdminCompanyProfilePage() {
         subscriptionSpendPolicy: user.managedCompany?.subscriptionSpendPolicy ?? "EXCLUDE",
         levelRules: normalizeLevelRules(user.managedCompany?.levelRules),
         isActive: user.managedCompany?.isActive ?? true,
+        operatesOnline: user.managedCompany?.operatesOnline ?? false,
       };
       const nextSubscriptions = user.managedCompany?.subscriptions ?? [];
       setInitialAccountState(nextAccount);
@@ -445,6 +449,7 @@ export default function AdminCompanyProfilePage() {
           subscriptionSpendPolicy: user.managedCompany?.subscriptionSpendPolicy ?? "EXCLUDE",
           levelRules: normalizeLevelRules(user.managedCompany?.levelRules),
           isActive: user.managedCompany?.isActive ?? true,
+          operatesOnline: user.managedCompany?.operatesOnline ?? false,
         });
         setSubscriptions(user.managedCompany?.subscriptions ?? []);
         setLocations((user.managedCompany?.locations ?? []).map(normalizeLocation));
@@ -465,6 +470,7 @@ export default function AdminCompanyProfilePage() {
           subscriptionSpendPolicy: user.managedCompany?.subscriptionSpendPolicy ?? "EXCLUDE",
           levelRules: normalizeLevelRules(user.managedCompany?.levelRules),
           isActive: user.managedCompany?.isActive ?? true,
+          operatesOnline: user.managedCompany?.operatesOnline ?? false,
         };
         const nextSubscriptions = user.managedCompany?.subscriptions ?? [];
         setInitialAccountState(nextAccount);
@@ -555,6 +561,7 @@ export default function AdminCompanyProfilePage() {
         cashbackPercent: Number(rule.cashbackPercent || 0),
       })),
       isActive: companyForm.isActive,
+      operatesOnline: companyForm.operatesOnline,
     });
     if (!res.ok) {
       setError(String(res.message));
@@ -857,6 +864,7 @@ export default function AdminCompanyProfilePage() {
             <Badge variant={companyForm.isActive ? "default" : "secondary"}>
               {companyForm.isActive ? statusLabel("ACTIVE", t) : statusLabel("INACTIVE", t)}
             </Badge>
+            {companyForm.operatesOnline && <Badge variant="outline">{t("admin.companyDetail.onlineBadge")}</Badge>}
             <Badge variant="outline">UUID: {companyUserUuid.slice(0, 8)}...</Badge>
           </div>
         </div>
@@ -1038,7 +1046,9 @@ export default function AdminCompanyProfilePage() {
                 {t("admin.companyDetail.locations")}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                {t("admin.companyDetail.locationsDescription")}
+                {companyForm.operatesOnline
+                  ? t("admin.companyDetail.locationsOnlineDescription")
+                  : t("admin.companyDetail.locationsDescription")}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1064,6 +1074,17 @@ export default function AdminCompanyProfilePage() {
         </CardHeader>
         {sections.locations && (
           <CardContent className="space-y-4 pb-4 pt-0">
+            {companyForm.operatesOnline && (
+              <div className="rounded-2xl border border-cyan-200/20 bg-cyan-200/[0.06] p-4 text-sm text-cyan-50">
+                <div className="flex items-start gap-3">
+                  <Globe2 className="mt-0.5 h-5 w-5 shrink-0 text-cyan-100" />
+                  <div>
+                    <p className="font-semibold">{t("admin.companyDetail.onlineLocationsTitle")}</p>
+                    <p className="mt-1 text-cyan-50/75">{t("admin.companyDetail.onlineLocationsHint")}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="rounded-2xl border border-cyan-200/15 bg-gradient-to-br from-cyan-200/[0.07] via-muted/10 to-muted/5 p-4 shadow-[0_18px_70px_rgba(0,0,0,0.16)]">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -1313,7 +1334,9 @@ export default function AdminCompanyProfilePage() {
               ))}
               {locations.length === 0 && (
                 <div className="rounded-xl border border-dashed border-white/15 bg-muted/10 p-5 text-sm text-muted-foreground">
-                  {t("admin.companyDetail.noAddresses")}
+                  {companyForm.operatesOnline
+                    ? t("admin.companyDetail.noAddressesOnline")
+                    : t("admin.companyDetail.noAddresses")}
                 </div>
               )}
             </div>
@@ -1421,6 +1444,50 @@ export default function AdminCompanyProfilePage() {
                 <option value="active">{statusLabel("ACTIVE", t)}</option>
                 <option value="inactive">{statusLabel("INACTIVE", t)}</option>
               </SelectField>
+            </div>
+            <div className="space-y-2 xl:col-span-2">
+              <Label className="inline-flex items-center gap-1.5">
+                <Globe2 className="h-3.5 w-3.5 text-primary" />
+                {t("admin.companyDetail.workMode")}
+              </Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant={!companyForm.operatesOnline ? "default" : "secondary"}
+                  className="h-auto justify-start gap-3 rounded-xl px-3 py-3 text-left"
+                  onClick={() =>
+                    setCompanyForm((p) => (p ? { ...p, operatesOnline: false } : p))
+                  }
+                >
+                  <MapPin className="h-4 w-4 shrink-0" />
+                  <span>
+                    <span className="block text-sm font-semibold">
+                      {t("admin.companyDetail.workModeOffline")}
+                    </span>
+                    <span className="block text-xs font-normal opacity-70">
+                      {t("admin.companyDetail.workModeOfflineDescription")}
+                    </span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant={companyForm.operatesOnline ? "default" : "secondary"}
+                  className="h-auto justify-start gap-3 rounded-xl px-3 py-3 text-left"
+                  onClick={() =>
+                    setCompanyForm((p) => (p ? { ...p, operatesOnline: true } : p))
+                  }
+                >
+                  <Globe2 className="h-4 w-4 shrink-0" />
+                  <span>
+                    <span className="block text-sm font-semibold">
+                      {t("admin.companyDetail.workModeOnline")}
+                    </span>
+                    <span className="block text-xs font-normal opacity-70">
+                      {t("admin.companyDetail.workModeOnlineDescription")}
+                    </span>
+                  </span>
+                </Button>
+              </div>
             </div>
             <div className="space-y-2 xl:col-span-2">
               <Label className="inline-flex items-center gap-1.5">

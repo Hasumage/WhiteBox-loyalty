@@ -58,8 +58,8 @@ describe("admin user permissions route", () => {
 
   it("allows super admin to persist sanitized permissions and audit the change", async () => {
     mockedPrisma.user.findUnique
-      .mockResolvedValueOnce({ id: 1, role: "SUPER_ADMIN", email: "super@test.local", name: "Super" } as never)
-      .mockResolvedValueOnce({ id: 2, uuid: "manager-user", email: "manager@test.local" } as never)
+      .mockResolvedValueOnce({ id: 1, role: "SUPER_ADMIN", email: "super@test.local", name: "Super", permissions: [] } as never)
+      .mockResolvedValueOnce({ id: 2, uuid: "manager-user", email: "manager@test.local", role: "MANAGER", permissions: [] } as never)
       .mockResolvedValueOnce({
         id: 2,
         uuid: "manager-user",
@@ -91,10 +91,15 @@ describe("admin user permissions route", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(tx.adminUserPermission.upsert).toHaveBeenCalledTimes(1);
-    expect(tx.adminUserPermission.upsert).toHaveBeenCalledWith(expect.objectContaining({
+    expect(tx.adminUserPermission.upsert).toHaveBeenCalled();
+    const financeCall = tx.adminUserPermission.upsert.mock.calls.find(
+      ([call]) => call.where.userId_scope.scope === "FINANCE",
+    )?.[0];
+    expect(financeCall).toMatchObject({
       where: { userId_scope: { userId: 2, scope: "FINANCE" } },
-    }));
+      update: { canView: false, canEdit: false, canApprove: false },
+    });
+    expect(tx.adminUserPermission.upsert.mock.calls.some(([call]) => call.where.userId_scope.scope === "NOT_A_SCOPE")).toBe(false);
     expect(tx.auditEvent.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ action: "Admin permissions updated" }),
     }));
@@ -102,7 +107,7 @@ describe("admin user permissions route", () => {
 
   it("blocks managers from editing access settings", async () => {
     mockedRequireAdminSession.mockResolvedValue({ userId: 3, email: "manager@test.local", role: "MANAGER" });
-    mockedPrisma.user.findUnique.mockResolvedValue({ id: 3, role: "MANAGER", email: "manager@test.local" } as never);
+    mockedPrisma.user.findUnique.mockResolvedValue({ id: 3, role: "MANAGER", email: "manager@test.local", permissions: [] } as never);
 
     const res = await PUT(
       new NextRequest("http://localhost/api/admin/users/support-user/permissions", {
@@ -114,6 +119,6 @@ describe("admin user permissions route", () => {
     const body = await res.json();
 
     expect(res.status).toBe(403);
-    expect(body.message).toContain("Only SUPER_ADMIN");
+    expect(body.message).toContain("Access settings permission");
   });
 });

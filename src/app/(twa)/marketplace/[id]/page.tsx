@@ -17,31 +17,32 @@ import {
   type TwaSubscriptionPlan,
 } from "@/lib/api/twa-client";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { formatPlanPrice as formatLocalizedPlanPrice, formatRenewal as formatLocalizedRenewal, interpolate } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/format";
 
-function formatPlanPrice(plan: TwaSubscriptionPlan) {
-  const unit = plan.renewalUnit || "month";
-  return `$${plan.price}/${unit}`;
+function formatPlanPrice(plan: TwaSubscriptionPlan, t: TranslateFn) {
+  return formatLocalizedPlanPrice(plan.price, plan.renewalUnit, t);
 }
 
-function formatRenewal(plan: TwaSubscriptionPlan) {
-  const value = Math.max(1, Number(plan.renewalValue) || 1);
-  const unit = plan.renewalUnit || "month";
-  return `${value} ${unit}${value > 1 ? "s" : ""}`;
+function formatRenewal(plan: TwaSubscriptionPlan, t: TranslateFn) {
+  return formatLocalizedRenewal(plan.renewalValue, plan.renewalUnit, t);
 }
 
-function buildBenefits(plan: TwaSubscriptionPlan) {
+function buildBenefits(plan: TwaSubscriptionPlan, t: TranslateFn) {
   const benefits = [
-    plan.company ? `Benefits at ${plan.company.name}` : "Benefits across selected partners",
-    plan.category ? `${plan.category.name} category access` : "Marketplace subscription access",
-    `Renews every ${formatRenewal(plan)}`,
+    plan.company ? interpolate(t("client.subscription.benefitsAt"), { company: plan.company.name }) : t("client.subscription.benefitsAcross"),
+    plan.category ? interpolate(t("client.subscription.categoryAccess"), { category: plan.category.name }) : t("client.subscription.marketplaceAccess"),
+    interpolate(t("client.subscription.renewsEvery"), { period: formatRenewal(plan, t) }),
   ];
   if (plan.promoBonusDays > 0) {
-    benefits.push(`${plan.promoBonusDays} bonus days included`);
+    benefits.push(interpolate(t("client.subscription.bonusDays"), { count: plan.promoBonusDays }));
   }
   return benefits;
 }
 
 export default function SubscriptionDetailPage() {
+  const { t } = useI18n("ru");
   const params = useParams();
   const id = String(params.id ?? "");
   const [plans, setPlans] = useState<TwaSubscriptionPlan[]>([]);
@@ -83,14 +84,14 @@ export default function SubscriptionDetailPage() {
       setError(res.message);
       return;
     }
-    setNotice("Subscription activated.");
+    setNotice(t("client.subscription.activatedNotice"));
     setPlans((current) =>
       current.map((plan) => (plan.uuid === subscription.uuid ? { ...plan, isOwned: true } : plan)),
     );
   }
 
   if (loading && plans.length === 0) {
-    return <TwaLoadingScreen title="Loading subscription" subtitle="Preparing plan details and activation status." />;
+    return <TwaLoadingScreen title={t("client.subscription.loadingTitle")} subtitle={t("client.subscription.loadingSubtitle")} />;
   }
 
   if (!subscription) {
@@ -100,16 +101,16 @@ export default function SubscriptionDetailPage() {
         animate={{ opacity: 1 }}
         className="flex min-h-full flex-col items-center justify-center px-6"
       >
-        <p className="mb-4 text-muted-foreground">Subscription not found.</p>
+        <p className="mb-4 text-muted-foreground">{t("client.subscription.notFound")}</p>
         <Button asChild variant="secondary">
-          <Link href="/marketplace">Back to Marketplace</Link>
+          <Link href="/marketplace">{t("client.common.backMarketplace")}</Link>
         </Button>
       </motion.div>
     );
   }
 
   const category = subscription.category;
-  const benefits = buildBenefits(subscription);
+  const benefits = buildBenefits(subscription, t);
 
   return (
     <motion.div
@@ -123,7 +124,7 @@ export default function SubscriptionDetailPage() {
         className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        {t("client.common.back")}
       </Link>
 
       <motion.section
@@ -154,7 +155,7 @@ export default function SubscriptionDetailPage() {
                   {subscription.company.name}
                 </Badge>
               )}
-              {subscription.isOwned && <Badge className="text-xs font-normal">Active</Badge>}
+              {subscription.isOwned && <Badge className="text-xs font-normal">{t("client.common.active")}</Badge>}
             </div>
           </div>
         </div>
@@ -169,7 +170,7 @@ export default function SubscriptionDetailPage() {
         <Card className="glass border-white/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Description
+              {t("client.subscription.description")}
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
@@ -187,12 +188,12 @@ export default function SubscriptionDetailPage() {
         <Card className="glass border-white/10">
           <CardContent className="flex flex-row items-center justify-between p-4">
             <div>
-              <p className="text-sm text-muted-foreground">Price</p>
-              <p className="text-xl font-bold text-primary">{formatPlanPrice(subscription)}</p>
+              <p className="text-sm text-muted-foreground">{t("client.subscription.price")}</p>
+              <p className="text-xl font-bold text-primary">{formatPlanPrice(subscription, t)}</p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-muted-foreground">Renewal</p>
-              <p className="font-medium">{formatRenewal(subscription)}</p>
+              <p className="text-sm text-muted-foreground">{t("client.subscription.renewal")}</p>
+              <p className="font-medium">{formatRenewal(subscription, t)}</p>
             </div>
           </CardContent>
         </Card>
@@ -207,7 +208,7 @@ export default function SubscriptionDetailPage() {
         <Card className="glass border-white/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Benefits
+              {t("client.subscription.benefits")}
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
@@ -247,10 +248,10 @@ export default function SubscriptionDetailPage() {
           ) : (
             <Sparkles className="mr-2 h-4 w-4" />
           )}
-          {subscription.isOwned ? "Activated" : activating ? "Activating..." : "Activate"}
+          {subscription.isOwned ? t("client.subscription.activated") : activating ? t("client.subscription.activating") : t("client.subscription.activate")}
         </Button>
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          Payment provider integration is prepared for a future step.
+          {t("client.subscription.paymentFuture")}
         </p>
       </motion.section>
     </motion.div>
