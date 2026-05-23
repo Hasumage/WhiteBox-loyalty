@@ -1,5 +1,6 @@
 jest.mock("@/lib/prisma", () => ({
   prisma: {
+    user: { findUnique: jest.fn() },
     companyVerificationApplication: {
       count: jest.fn(),
       findMany: jest.fn(),
@@ -25,6 +26,14 @@ describe("admin company verifications list route", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedRequireAdminSession.mockResolvedValue({ userId: 1, email: "admin@test.local", role: "ADMIN" });
+    mockedPrisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      role: "ADMIN",
+      email: "admin@test.local",
+      permissions: [
+        { scope: "COMPANY_VERIFICATIONS", canView: true, canEdit: true, canApprove: true },
+      ],
+    } as never);
   });
 
   it("returns paginated verification requests with summary counts", async () => {

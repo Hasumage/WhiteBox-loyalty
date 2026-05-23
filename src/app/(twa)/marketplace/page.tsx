@@ -21,12 +21,14 @@ import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { getCachedTwaMarketplace, getTwaMarketplace, type TwaMarketplace, type TwaSubscriptionPlan } from "@/lib/api/twa-client";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { formatPlanPrice as formatLocalizedPlanPrice } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/format";
 
 const POPULAR_CATEGORY_SLUGS = ["coffee", "books", "auto", "barber", "beauty", "food", "fitness", "retail"];
 
-function formatPlanPrice(plan: TwaSubscriptionPlan) {
-  const unit = plan.renewalUnit || "month";
-  return `$${plan.price}/${unit}`;
+function formatPlanPrice(plan: TwaSubscriptionPlan, t: TranslateFn) {
+  return formatLocalizedPlanPrice(plan.price, plan.renewalUnit, t);
 }
 
 function planPrice(plan: TwaSubscriptionPlan) {
@@ -35,6 +37,7 @@ function planPrice(plan: TwaSubscriptionPlan) {
 }
 
 export default function MarketplacePage() {
+  const { t } = useI18n("ru");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [marketplace, setMarketplace] = useState<TwaMarketplace>({ categories: [], subscriptions: [] });
   const [loading, setLoading] = useState(true);
@@ -101,7 +104,7 @@ export default function MarketplacePage() {
   }
 
   if (loading && marketplace.categories.length === 0 && marketplace.subscriptions.length === 0) {
-    return <TwaLoadingScreen title="Loading subscriptions" subtitle="Finding active plans, filters and partner benefits." />;
+    return <TwaLoadingScreen title={t("client.market.loadingTitle")} subtitle={t("client.market.loadingSubtitle")} />;
   }
 
   return (
@@ -116,13 +119,13 @@ export default function MarketplacePage() {
         className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        {t("client.common.back")}
       </Link>
 
       <div className="mb-4">
-        <h1 className="text-xl font-semibold">Subscriptions</h1>
+        <h1 className="text-xl font-semibold">{t("client.market.title")}</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Activate plans and use benefits at partner locations
+          {t("client.market.subtitle")}
         </p>
       </div>
 
@@ -139,19 +142,19 @@ export default function MarketplacePage() {
               )}
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              Filters
+              {t("client.common.filters")}
             </button>
           </SheetTrigger>
           <SheetContent side="left" className="w-[86%] max-w-sm overflow-y-auto p-0" showCloseButton>
             <SheetHeader className="border-b border-white/10">
-              <SheetTitle>Subscription filters</SheetTitle>
-              <SheetDescription>Refine marketplace plans by category and monthly price.</SheetDescription>
+              <SheetTitle>{t("client.market.filterTitle")}</SheetTitle>
+              <SheetDescription>{t("client.market.filterDescription")}</SheetDescription>
             </SheetHeader>
 
             <div className="space-y-6 px-6 py-5">
               <section>
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-muted-foreground">Categories</h2>
+                  <h2 className="text-sm font-semibold text-muted-foreground">{t("client.common.categories")}</h2>
                   {selectedCategory && (
                     <button
                       type="button"
@@ -159,7 +162,7 @@ export default function MarketplacePage() {
                       className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                     >
                       <X className="h-3 w-3" />
-                      Clear
+                      {t("client.common.clear")}
                     </button>
                   )}
                 </div>
@@ -184,10 +187,10 @@ export default function MarketplacePage() {
               </section>
 
               <section>
-                <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Price per month</h2>
+                <h2 className="mb-3 text-sm font-semibold text-muted-foreground">{t("client.market.pricePerMonth")}</h2>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="space-y-1">
-                    <span className="text-xs text-muted-foreground">Min</span>
+                    <span className="text-xs text-muted-foreground">{t("client.market.min")}</span>
                     <Input
                       type="number"
                       inputMode="decimal"
@@ -199,7 +202,7 @@ export default function MarketplacePage() {
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="text-xs text-muted-foreground">Max</span>
+                    <span className="text-xs text-muted-foreground">{t("client.market.max")}</span>
                     <Input
                       type="number"
                       inputMode="decimal"
@@ -214,7 +217,7 @@ export default function MarketplacePage() {
               </section>
 
               <Button variant="outline" className="w-full border-white/10" onClick={clearFilters}>
-                Reset filters
+                {t("client.common.resetFilters")}
               </Button>
             </div>
           </SheetContent>
@@ -230,7 +233,7 @@ export default function MarketplacePage() {
               : "glass border border-white/10 text-muted-foreground hover:text-foreground",
           )}
         >
-          All
+          {t("client.common.all")}
         </button>
         {quickCategories.map((category) => (
           <button
@@ -277,7 +280,7 @@ export default function MarketplacePage() {
                       </p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <span className="text-sm font-medium text-primary">
-                          {formatPlanPrice(plan)}
+                          {formatPlanPrice(plan, t)}
                         </span>
                         {category && (
                           <Badge variant="secondary" className="inline-flex items-center gap-1 text-[10px] font-normal">
@@ -290,11 +293,11 @@ export default function MarketplacePage() {
                             {plan.company.name}
                           </Badge>
                         )}
-                        {plan.isOwned && <Badge className="text-[10px] font-normal">Active</Badge>}
+                        {plan.isOwned && <Badge className="text-[10px] font-normal">{t("client.common.active")}</Badge>}
                       </div>
                     </div>
                     <Button size="sm" variant="secondary" className="shrink-0">
-                      View
+                      {t("client.common.view")}
                     </Button>
                   </CardContent>
                 </Card>
@@ -312,7 +315,7 @@ export default function MarketplacePage() {
 
       {!loading && visibleSubscriptions.length === 0 && (
         <p className="py-12 text-center text-sm text-muted-foreground">
-          No subscriptions in this category.
+          {t("client.market.empty")}
         </p>
       )}
     </motion.div>

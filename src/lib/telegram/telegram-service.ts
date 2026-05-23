@@ -1,4 +1,5 @@
-import { ProxyAgent, fetch as undiciFetch } from "undici";
+import { request as httpsRequest, type Agent as HttpsAgent } from "node:https";
+import httpsProxyAgentModule from "https-proxy-agent";
 
 export type TelegramRecipient = {
   chatId: string;
@@ -13,6 +14,8 @@ export type LandingLead = {
   business?: string;
   message: string;
 };
+
+const { HttpsProxyAgent } = httpsProxyAgentModule as typeof import("https-proxy-agent");
 
 export function renderLandingLeadMessage(lead: LandingLead) {
   return [
@@ -112,11 +115,72 @@ type TelegramFetchInit = {
   proxyUrl?: string;
 };
 
-function telegramFetch(url: string, init: TelegramFetchInit) {
-  if (!init.proxyUrl) return fetch(url, init);
+const TELEGRAM_RETRY_DELAYS_MS = [350, 900, 1800];
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableTelegramResponse(status: number) {
+  return status === 429 || status >= 500;
+}
+
+function fetchViaHttpsProxy(url: string, init: TelegramFetchInit) {
+  return new Promise<Response>((resolve, reject) => {
+    const body = init.body;
+    const request = httpsRequest(
+      new URL(url),
+      {
+        method: init.method,
+        headers: {
+          ...(init.headers ?? {}),
+          ...(body ? { "Content-Length": Buffer.byteLength(body).toString() } : {}),
+        },
+        agent: new HttpsProxyAgent(init.proxyUrl!) as unknown as HttpsAgent,
+        timeout: 15_000,
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        response.on("end", () => {
+          resolve(
+            new Response(Buffer.concat(chunks), {
+              status: response.statusCode ?? 0,
+              statusText: response.statusMessage,
+              headers: response.headers as HeadersInit,
+            }),
+          );
+        });
+      },
+    );
+
+    request.on("timeout", () => request.destroy(new Error("Telegram proxy request timed out.")));
+    request.on("error", reject);
+    if (body) request.write(body);
+    request.end();
+  });
+}
+
+async function telegramFetch(url: string, init: TelegramFetchInit) {
   const { proxyUrl, ...fetchInit } = init;
-  return undiciFetch(url, { ...fetchInit, dispatcher: new ProxyAgent(proxyUrl) });
+
+  for (let attempt = 0; attempt <= TELEGRAM_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const response = proxyUrl ? await fetchViaHttpsProxy(url, init) : await fetch(url, fetchInit);
+
+      if (!isRetryableTelegramResponse(response.status) || attempt === TELEGRAM_RETRY_DELAYS_MS.length) {
+        return response;
+      }
+
+      await response.arrayBuffer().catch(() => undefined);
+    } catch (error) {
+      if (attempt === TELEGRAM_RETRY_DELAYS_MS.length) throw error;
+    }
+
+    await sleep(TELEGRAM_RETRY_DELAYS_MS[attempt]);
+  }
+
+  throw new Error("Telegram request failed after retries.");
 }
 
 export async function sendTelegramMessage(params: {

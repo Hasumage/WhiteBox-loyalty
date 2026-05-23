@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
-import { AccountStatus, UserRole } from "@prisma/client";
+import { AccountStatus, PermissionScope, UserRole } from "@prisma/client";
 import { AdminService } from "./admin.service";
 
 describe("AdminService", () => {
@@ -68,7 +68,9 @@ describe("AdminService", () => {
     };
     $transaction: jest.Mock;
     userSubscription: { count: jest.Mock; findMany: jest.Mock };
-    subscription: { findUnique: jest.Mock; count: jest.Mock };
+    subscription: { findUnique: jest.Mock; findMany: jest.Mock; count: jest.Mock };
+    subscriptionBundle: { findUnique: jest.Mock; findMany: jest.Mock; create: jest.Mock };
+    subscriptionBundleParticipant: { findMany: jest.Mock };
     promoCode: { findMany: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     referralCampaign: { findFirst: jest.Mock; create: jest.Mock; update: jest.Mock };
     referralInvite: { count: jest.Mock };
@@ -149,7 +151,9 @@ describe("AdminService", () => {
       },
       $transaction: jest.fn().mockResolvedValue([]),
       userSubscription: { count: jest.fn(), findMany: jest.fn() },
-      subscription: { findUnique: jest.fn(), count: jest.fn() },
+      subscription: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+      subscriptionBundle: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
+      subscriptionBundleParticipant: { findMany: jest.fn() },
       promoCode: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
@@ -335,14 +339,136 @@ describe("AdminService", () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it("blockUserAccountByUuid requires SUPER_ADMIN and revokes refresh sessions", async () => {
+  it("updateUserByUuid blocks SUPER_ADMIN from blocking another SUPER_ADMIN", async () => {
     prisma.user.findUnique
-      .mockResolvedValueOnce({ id: 1, role: UserRole.SUPER_ADMIN, email: "super@example.com" })
+      .mockResolvedValueOnce({
+        id: 2,
+        uuid: "u-super",
+        role: UserRole.SUPER_ADMIN,
+        accountStatus: "ACTIVE",
+      })
+      .mockResolvedValueOnce({
+        id: 1,
+        role: UserRole.SUPER_ADMIN,
+        email: "super@example.com",
+      });
+
+    await expect(
+      service.updateUserByUuid(
+        "u-super",
+        { accountStatus: AccountStatus.BLOCKED },
+        1,
+      ),
+    ).rejects.toThrow("SUPER_ADMIN accounts cannot be blocked");
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("updateUserByUuid blocks ADMIN from blocking another ADMIN", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 2,
+        uuid: "u-admin",
+        role: UserRole.ADMIN,
+        accountStatus: "ACTIVE",
+      })
+      .mockResolvedValueOnce({
+        id: 1,
+        role: UserRole.ADMIN,
+        email: "admin@example.com",
+      });
+
+    await expect(
+      service.updateUserByUuid(
+        "u-admin",
+        { accountStatus: AccountStatus.BLOCKED },
+        1,
+      ),
+    ).rejects.toThrow("ADMIN accounts can be blocked only by a SUPER_ADMIN policy decision");
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("assertAdminPermission gives SUPER_ADMIN database access without explicit rows", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      role: UserRole.SUPER_ADMIN,
+      permissions: [],
+    });
+
+    await expect(
+      service.assertAdminPermission(1, PermissionScope.DATABASE, "canView"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("assertAdminPermission blocks ADMIN database access until it is explicitly granted", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      role: UserRole.ADMIN,
+      permissions: [],
+    });
+
+    await expect(
+      service.assertAdminPermission(1, PermissionScope.DATABASE, "canView"),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("assertAdminPermission allows ADMIN database restore only with approve permission", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 1,
+      role: UserRole.ADMIN,
+      permissions: [{ canView: true, canEdit: true, canApprove: true }],
+    });
+
+    await expect(
+      service.assertAdminPermission(1, PermissionScope.DATABASE, "canApprove"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("updateCompanyUserByUuid creates warning audit when manager changes company data", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 2,
+        uuid: "company-user",
+        role: UserRole.COMPANY,
+      })
+      .mockResolvedValueOnce({
+        id: 1,
+        role: UserRole.MANAGER,
+        email: "manager@example.com",
+      });
+    prisma.user.update.mockResolvedValue({
+      id: 2,
+      uuid: "company-user",
+      name: "Updated Company User",
+      managedCompany: { name: "Coffee Partner" },
+    });
+    prisma.auditEvent.create.mockResolvedValue({ id: "audit-warning" });
+
+    await service.updateCompanyUserByUuid("company-user", { name: "Updated Company User" }, 1);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          workspace: "MANAGER",
+          level: "WARN",
+          action: "Manager changed company user account",
+          actorUserId: 1,
+          actorLabel: "manager@example.com",
+          targetUuid: "company-user",
+          tags: expect.arrayContaining(["WARNING", "MANAGER_CHANGE", "REVIEW_REQUIRED"]),
+        }),
+      }),
+    );
+  });
+
+  it("blockUserAccountByUuid lets ADMIN block lower-risk client accounts and revokes refresh sessions", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 1, role: UserRole.ADMIN, email: "admin@example.com" })
       .mockResolvedValueOnce({
         id: 2,
         uuid: "u-2",
         email: "target@example.com",
         name: "Target",
+        role: UserRole.CLIENT,
         accountStatus: "ACTIVE",
       });
     prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
@@ -364,6 +490,24 @@ describe("AdminService", () => {
       expect.objectContaining({ where: expect.objectContaining({ userId: 2 }) }),
     );
     expect(prisma.auditEvent.create).toHaveBeenCalled();
+  });
+
+  it("blockUserAccountByUuid blocks SUPER_ADMIN from blocking SUPER_ADMIN accounts", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 1, role: UserRole.SUPER_ADMIN, email: "super@example.com" })
+      .mockResolvedValueOnce({
+        id: 2,
+        uuid: "u-super",
+        email: "other-super@example.com",
+        name: "Other Super",
+        role: UserRole.SUPER_ADMIN,
+        accountStatus: "ACTIVE",
+      });
+
+    await expect(service.blockUserAccountByUuid("u-super", 1, "test")).rejects.toThrow(
+      "SUPER_ADMIN accounts cannot be blocked",
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it("requestEmailChange creates request and returns preview", async () => {
@@ -601,6 +745,45 @@ describe("AdminService", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it("upsertCompanyProfile persists online company mode", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 10,
+      uuid: "c-online",
+      role: "COMPANY",
+      managedCompany: {
+        id: 42,
+        levelRules: [],
+        subscriptionSpendPolicy: "EXCLUDE",
+        operatesOnline: false,
+      },
+    });
+    prisma.category.findMany.mockResolvedValue([{ id: 1 }]);
+    prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
+    prisma.company.update.mockResolvedValue({ id: 42, name: "Online Coffee", slug: "online-coffee" });
+    prisma.company.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 42,
+      name: "Online Coffee",
+      slug: "online-coffee",
+      operatesOnline: true,
+    });
+
+    const result = await service.upsertCompanyProfile("c-online", {
+      name: "Online Coffee",
+      categoryIds: [1],
+      operatesOnline: true,
+      levelRules: [{ levelName: "Bronze", minTotalSpend: 0, cashbackPercent: 1 }],
+    } as never);
+
+    expect(prisma.company.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          operatesOnline: true,
+        }),
+      }),
+    );
+    expect(result).toMatchObject({ operatesOnline: true });
+  });
+
   it("createCompanyLocation stores manually picked map coordinates without geocoding", async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 20,
@@ -785,5 +968,191 @@ describe("AdminService", () => {
       activeSubscribers: 2,
       estimatedMonthlyRevenue: 200,
     });
+  });
+
+  it("searchSubscriptions returns ordinary and paired subscriptions together", async () => {
+    prisma.subscription.findMany.mockResolvedValue([
+      {
+        uuid: "plan-uuid",
+        slug: "coffee-basic",
+        name: "Coffee Basic",
+        description: "Monthly coffee subscription",
+        price: { toString: () => "999" },
+        renewalPeriod: "1 month",
+        isActive: true,
+        updatedAt: new Date("2026-05-22T10:00:00.000Z"),
+        company: { id: 11, slug: "coffee", name: "Coffee Co" },
+        category: { id: 3, slug: "food", name: "Food", icon: "coffee" },
+      },
+    ]);
+    prisma.subscriptionBundle.findMany.mockResolvedValue([
+      {
+        id: 2,
+        uuid: "bundle-uuid",
+        slug: "coffee-fitness",
+        name: "Coffee + Fitness",
+        description: "Shared subscription",
+        price: { toString: () => "1990" },
+        renewalPeriod: "1 month",
+        renewalValue: 1,
+        renewalUnit: "month",
+        promoBonusDays: 0,
+        status: "ACTIVE",
+        isActive: true,
+        categoryId: 3,
+        createdAt: new Date("2026-05-22T09:00:00.000Z"),
+        updatedAt: new Date("2026-05-22T11:00:00.000Z"),
+        category: { id: 3, slug: "food", name: "Food", icon: "coffee" },
+        participants: [
+          {
+            id: 1,
+            companyId: 11,
+            benefitTitle: "Coffee box",
+            benefitDescription: "Fresh coffee delivery",
+            fulfillmentNote: null,
+            revenueSharePercent: { toString: () => "60" },
+            sortOrder: 1,
+            company: { id: 11, slug: "coffee", name: "Coffee Co", isActive: true },
+          },
+          {
+            id: 2,
+            companyId: 12,
+            benefitTitle: "Fitness class",
+            benefitDescription: "Weekly workout",
+            fulfillmentNote: null,
+            revenueSharePercent: { toString: () => "40" },
+            sortOrder: 2,
+            company: { id: 12, slug: "fitness", name: "Fitness Co", isActive: true },
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.searchSubscriptions("coffee");
+
+    expect(result.items.map((item) => item.type)).toEqual(["bundle", "subscription"]);
+    expect(result.items[0]).toMatchObject({
+      uuid: "bundle-uuid",
+      name: "Coffee + Fitness",
+      participants: [
+        expect.objectContaining({ companyName: "Coffee Co", revenueSharePercent: "60" }),
+        expect.objectContaining({ companyName: "Fitness Co", revenueSharePercent: "40" }),
+      ],
+    });
+    expect(prisma.subscription.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ OR: expect.any(Array) }),
+        take: 10,
+      }),
+    );
+  });
+
+  it("createPairedSubscription validates revenue split and creates bundle participants", async () => {
+    prisma.subscriptionBundle.findUnique.mockResolvedValue(null);
+    prisma.company.findMany.mockResolvedValue([{ id: 11 }, { id: 12 }]);
+    prisma.category.findUnique.mockResolvedValue({ id: 3 });
+    prisma.subscriptionBundle.create.mockResolvedValue({
+      id: 1,
+      uuid: "bundle-uuid",
+      slug: "coffee-fitness",
+      name: "Coffee + Fitness",
+      description: "Shared subscription",
+      price: { toString: () => "1990" },
+      renewalPeriod: "1 month",
+      renewalValue: 1,
+      renewalUnit: "month",
+      promoBonusDays: 0,
+      status: "DRAFT",
+      isActive: false,
+      categoryId: 3,
+      createdAt: new Date("2026-05-22T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-22T10:00:00.000Z"),
+      category: { id: 3, slug: "food", name: "Food", icon: "coffee" },
+      participants: [
+        {
+          id: 1,
+          companyId: 11,
+          benefitTitle: "Coffee box",
+          benefitDescription: "Fresh coffee delivery",
+          fulfillmentNote: null,
+          revenueSharePercent: { toString: () => "60" },
+          sortOrder: 1,
+          company: { id: 11, slug: "coffee", name: "Coffee Co", isActive: true },
+        },
+        {
+          id: 2,
+          companyId: 12,
+          benefitTitle: "Fitness class",
+          benefitDescription: "Weekly workout",
+          fulfillmentNote: null,
+          revenueSharePercent: { toString: () => "40" },
+          sortOrder: 2,
+          company: { id: 12, slug: "fitness", name: "Fitness Co", isActive: true },
+        },
+      ],
+    } as never);
+    prisma.auditEvent.create.mockResolvedValue({ id: "audit-1" });
+
+    const result = await service.createPairedSubscription({
+      name: "Coffee + Fitness",
+      description: "Shared subscription",
+      price: 1990,
+      categoryId: 3,
+      participants: [
+        {
+          companyId: 11,
+          benefitTitle: "Coffee box",
+          benefitDescription: "Fresh coffee delivery",
+          revenueSharePercent: 60,
+        },
+        {
+          companyId: 12,
+          benefitTitle: "Fitness class",
+          benefitDescription: "Weekly workout",
+          revenueSharePercent: 40,
+        },
+      ],
+    });
+
+    expect(result.slug).toBe("coffee-fitness");
+    expect(result.participants).toHaveLength(2);
+    expect(prisma.subscriptionBundle.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          slug: "coffee-fitness",
+          participants: expect.objectContaining({
+            create: [
+              expect.objectContaining({ companyId: 11, revenueSharePercent: expect.anything() }),
+              expect.objectContaining({ companyId: 12, revenueSharePercent: expect.anything() }),
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("createPairedSubscription rejects revenue split that is not 100 percent", async () => {
+    await expect(
+      service.createPairedSubscription({
+        name: "Bad split",
+        description: "Shared subscription",
+        price: 1000,
+        participants: [
+          {
+            companyId: 11,
+            benefitTitle: "A",
+            benefitDescription: "Company A",
+            revenueSharePercent: 80,
+          },
+          {
+            companyId: 12,
+            benefitTitle: "B",
+            benefitDescription: "Company B",
+            revenueSharePercent: 30,
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.subscriptionBundle.create).not.toHaveBeenCalled();
   });
 });

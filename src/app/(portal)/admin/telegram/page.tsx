@@ -10,6 +10,7 @@ import {
   LockKeyhole,
   RefreshCw,
   Send,
+  ServerCrash,
   ShieldCheck,
   Sparkles,
   UserCog,
@@ -191,6 +192,11 @@ export default function AdminTelegramPage() {
           <div className="flex flex-wrap gap-3">
             <Button variant="secondary" onClick={loadStatus} disabled={loadingStatus}>
               <RefreshCw className={cn("h-4 w-4", loadingStatus && "animate-spin")} /> {t("admin.telegram.refresh")}
+            </Button>
+            <Button asChild variant="secondary">
+              <Link href="/admin/system-health">
+                <ServerCrash className="h-4 w-4" /> {t("admin.telegram.systemHealth")}
+              </Link>
             </Button>
             <Button onClick={createLink} disabled={creatingLink} className="bg-white text-black hover:bg-white/90">
               <ShieldCheck className="h-4 w-4" /> {connected ? t("admin.telegram.reconnectMy") : t("admin.telegram.connectMy")}

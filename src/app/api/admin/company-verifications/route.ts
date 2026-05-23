@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { CompanyVerificationStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminScope } from "@/lib/admin/require-admin-scope";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -17,9 +18,8 @@ function clampNumber(value: string | null, fallback: number, min: number, max: n
 export async function GET(request: NextRequest) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
-  if (session.role === "SUPPORT") {
-    return NextResponse.json({ message: "Support users cannot access passport verification requests" }, { status: 403 });
-  }
+  const access = await requireAdminScope(session, "COMPANY_VERIFICATIONS", "canView");
+  if (!access.ok) return access.response;
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query")?.trim() ?? "";

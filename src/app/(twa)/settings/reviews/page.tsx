@@ -1,41 +1,45 @@
-import type { Metadata } from "next";
+"use client";
+
 import { Star } from "lucide-react";
+import { useMemo } from "react";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
-export const metadata: Metadata = {
-  title: "My Reviews | Loyalty Wallet",
-  description: "User reviews and ratings",
-};
-
-const reviewItems = [
+const reviewItemKeys = [
   {
     id: "r1",
-    company: "Coffee Shop",
+    companyKey: "client.reviews.sample1Company",
     rating: 5,
-    text: "Fast service and perfect flat white. Points credited instantly.",
-    date: "2 days ago",
+    textKey: "client.reviews.sample1Text",
+    dateKey: "client.reviews.sample1Date",
   },
   {
     id: "r2",
-    company: "Power Gym",
+    companyKey: "client.reviews.sample2Company",
     rating: 4,
-    text: "Great classes and clean locker rooms. Would like more evening slots.",
-    date: "1 week ago",
+    textKey: "client.reviews.sample2Text",
+    dateKey: "client.reviews.sample2Date",
   },
   {
     id: "r3",
-    company: "Classic Barber",
+    companyKey: "client.reviews.sample3Company",
     rating: 5,
-    text: "Excellent cut and friendly team. Booking was smooth.",
-    date: "2 weeks ago",
+    textKey: "client.reviews.sample3Text",
+    dateKey: "client.reviews.sample3Date",
   },
-];
+] as const;
 
 export default function ReviewsPage() {
+  const { t } = useI18n("ru");
+  const reviewItems = useMemo(
+    () => reviewItemKeys.map((item) => ({ ...item, company: t(item.companyKey), text: t(item.textKey), date: t(item.dateKey) })),
+    [t],
+  );
+
   return (
     <article className="mx-auto max-w-lg">
-      <h1 className="mb-2 text-2xl font-semibold tracking-tight">My reviews</h1>
+      <h1 className="mb-2 text-2xl font-semibold tracking-tight">{t("client.reviews.title")}</h1>
       <p className="text-muted-foreground mb-6 text-sm">
-        Ratings and comments you left for partner businesses.
+        {t("client.reviews.subtitle")}
       </p>
       <ul className="space-y-3">
         {reviewItems.map((item) => (

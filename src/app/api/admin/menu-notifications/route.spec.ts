@@ -3,6 +3,12 @@ jest.mock("@/lib/prisma", () => ({
     companyVerificationApplication: {
       count: jest.fn(),
     },
+    telegramMessageQueue: {
+      count: jest.fn(),
+    },
+    auditEvent: {
+      count: jest.fn(),
+    },
   },
 }));
 
@@ -27,13 +33,17 @@ describe("admin menu notifications route", () => {
 
   it("returns open company verification counters for menu item and section", async () => {
     mockedPrisma.companyVerificationApplication.count.mockResolvedValue(23);
+    mockedPrisma.telegramMessageQueue.count.mockResolvedValue(2);
+    mockedPrisma.auditEvent.count.mockResolvedValue(1);
 
     const res = await GET(new NextRequest("http://localhost/api/admin/menu-notifications"));
     const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(body.items["/admin/company-verifications"]).toBe(23);
+    expect(body.items["/admin/system-health"]).toBe(3);
     expect(body.sections["admin.nav.usersPartners"]).toBe(23);
+    expect(body.sections["admin.nav.system"]).toBe(3);
     expect(mockedPrisma.companyVerificationApplication.count).toHaveBeenCalledWith({
       where: { status: { in: ["SUBMITTED", "REVIEWING"] } },
     });
@@ -49,5 +59,7 @@ describe("admin menu notifications route", () => {
     expect(body.items).toEqual({});
     expect(body.sections).toEqual({});
     expect(mockedPrisma.companyVerificationApplication.count).not.toHaveBeenCalled();
+    expect(mockedPrisma.telegramMessageQueue.count).not.toHaveBeenCalled();
+    expect(mockedPrisma.auditEvent.count).not.toHaveBeenCalled();
   });
 });

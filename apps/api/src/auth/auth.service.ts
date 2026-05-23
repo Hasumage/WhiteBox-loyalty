@@ -16,6 +16,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { verifyTelegramMiniAppInitData } from "./telegram-mini-app";
 
 /** Mirrors Prisma `AccountStatus` — string union keeps emitted `.d.ts` stable if Prisma re-exports differ. */
 export type AccountStatusValue = "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
@@ -307,6 +308,52 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     if (!user) {
       throw new UnauthorizedException("Invalid email or password");
     }
+    return this.issueTokens(user);
+  }
+
+  async loginWithTelegramMiniApp(initData: string, ctx: LoginContext = {}) {
+    const maxAgeSecondsRaw = Number(
+      this.config.get("TELEGRAM_MINI_APP_AUTH_MAX_AGE_SECONDS") ?? 24 * 60 * 60,
+    );
+    const verified = verifyTelegramMiniAppInitData(
+      initData,
+      this.config.get<string>("TELEGRAM_BOT_TOKEN"),
+      {
+        maxAgeSeconds: Number.isFinite(maxAgeSecondsRaw)
+          ? Math.max(60, Math.floor(maxAgeSecondsRaw))
+          : 24 * 60 * 60,
+      },
+    );
+
+    let telegramId: bigint;
+    try {
+      telegramId = BigInt(String(verified.user.id));
+    } catch {
+      throw new UnauthorizedException("Telegram Mini App user id is invalid.");
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { telegramId } });
+    if (!user) {
+      throw new UnauthorizedException("Telegram account is not linked to WhiteBox.");
+    }
+
+    const now = new Date();
+    if (
+      user.accountStatus === "FROZEN_PENDING_DELETION" &&
+      user.deletionScheduledAt &&
+      user.deletionScheduledAt <= now
+    ) {
+      await this.finalizeExpiredFrozenAccount(user.id, now, user.uuid);
+      throw new UnauthorizedException("Telegram account is not linked to an active WhiteBox account.");
+    }
+    if (user.accountStatus === "BLOCKED") {
+      throw new UnauthorizedException("Account is blocked.");
+    }
+
+    await this.recordLoginEvent(user.id, {
+      ...ctx,
+      deviceLabel: ctx.deviceLabel ?? "Telegram Mini App",
+    });
     return this.issueTokens(user);
   }
 

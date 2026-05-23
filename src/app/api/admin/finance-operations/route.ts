@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
+import { resolveEffectivePermission } from "@/lib/admin/access-control";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -16,7 +17,7 @@ async function actorFromSession(session: Awaited<ReturnType<typeof requireAdminS
       name: true,
       permissions: {
         where: { scope: "FINANCE" },
-        select: { canView: true, canEdit: true, canApprove: true },
+        select: { scope: true, canView: true, canEdit: true, canApprove: true },
       },
     },
   });
@@ -24,16 +25,7 @@ async function actorFromSession(session: Awaited<ReturnType<typeof requireAdminS
 
 function financeAccess(actor: Awaited<ReturnType<typeof actorFromSession>>) {
   const explicit = actor?.permissions[0];
-  const defaults = {
-    canView: actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN" || actor?.role === "MANAGER",
-    canEdit: actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN" || actor?.role === "MANAGER",
-    canApprove: actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN",
-  };
-  return {
-    canView: defaults.canView || Boolean(explicit?.canView),
-    canEdit: defaults.canEdit || Boolean(explicit?.canEdit),
-    canApprove: defaults.canApprove || Boolean(explicit?.canApprove),
-  };
+  return resolveEffectivePermission(actor?.role ?? "CLIENT", explicit, "FINANCE");
 }
 
 export async function GET(request: NextRequest) {

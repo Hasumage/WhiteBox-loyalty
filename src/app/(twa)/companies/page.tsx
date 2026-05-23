@@ -24,6 +24,7 @@ import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 const POPULAR_CATEGORY_SLUGS = ["coffee", "books", "auto", "barber", "beauty", "food", "fitness", "retail"];
 
@@ -63,6 +64,7 @@ function buildCompanyCategories(companies: TwaCompany[], favoriteSlugs: string[]
 }
 
 export default function CompaniesPage() {
+  const { t } = useI18n("ru");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [companies, setCompanies] = useState<TwaCompany[]>([]);
@@ -121,7 +123,7 @@ export default function CompaniesPage() {
   }, [companies, searchQuery, selectedCategory]);
 
   if (loading && companies.length === 0) {
-    return <TwaLoadingScreen title="Loading partners" subtitle="Syncing company cards, categories and loyalty levels." />;
+    return <TwaLoadingScreen title={t("client.partners.loadingTitle")} subtitle={t("client.partners.loadingSubtitle")} />;
   }
 
   return (
@@ -136,16 +138,16 @@ export default function CompaniesPage() {
         className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back
+        {t("client.common.back")}
       </Link>
 
-      <h1 className="mb-1 text-xl font-semibold">All Partners</h1>
-      <p className="mb-4 text-sm text-muted-foreground">Browse and open loyalty cards</p>
+      <h1 className="mb-1 text-xl font-semibold">{t("client.partners.title")}</h1>
+      <p className="mb-4 text-sm text-muted-foreground">{t("client.partners.subtitle")}</p>
 
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search partners..."
+          placeholder={t("client.partners.searchPlaceholder")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="glass h-10 rounded-xl border-white/10 pl-9"
@@ -165,19 +167,19 @@ export default function CompaniesPage() {
               )}
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              Filters
+                {t("client.common.filters")}
             </button>
           </SheetTrigger>
           <SheetContent side="left" className="w-[86%] max-w-sm overflow-y-auto p-0" showCloseButton>
             <SheetHeader className="border-b border-white/10">
-              <SheetTitle>Partner filters</SheetTitle>
-              <SheetDescription>Filter by any category attached to a partner.</SheetDescription>
+              <SheetTitle>{t("client.partners.filterTitle")}</SheetTitle>
+              <SheetDescription>{t("client.partners.filterDescription")}</SheetDescription>
             </SheetHeader>
 
             <div className="space-y-6 px-6 py-5">
               <section>
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-muted-foreground">Categories</h2>
+                  <h2 className="text-sm font-semibold text-muted-foreground">{t("client.common.categories")}</h2>
                   {selectedCategory && (
                     <button
                       type="button"
@@ -185,7 +187,7 @@ export default function CompaniesPage() {
                       className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                     >
                       <X className="h-3 w-3" />
-                      Clear
+                      {t("client.common.clear")}
                     </button>
                   )}
                 </div>
@@ -210,7 +212,7 @@ export default function CompaniesPage() {
               </section>
 
               <Button variant="outline" className="w-full border-white/10" onClick={() => setSelectedCategory(null)}>
-                Reset filters
+                {t("client.common.resetFilters")}
               </Button>
             </div>
           </SheetContent>
@@ -226,7 +228,7 @@ export default function CompaniesPage() {
               : "glass border border-white/10 text-muted-foreground hover:text-foreground",
           )}
         >
-          All
+          {t("client.common.all")}
         </button>
         {quickCategories.map((category) => (
           <button
@@ -289,13 +291,13 @@ export default function CompaniesPage() {
                   <CardContent className="px-4 pb-4 pt-0">
                     <p className="mb-2 text-xl font-bold tabular-nums text-primary">
                       {company.points.balance}
-                      <span className="ml-1 text-sm font-normal text-muted-foreground">pts</span>
+                      <span className="ml-1 text-sm font-normal text-muted-foreground">{t("client.common.pointsShort")}</span>
                     </p>
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{company.level.current?.levelName ?? "Member"}</span>
+                        <span>{company.level.current?.levelName ?? t("client.common.member")}</span>
                         <span>
-                          {company.level.next ? `${company.level.next.pointsToNext} pts left` : "Top level"}
+                          {company.level.next ? `${company.level.next.pointsToNext} ${t("client.common.ptsLeft")}` : t("client.common.topLevel")}
                         </span>
                       </div>
                       <Progress value={progressPercent} className="h-1.5" />
@@ -308,9 +310,9 @@ export default function CompaniesPage() {
         })}
       </ul>
 
-      {loading && filteredCompanies.length > 0 && <p className="py-4 text-center text-xs text-muted-foreground">Refreshing partners...</p>}
+      {loading && filteredCompanies.length > 0 && <p className="py-4 text-center text-xs text-muted-foreground">{t("client.partners.refreshing")}</p>}
       {!loading && filteredCompanies.length === 0 && (
-        <p className="py-12 text-center text-sm text-muted-foreground">No partners match your filters.</p>
+        <p className="py-12 text-center text-sm text-muted-foreground">{t("client.partners.empty")}</p>
       )}
     </motion.div>
   );

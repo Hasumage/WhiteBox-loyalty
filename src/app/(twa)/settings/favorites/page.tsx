@@ -14,10 +14,13 @@ import {
   getRegisteredCategories,
   saveFavoriteCategorySlugs,
 } from "@/lib/api/categories-client";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { interpolate } from "@/lib/i18n/format";
 
 const MAX_FAVORITE_CATEGORIES = 10;
 
 function FavoriteCategoriesContent() {
+  const { t } = useI18n("ru");
   const router = useRouter();
   const searchParams = useSearchParams();
   const onboardingMode = searchParams.get("onboarding") === "1";
@@ -43,7 +46,7 @@ function FavoriteCategoriesContent() {
   }, []);
 
   const selectedCount = selected.length;
-  const title = onboardingMode ? "Select favorite categories" : "Favorite categories";
+  const title = onboardingMode ? t("client.favorites.onboardingTitle") : t("client.favorites.title");
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   function toggle(slug: string) {
@@ -64,7 +67,7 @@ function FavoriteCategoriesContent() {
     const res = await saveFavoriteCategorySlugs(selected);
     setSaving(false);
     if (!res.ok) {
-      setError("Choose up to 10 categories.");
+      setError(t("client.favorites.limitError"));
       return;
     }
     router.replace(nextPath);
@@ -74,7 +77,7 @@ function FavoriteCategoriesContent() {
     <div className="mx-auto max-w-lg px-4 pb-4 pt-6">
       <h1 className="mb-2 text-2xl font-semibold tracking-tight">{title}</h1>
       <p className="text-muted-foreground mb-4 text-sm">
-        Pick categories to personalize sliders, recommendations and category priority.
+        {t("client.favorites.subtitle")}
       </p>
 
       <Card className="glass border-white/10">
@@ -83,14 +86,14 @@ function FavoriteCategoriesContent() {
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Sparkles className="h-4 w-4 text-primary" />
-                Choose categories
+                {t("client.favorites.chooseCategories")}
               </CardTitle>
               <CardDescription className="mt-1">
-                Pick what you want to see first.
+                {t("client.favorites.chooseSubtitle")}
               </CardDescription>
             </div>
             <div className="min-w-[84px] shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white px-3 py-1 text-center text-xs font-semibold text-black">
-              selected {selectedCount}
+              {interpolate(t("client.favorites.selected"), { count: selectedCount })}
             </div>
           </div>
         </CardHeader>
@@ -126,11 +129,11 @@ function FavoriteCategoriesContent() {
       <div className="mt-3 flex gap-2">
         <Button type="button" className="flex-1" disabled={!canSave} onClick={onSave}>
           <Heart className="mr-2 h-4 w-4" />
-          {saving ? "Saving..." : "Save favorites"}
+          {saving ? t("client.common.saving") : t("client.favorites.save")}
         </Button>
         {!onboardingMode && (
           <Button type="button" variant="secondary" className="glass border-white/10" onClick={() => router.replace("/settings")}>
-            Cancel
+            {t("client.common.cancel")}
           </Button>
         )}
       </div>
@@ -140,8 +143,13 @@ function FavoriteCategoriesContent() {
 
 export default function FavoriteCategoriesPage() {
   return (
-    <Suspense fallback={<div className="px-4 py-6 text-sm text-muted-foreground">Loading favorite categories...</div>}>
+    <Suspense fallback={<FavoriteCategoriesFallback />}>
       <FavoriteCategoriesContent />
     </Suspense>
   );
+}
+
+function FavoriteCategoriesFallback() {
+  const { t } = useI18n("ru");
+  return <div className="px-4 py-6 text-sm text-muted-foreground">{t("client.favorites.loading")}</div>;
 }

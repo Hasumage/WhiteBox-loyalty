@@ -12,26 +12,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { formatPlanPrice as formatLocalizedPlanPrice, relativeDate } from "@/lib/i18n/format";
+import type { Locale } from "@/lib/i18n/shared";
+import type { TranslateFn } from "@/lib/i18n/format";
 
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return d.toLocaleDateString();
+function formatDate(iso: string, locale: Locale, t: TranslateFn) {
+  return relativeDate(iso, locale, t);
 }
 
-function formatPlanPrice(subscription: TwaUserSubscription) {
+function formatPlanPrice(subscription: TwaUserSubscription, t: TranslateFn) {
   const plan = subscription.subscription;
-  return `$${plan.price}/${plan.renewalUnit || "month"}`;
+  return formatLocalizedPlanPrice(plan.price, plan.renewalUnit, t);
 }
 
-function subscriptionStatusLabel(status: TwaUserSubscription["status"]) {
-  if (status === "CANCELED") return "Canceled";
-  if (status === "EXPIRED") return "Expired";
-  return "Active";
+function subscriptionStatusLabel(status: TwaUserSubscription["status"], t: TranslateFn) {
+  if (status === "CANCELED") return t("client.common.canceled");
+  if (status === "EXPIRED") return t("client.common.expired");
+  return t("client.common.active");
 }
 
 const container = {
@@ -48,6 +46,7 @@ const item = {
 };
 
 export default function HistoryPage() {
+  const { locale, t } = useI18n("ru");
   const [history, setHistory] = useState<TwaHistory>({ transactions: [], archivedSubscriptions: [] });
   const [loading, setLoading] = useState(true);
 
@@ -69,7 +68,7 @@ export default function HistoryPage() {
   }, []);
 
   if (loading && history.transactions.length === 0 && history.archivedSubscriptions.length === 0) {
-    return <TwaLoadingScreen title="Loading history" subtitle="Syncing recent activity and archived subscriptions." />;
+    return <TwaLoadingScreen title={t("client.history.loadingTitle")} subtitle={t("client.history.loadingSubtitle")} />;
   }
 
   return (
@@ -82,10 +81,10 @@ export default function HistoryPage() {
       <motion.section variants={container} initial="hidden" animate="show" className="mb-4">
         <motion.div variants={item} className="mb-1 flex items-center gap-2">
           <HistoryIcon className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold">History</h1>
+          <h1 className="text-lg font-semibold">{t("client.history.title")}</h1>
         </motion.div>
         <motion.p variants={item} className="text-sm text-muted-foreground">
-          Your activity and subscription history
+          {t("client.history.subtitle")}
         </motion.p>
       </motion.section>
 
@@ -93,11 +92,11 @@ export default function HistoryPage() {
         <TabsList className="glass mb-4 w-full border-white/10">
           <TabsTrigger value="activity" className="flex-1">
             <ArrowDownLeft className="mr-1.5 h-4 w-4" />
-            Activity
+            {t("client.history.activity")}
           </TabsTrigger>
           <TabsTrigger value="subscriptions" className="flex-1">
             <Archive className="mr-1.5 h-4 w-4" />
-            Subscriptions
+            {t("client.history.subscriptions")}
           </TabsTrigger>
         </TabsList>
 
@@ -125,7 +124,7 @@ export default function HistoryPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-base font-semibold">{tx.company.name}</p>
-                        <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">{tx.description ?? formatDate(tx.occurredAt)}</p>
+                        <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">{tx.description ?? formatDate(tx.occurredAt, locale, t)}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <span className={cn("text-sm tabular-nums font-semibold", tx.type === "EARN" ? "text-emerald-400" : "text-amber-400")}>
@@ -133,7 +132,7 @@ export default function HistoryPage() {
                           {Math.abs(tx.amount)}
                         </span>
                         <Badge variant={tx.status === "ACTIVE" ? "default" : "secondary"} className="px-2.5 py-1 text-xs">
-                          {tx.status === "ACTIVE" ? "Active" : "Expired"}
+                          {tx.status === "ACTIVE" ? t("client.common.active") : t("client.common.expired")}
                         </Badge>
                       </div>
                     </CardContent>
@@ -142,7 +141,7 @@ export default function HistoryPage() {
               ))}
             </ul>
             {!loading && history.transactions.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">No loyalty activity yet.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("client.history.noActivity")}</p>
             )}
           </ScrollArea>
         </TabsContent>
@@ -174,7 +173,7 @@ export default function HistoryPage() {
                                 <div className="min-w-0">
                                   <p className="truncate text-base font-semibold">{plan.name}</p>
                                   <p className="mt-0.5 truncate text-xs leading-snug text-muted-foreground">
-                                    {formatPlanPrice(subscription)}
+                                    {formatPlanPrice(subscription, t)}
                                     {category ? ` В· ${category.name}` : ""}
                                   </p>
                                 </div>
@@ -189,7 +188,7 @@ export default function HistoryPage() {
                                   : "bg-muted/40 text-muted-foreground",
                               )}
                             >
-                              {subscriptionStatusLabel(subscription.status)}
+                              {subscriptionStatusLabel(subscription.status, t)}
                             </Badge>
                           </div>
                         </CardContent>
@@ -200,7 +199,7 @@ export default function HistoryPage() {
               })}
             </div>
             {!loading && history.archivedSubscriptions.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">No archived subscriptions yet.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("client.history.noArchivedSubscriptions")}</p>
             )}
           </ScrollArea>
         </TabsContent>

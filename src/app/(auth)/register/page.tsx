@@ -16,9 +16,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { register as registerApi, setStoredSession } from "@/lib/api/auth-client";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { t } = useI18n("ru");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,14 +39,14 @@ export default function RegisterPage() {
             ? Array.isArray(data.message)
               ? data.message.join(", ")
               : String(data.message)
-            : "Registration failed";
+            : t("client.auth.registrationFailed");
         setError(msg);
         return;
       }
       setStoredSession(data);
       router.replace(data.needsCategoryOnboarding ? "/onboarding" : "/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+      setError(err instanceof Error ? err.message : t("client.auth.registrationFailed"));
     } finally {
       setLoading(false);
     }
@@ -58,21 +60,18 @@ export default function RegisterPage() {
             <WhiteBoxLogo className="h-9 w-9 shrink-0" />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold text-foreground">WhiteBox</span>
-              <span className="block truncate text-xs text-muted-foreground">loyalty infrastructure</span>
+              <span className="block truncate text-xs text-muted-foreground">{t("client.auth.brandSubtitle")}</span>
             </span>
           </Link>
           <Link
             href="/landing"
             className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
           >
-            Landing <ArrowUpRight className="h-3.5 w-3.5" />
+            {t("client.auth.landing")} <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
-        <CardTitle>Create account</CardTitle>
-        <CardDescription>
-          Loyalty app users register as <strong>CLIENT</strong>. Partner accounts use{" "}
-          <strong>COMPANY</strong> when invited.
-        </CardDescription>
+        <CardTitle>{t("client.auth.registerTitle")}</CardTitle>
+        <CardDescription>{t("client.auth.registerSubtitle")}</CardDescription>
       </CardHeader>
       <form onSubmit={onSubmit}>
         <CardContent className="space-y-4">
@@ -83,7 +82,7 @@ export default function RegisterPage() {
           )}
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground" htmlFor="name">
-              Name
+              {t("client.auth.name")}
             </label>
             <Input
               id="name"
@@ -96,7 +95,7 @@ export default function RegisterPage() {
           </div>
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground" htmlFor="email">
-              Email
+              {t("client.auth.email")}
             </label>
             <Input
               id="email"
@@ -110,7 +109,7 @@ export default function RegisterPage() {
           </div>
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground" htmlFor="password">
-              Password
+              {t("client.auth.password")}
             </label>
             <Input
               id="password"
@@ -122,17 +121,17 @@ export default function RegisterPage() {
               minLength={8}
               className="glass border-white/10"
             />
-            <p className="text-xs text-muted-foreground">At least 8 characters.</p>
+            <p className="text-xs text-muted-foreground">{t("client.auth.minPassword")}</p>
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-3 pt-8">
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Creating…" : "Create account"}
+            {loading ? t("client.auth.creating") : t("client.auth.createAccount")}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
+            {t("client.auth.haveAccount")}{" "}
             <Link href="/login" className="text-primary underline-offset-4 hover:underline">
-              Sign in
+              {t("client.auth.signIn")}
             </Link>
           </p>
         </CardFooter>

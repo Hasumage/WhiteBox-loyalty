@@ -105,6 +105,76 @@ export type AdminLandingLeadsResponse = {
   totalPages: number;
 };
 
+export type AdminSystemHealthResponse = {
+  generatedAt: string;
+  summary: {
+    openIssues: number;
+    criticalIncidents: number;
+    telegramQueueFailed: number;
+    telegramQueueDue: number;
+    leadTelegramFailed24h: number;
+  };
+  telegram: {
+    botConfigured: boolean;
+    proxyConfigured: boolean;
+    queue: {
+      total: number;
+      failed: number;
+      due: number;
+      sent: number;
+      recent: Array<{
+        id: string;
+        status: "PENDING" | "SENT" | "FAILED";
+        recipientRole: string | null;
+        recipientLabel: string | null;
+        recipientChatId: string;
+        textPreview: string | null;
+        source: string | null;
+        sourceId: string | null;
+        priority: number;
+        attempts: number;
+        telegramMessageId: number | null;
+        lastError: string | null;
+        nextRetryAt: string | null;
+        sentAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+      }>;
+    };
+    landingLeadDelivery24h: {
+      sent: number;
+      failed: number;
+      pending: number;
+      recentFailures: Array<{
+        id: string;
+        recipientRole: string;
+        recipientLabel: string | null;
+        recipientChatId: string;
+        attempts: number;
+        lastError: string | null;
+        nextRetryAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        lead: { uuid: string; name: string; company: string | null };
+      }>;
+    };
+  };
+  developerIncidents: Array<{
+    id: string;
+    level: "INFO" | "WARN" | "CRITICAL";
+    category: "SECURITY" | "USER" | "SUBSCRIPTION" | "BILLING" | "SYSTEM";
+    action: string;
+    details: string | null;
+    actorLabel: string;
+    targetLabel: string | null;
+    result: "SUCCESS" | "BLOCKED";
+    tags: string[];
+    linkUrl: string | null;
+    linkLabel: string | null;
+    createdAt: string;
+  }>;
+};
+
 export type AdminCompanyVerificationStatus = "DRAFT" | "SUBMITTED" | "REVIEWING" | "APPROVED" | "REJECTED";
 export type AdminCompanyEmploymentType = "SELF_EMPLOYED" | "INDIVIDUAL_ENTREPRENEUR";
 export type AdminIdentityVerificationMode = "FULL" | "DEFERRED";
@@ -199,6 +269,12 @@ export type AdminUserPermissionsResponse = {
   user: { uuid: string; name: string; email: string; role: AdminRole };
   scopes: AdminPermissionScope[];
   permissions: AdminUserPermissionRow[];
+  policy?: {
+    canManage: boolean;
+    targetLocked: boolean;
+    editableScopes: AdminPermissionScope[];
+    assignableRoles?: Array<Extract<AdminRole, "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "SUPPORT">>;
+  };
 };
 
 export type AdminFinanceOperation = {
@@ -283,6 +359,56 @@ export type AdminCompanySubscription = {
   updatedAt: string;
 };
 
+export type AdminPairedSubscription = {
+  id: number;
+  uuid: string;
+  slug: string;
+  name: string;
+  description: string;
+  price: string;
+  renewalPeriod: string;
+  renewalValue: number;
+  renewalUnit: "week" | "month" | "year";
+  promoBonusDays: number;
+  status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+  isActive: boolean;
+  categoryId: number | null;
+  createdAt: string;
+  updatedAt: string;
+  category: { id: number; slug: string; name: string; icon: string } | null;
+  participants: Array<{
+    id: number;
+    companyId: number;
+    benefitTitle: string;
+    benefitDescription: string;
+    fulfillmentNote: string | null;
+    revenueSharePercent: string;
+    sortOrder: number;
+    company: { id: number; slug: string; name: string; isActive: boolean };
+  }>;
+};
+
+export type AdminSubscriptionSearchItem = {
+  type: "subscription" | "bundle";
+  uuid: string;
+  slug: string;
+  name: string;
+  description: string;
+  price: string;
+  renewalPeriod: string;
+  isActive: boolean;
+  status: string;
+  updatedAt: string;
+  company: { id: number; slug: string; name: string } | null;
+  category: { id: number; slug: string; name: string; icon: string } | null;
+  participants: Array<{
+    companyId: number;
+    companyName: string;
+    benefitTitle: string;
+    revenueSharePercent: string;
+  }>;
+};
+
 export type AdminCompanyLocation = {
   id: number;
   uuid: string;
@@ -339,6 +465,7 @@ export type AdminCompanyUser = {
     }>;
     locations?: AdminCompanyLocation[];
     isActive: boolean;
+    operatesOnline: boolean;
   } | null;
 };
 
@@ -684,6 +811,19 @@ export async function adminUpdateUser(uuid: string, input: AdminUpdateUserInput)
   return { ok: true as const, data: (await res.json()) as AdminUserDetail };
 }
 
+export async function adminUpdateUserRole(uuid: string, role: AdminRole) {
+  const res = await fetch(`${apiBase()}/admin/users/${uuid}/role`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ role }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to update user role" };
+  }
+  return { ok: true as const, data: (await res.json()) as { uuid: string; email: string; name: string; role: AdminRole; updatedAt: string } };
+}
+
 export async function adminDeleteUser(uuid: string) {
   const res = await fetch(`${apiBase()}/admin/users/${uuid}`, {
     method: "DELETE",
@@ -955,6 +1095,7 @@ export async function adminUpsertCompanyProfile(uuid: string, input: {
     cashbackPercent: number;
   }>;
   isActive?: boolean;
+  operatesOnline?: boolean;
 }) {
   const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/company-profile`, {
     method: "PUT",
@@ -1056,6 +1197,57 @@ export async function adminFindSubscriptionByUuid(uuid: string) {
     slug: string;
     description: string;
   };
+}
+
+export async function adminSearchSubscriptions(query: string) {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set("query", query.trim());
+  const suffix = params.toString() ? `?${params}` : "";
+  const res = await fetch(`${apiBase()}/admin/subscriptions/search${suffix}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { items: AdminSubscriptionSearchItem[] };
+  return data.items;
+}
+
+export async function adminListPairedSubscriptions() {
+  const res = await fetch(`${apiBase()}/admin/subscriptions/bundles`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as AdminPairedSubscription[];
+}
+
+export async function adminCreatePairedSubscription(input: {
+  name: string;
+  description: string;
+  price: number;
+  renewalValue?: number;
+  renewalUnit?: "week" | "month" | "year";
+  promoBonusDays?: number;
+  slug?: string;
+  categoryId?: number;
+  isActive?: boolean;
+  participants: Array<{
+    companyId: number;
+    benefitTitle: string;
+    benefitDescription: string;
+    fulfillmentNote?: string;
+    revenueSharePercent: number;
+  }>;
+}) {
+  const res = await fetch(`${apiBase()}/admin/subscriptions/bundles`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+    return { ok: false as const, message: message ?? "Failed to create paired subscription" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminPairedSubscription };
 }
 
 export async function adminListPromoCodes() {
@@ -1363,6 +1555,49 @@ export async function adminRetryDueLandingLeads() {
     ok: true as const,
     data: (await res.json()) as { ok: true; result: { processed: number } },
   };
+}
+
+export async function adminGetSystemHealth() {
+  const res = await fetch("/api/admin/system-health", {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to fetch system health" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminSystemHealthResponse };
+}
+
+export async function adminRetryTelegramQueue() {
+  const res = await fetch("/api/admin/telegram/retry-queue", {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to retry Telegram queue" };
+  }
+  return {
+    ok: true as const,
+    data: (await res.json()) as {
+      ok: true;
+      result: { processed: number; sent: number; failed: number; results: Array<{ id: string; ok: boolean; message?: string }> };
+    },
+  };
+}
+
+export async function adminResolveSystemHealthIncident(id: string) {
+  const res = await fetch("/api/admin/system-health", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ action: "resolveDeveloperIncident", id }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to resolve incident" };
+  }
+  return { ok: true as const, data: (await res.json()) as { ok: true; incident: { id: string; tags: string[] } } };
 }
 
 export async function adminListCompanyVerifications(options?: {

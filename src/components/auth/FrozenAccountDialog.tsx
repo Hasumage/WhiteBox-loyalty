@@ -11,11 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { reactivateAccount, setStoredSession, type AuthTokensResponse } from "@/lib/api/auth-client";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { interpolate } from "@/lib/i18n/format";
 
-function formatDeadline(iso: string | null | undefined) {
+function formatDeadline(iso: string | null | undefined, locale: string) {
   if (!iso) return "";
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(iso));
@@ -38,6 +40,7 @@ export function FrozenAccountDialog({
   /** Fired whenever the dialog closes (reactivate, dismiss, or backdrop). */
   onClosed: () => void;
 }) {
+  const { locale, t } = useI18n("ru");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,7 +55,7 @@ export function FrozenAccountDialog({
     try {
       const result = await reactivateAccount();
       if (!("accessToken" in result) || !result.accessToken) {
-        setError("message" in result ? String(result.message) : "Could not reactivate.");
+        setError("message" in result ? String(result.message) : t("client.auth.couldNotReactivate"));
         return;
       }
       setStoredSession(result as AuthTokensResponse);
@@ -66,15 +69,16 @@ export function FrozenAccountDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent showClose={false} className="glass max-w-md border-sky-500/40 bg-sky-950/30">
         <DialogHeader>
-          <DialogTitle className="text-sky-200">Account scheduled for removal</DialogTitle>
+          <DialogTitle className="text-sky-200">{t("client.auth.frozenTitle")}</DialogTitle>
           <DialogDescription className="text-sky-100/90">
-            Hi {userName}, your profile is frozen. You have until{" "}
-            <strong className="text-sky-100">{formatDeadline(deletionScheduledAt)}</strong> to
-            reactivate — after that, your account and associated data will be permanently deleted.
+            {interpolate(t("client.auth.frozenDescription"), {
+              name: userName,
+              date: formatDeadline(deletionScheduledAt, locale),
+            })}
           </DialogDescription>
         </DialogHeader>
         {error && (
-          <p className="text-destructive text-sm" role="alert">
+          <p className="text-sm text-destructive" role="alert">
             {error}
           </p>
         )}
@@ -85,7 +89,7 @@ export function FrozenAccountDialog({
             disabled={busy}
             onClick={handleReactivate}
           >
-            {busy ? "Reactivating…" : "Reactivate my account"}
+            {busy ? t("client.auth.reactivating") : t("client.auth.reactivate")}
           </Button>
           <Button
             type="button"
@@ -94,7 +98,7 @@ export function FrozenAccountDialog({
             disabled={busy}
             onClick={() => handleOpenChange(false)}
           >
-            I understand — continue to the app
+            {t("client.auth.frozenContinue")}
           </Button>
         </DialogFooter>
       </DialogContent>

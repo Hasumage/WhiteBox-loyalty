@@ -1,0 +1,1 @@
+ALTER TABLE "Company" ADD COLUMN "operatesOnline" BOOLEAN NOT NULL DEFAULT false;

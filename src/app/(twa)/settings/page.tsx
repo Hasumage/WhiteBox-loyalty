@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { getStoredUser, type StoredUser } from "@/lib/api/auth-client";
 import { getCachedFavoriteCategorySlugs, getCachedRegisteredCategories, getFavoriteCategorySlugs, getRegisteredCategories } from "@/lib/api/categories-client";
 import {
@@ -41,6 +42,8 @@ import {
   redeemTwaReferralCode,
   type TwaProfile,
 } from "@/lib/api/twa-client";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { interpolate } from "@/lib/i18n/format";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -83,6 +86,7 @@ const fallbackProfile: TwaProfile = {
 };
 
 export default function SettingsPage() {
+  const { locale, setLocale, t } = useI18n("ru");
   const pathname = usePathname();
   const [user, setUser] = useState<StoredUser | null>(null);
   const [favoriteCategories, setFavoriteCategories] = useState<FavoriteCategoryChip[]>([]);
@@ -163,39 +167,52 @@ export default function SettingsPage() {
   }, [pathname]);
 
   const favoriteSummary = useMemo(
-    () => (favoriteCategories.length === 0 ? "No favorites yet" : `${favoriteCategories.length} categories selected`),
-    [favoriteCategories.length],
+    () =>
+      favoriteCategories.length === 0
+        ? t("client.profile.noFavorites")
+        : interpolate(t("client.profile.categoriesSelected"), { count: favoriteCategories.length }),
+    [favoriteCategories.length, t],
   );
 
-  const activityLabel = profile.stats.activityScore >= 75 ? "Gold rhythm" : profile.stats.activityScore >= 40 ? "Silver rhythm" : "Starter rhythm";
-  const activityTone = profile.stats.activityScore >= 75 ? "Loyalty pro" : profile.stats.activityScore >= 40 ? "Momentum is building" : "First steps";
+  const activityLabel =
+    profile.stats.activityScore >= 75
+      ? t("client.profile.goldRhythm")
+      : profile.stats.activityScore >= 40
+        ? t("client.profile.silverRhythm")
+        : t("client.profile.starterRhythm");
+  const activityTone =
+    profile.stats.activityScore >= 75
+      ? t("client.profile.loyaltyPro")
+      : profile.stats.activityScore >= 40
+        ? t("client.profile.momentum")
+        : t("client.profile.firstSteps");
   const scoreProgress = Math.max(4, Math.min(100, profile.stats.activityScore));
   const nextActions = useMemo(() => {
     const actions: Array<{ href: string; label: string; detail: string; icon: typeof Heart; done: boolean }> = [
       {
         href: "/settings/favorites",
-        label: "Choose favorites",
-        detail: "Tune recommendations",
+        label: t("client.profile.chooseFavorites"),
+        detail: t("client.profile.tuneRecommendations"),
         icon: Heart,
         done: profile.stats.favoriteCategories > 0,
       },
       {
         href: "/companies",
-        label: "Visit partners",
-        detail: "Start earning points",
+        label: t("client.profile.visitPartners"),
+        detail: t("client.profile.startEarning"),
         icon: Store,
         done: profile.stats.partnerCount > 0,
       },
       {
         href: "/marketplace",
-        label: "Try subscriptions",
-        detail: "Unlock partner perks",
+        label: t("client.profile.trySubscriptions"),
+        detail: t("client.profile.unlockPerks"),
         icon: Ticket,
         done: profile.stats.activeSubscriptions > 0,
       },
     ];
     return actions.sort((a, b) => Number(a.done) - Number(b.done));
-  }, [profile.stats.activeSubscriptions, profile.stats.favoriteCategories, profile.stats.partnerCount]);
+  }, [profile.stats.activeSubscriptions, profile.stats.favoriteCategories, profile.stats.partnerCount, t]);
   const primaryAction = nextActions.find((action) => !action.done) ?? nextActions[0];
 
   async function redeemPromo() {
@@ -231,11 +248,11 @@ export default function SettingsPage() {
   async function copyReferralCode() {
     if (!profile.referral.code) return;
     await navigator.clipboard?.writeText(profile.referral.code).catch(() => undefined);
-    setMessage("Referral code copied.");
+    setMessage(t("client.profile.referralCopied"));
   }
 
   if (loading) {
-    return <TwaLoadingScreen title="Loading profile" subtitle="Preparing your activity, favorites and rewards." />;
+    return <TwaLoadingScreen title={t("client.profile.loadingTitle")} subtitle={t("client.profile.loadingSubtitle")} />;
   }
 
   return (
@@ -250,11 +267,11 @@ export default function SettingsPage() {
           {user?.name ? initials(user.name) : "?"}
         </div>
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
-          <p className="mt-0.5 truncate text-sm text-muted-foreground">{user?.name ?? profile.user.name ?? "Guest"}</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("client.profile.title")}</h1>
+          <p className="mt-0.5 truncate text-sm text-muted-foreground">{user?.name ?? profile.user.name ?? t("client.profile.guest")}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge variant="secondary" className="bg-primary/15 text-primary"><Star className="h-3 w-3" /> {activityLabel}</Badge>
-            <Badge variant="secondary"><WalletCards className="h-3 w-3" /> {profile.stats.totalBalance} pts</Badge>
+            <Badge variant="secondary"><WalletCards className="h-3 w-3" /> {profile.stats.totalBalance} {t("client.common.pointsShort")}</Badge>
           </div>
         </div>
       </header>
@@ -262,6 +279,16 @@ export default function SettingsPage() {
       {message && <div className="mb-3 rounded-2xl border border-white/10 bg-muted/10 px-4 py-3 text-sm">{message}</div>}
 
       <div className="grid gap-3">
+        <Card className="glass border-white/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t("client.profile.languageTitle")}</CardTitle>
+            <CardDescription>{t("client.profile.languageDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <LanguageSwitcher locale={locale} onChange={(nextLocale) => void setLocale(nextLocale)} />
+          </CardContent>
+        </Card>
+
         <Card className="glass relative overflow-hidden border-white/10 bg-slate-950/70">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(255,255,255,0.12),transparent_30%),radial-gradient(circle_at_88%_0%,rgba(34,211,238,0.11),transparent_34%)]" />
           <CardContent className="relative space-y-4 px-4 pb-4 pt-1.5">
@@ -269,13 +296,13 @@ export default function SettingsPage() {
               <div>
                 <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
                   <Flame className="h-3.5 w-3.5" />
-                  WhiteBox pulse
+                  {t("client.profile.whiteboxPulse")}
                 </p>
                 <h2 className="mt-2 text-xl font-semibold tracking-tight">{activityTone}</h2>
                 <p className="mt-1 max-w-[13rem] text-xs leading-relaxed text-muted-foreground">
                   {profile.stats.activityScore > 0
-                    ? "Your loyalty profile is learning from activity, points and subscriptions."
-                    : "Start with favorites, partners or your first subscription to wake up the profile."}
+                    ? t("client.profile.nextStepsSubtitle")
+                    : t("client.profile.chooseCategories")}
                 </p>
               </div>
 
@@ -287,7 +314,7 @@ export default function SettingsPage() {
                 >
                   <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-slate-950 text-center">
                     <span className="text-2xl font-bold tabular-nums">{profile.stats.activityScore}</span>
-                    <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">pulse</span>
+                    <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{t("client.profile.pulse")}</span>
                   </div>
                 </div>
               </div>
@@ -295,9 +322,9 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-3 gap-2">
               {[
-                { label: "partners", value: profile.stats.partnerCount, icon: Store },
-                { label: "subs", value: profile.stats.activeSubscriptions, icon: WalletCards },
-                { label: "favorites", value: profile.stats.favoriteCategories, icon: Heart },
+                { label: t("client.profile.partners"), value: profile.stats.partnerCount, icon: Store },
+                { label: t("client.profile.subs"), value: profile.stats.activeSubscriptions, icon: WalletCards },
+                { label: t("client.profile.favorites"), value: profile.stats.favoriteCategories, icon: Heart },
               ].map((metric) => {
                 const Icon = metric.icon;
                 return (
@@ -313,8 +340,8 @@ export default function SettingsPage() {
             <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-3">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold">Next best steps</p>
-                  <p className="text-xs text-muted-foreground">Complete small actions to raise your pulse.</p>
+                  <p className="text-sm font-semibold">{t("client.profile.nextSteps")}</p>
+                  <p className="text-xs text-muted-foreground">{t("client.profile.nextStepsSubtitle")}</p>
                 </div>
                 <Badge variant="secondary" className="shrink-0 gap-1 bg-primary/15 text-primary">
                   <Trophy className="h-3 w-3" />
@@ -340,7 +367,7 @@ export default function SettingsPage() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold">{action.label}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{action.done ? "Done" : action.detail}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{action.done ? t("client.profile.done") : action.detail}</span>
                       </span>
                       {action.done ? <Target className="h-4 w-4 shrink-0 text-emerald-200" /> : <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-muted-foreground transition-transform group-hover:translate-x-0.5" />}
                     </Link>
@@ -352,7 +379,7 @@ export default function SettingsPage() {
             <Button asChild className="w-full rounded-2xl">
               <Link href={primaryAction.href}>
                 <Compass className="mr-2 h-4 w-4" />
-                Boost profile
+                {t("client.profile.boostProfile")}
               </Link>
             </Button>
           </CardContent>
@@ -360,13 +387,13 @@ export default function SettingsPage() {
 
         <Card className="glass border-white/10">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Favorite categories</CardTitle>
+            <CardTitle className="text-base">{t("client.profile.favoriteCategories")}</CardTitle>
             <CardDescription>{favoriteSummary}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
               {favoriteCategories.length === 0 ? (
-                <span className="rounded-full border border-dashed border-white/20 px-3 py-1 text-xs text-muted-foreground">Choose categories to personalize your feed</span>
+                <span className="rounded-full border border-dashed border-white/20 px-3 py-1 text-xs text-muted-foreground">{t("client.profile.chooseCategories")}</span>
               ) : (
                 favoriteCategories.slice(0, 8).map((cat) => (
                   <span
@@ -380,59 +407,62 @@ export default function SettingsPage() {
               )}
             </div>
             <Link href="/settings/favorites" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-muted/10 px-3 py-2 text-sm transition-colors hover:bg-muted/20">
-              <Heart className="h-4 w-4 text-primary" /> Select favorite categories
+              <Heart className="h-4 w-4 text-primary" /> {t("client.profile.selectFavoriteCategories")}
             </Link>
           </CardContent>
         </Card>
 
         <Card className="glass border-white/10">
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base"><Ticket className="h-4 w-4 text-primary" /> Promo codes</CardTitle>
-            <CardDescription>Activate bonus points or subscription access.</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base"><Ticket className="h-4 w-4 text-primary" /> {t("client.profile.promoCodes")}</CardTitle>
+            <CardDescription>{t("client.profile.promoCodesSubtitle")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex gap-2">
               <Input className="glass border-white/10 uppercase" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder="PROMO CODE" />
-              <Button type="button" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>Apply</Button>
+              <Button type="button" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>{t("client.profile.apply")}</Button>
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass border-white/10">
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base"><UsersRound className="h-4 w-4 text-primary" /> Invite friends</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base"><UsersRound className="h-4 w-4 text-primary" /> {t("client.profile.inviteFriends")}</CardTitle>
             <CardDescription>
               {profile.referral.isActive
-                ? `Both sides can receive bonuses: ${profile.referral.inviterBonusPoints}/${profile.referral.invitedBonusPoints} pts.`
-                : "Referral campaign is paused right now."}
+                ? interpolate(t("client.profile.referralActive"), {
+                    inviter: profile.referral.inviterBonusPoints,
+                    invited: profile.referral.invitedBonusPoints,
+                  })
+                : t("client.profile.inviteFriendsSubtitle")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <button type="button" onClick={copyReferralCode} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-muted/10 px-3 py-3 text-left">
-              <div><p className="text-xs text-muted-foreground">Your referral code</p><p className="font-semibold tracking-[0.18em]">{profile.referral.code || "..."}</p></div>
+              <div><p className="text-xs text-muted-foreground">{t("client.profile.yourReferralCode")}</p><p className="font-semibold tracking-[0.18em]">{profile.referral.code || "..."}</p></div>
               <Copy className="h-4 w-4 text-primary" />
             </button>
             <div className="flex gap-2">
               <Input className="glass border-white/10 uppercase" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder="FRIEND CODE" />
-              <Button type="button" variant="secondary" className="glass border-white/10" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>Redeem</Button>
+              <Button type="button" variant="secondary" className="glass border-white/10" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>{t("client.profile.redeem")}</Button>
             </div>
           </CardContent>
         </Card>
 
         <Link href="/settings/account" id="settings-block">
           <Card className="glass border-white/10 transition-colors hover:bg-muted/10">
-            <CardHeader className="pb-2"><CardTitle className="text-base">Account settings</CardTitle><CardDescription>Personal data and account controls</CardDescription></CardHeader>
-            <CardContent><div className="flex items-center gap-2 text-sm text-muted-foreground"><Settings className="h-4 w-4" /> Open account preferences page</div></CardContent>
+            <CardHeader className="pb-2"><CardTitle className="text-base">{t("client.profile.accountSettings")}</CardTitle><CardDescription>{t("client.profile.accountSettingsSubtitle")}</CardDescription></CardHeader>
+            <CardContent><div className="flex items-center gap-2 text-sm text-muted-foreground"><Settings className="h-4 w-4" /> {t("client.profile.openAccountPreferences")}</div></CardContent>
           </Card>
         </Link>
 
         <Card className="glass border-white/10">
-          <CardHeader className="pb-2"><CardTitle className="text-base">More</CardTitle><CardDescription>Reviews, partnership and business tools</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">{t("client.profile.more")}</CardTitle><CardDescription>{t("client.profile.moreSubtitle")}</CardDescription></CardHeader>
           <CardContent className="space-y-2">
             {[
-              ["/settings/reviews", MessageSquareText, "My reviews", "See and manage your feedback"],
-              ["/settings/partnership", ShieldCheck, "Partnership", "Collaborate with WhiteBox partners"],
-              ["/settings/business", BriefcaseBusiness, "For business", "Grow with loyalty programs for brands"],
+              ["/settings/reviews", MessageSquareText, t("client.profile.myReviews"), t("client.profile.myReviewsSubtitle")],
+              ["/settings/partnership", ShieldCheck, t("client.profile.partnership"), t("client.profile.partnershipSubtitle")],
+              ["/settings/business", BriefcaseBusiness, t("client.profile.forBusiness"), t("client.profile.forBusinessSubtitle")],
             ].map(([href, Icon, title, description]) => (
               <Link key={href as string} href={href as string} className="flex items-center justify-between rounded-xl border border-white/10 bg-muted/10 px-3 py-3 transition-colors hover:bg-muted/20">
                 <div className="flex items-center gap-2">
@@ -446,7 +476,7 @@ export default function SettingsPage() {
         </Card>
 
         <Link href="/companies" className="rounded-xl border border-white/10 bg-muted/10 px-3 py-3 transition-colors hover:bg-muted/20">
-          <div className="flex items-center gap-2"><Store className="h-4 w-4 text-primary" /><div><p className="text-sm font-medium">Explore partners</p><p className="text-xs text-muted-foreground">Find new stores and loyalty deals</p></div></div>
+          <div className="flex items-center gap-2"><Store className="h-4 w-4 text-primary" /><div><p className="text-sm font-medium">{t("client.home.explorePartners")}</p><p className="text-xs text-muted-foreground">{t("client.home.explorePartnersSubtitle")}</p></div></div>
         </Link>
       </div>
     </motion.div>

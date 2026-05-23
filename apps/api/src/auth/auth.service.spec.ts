@@ -3,8 +3,29 @@ import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConflictException } from "@nestjs/common";
 import { UserRole } from "@prisma/client";
+import { createHmac } from "crypto";
 import { AuthService } from "./auth.service";
 import { PrismaService } from "../prisma/prisma.service";
+
+function signedTelegramInitData(
+  user: { id: number; first_name?: string; username?: string },
+  botToken = "123456:test-bot-token",
+  authDate = Math.floor(Date.now() / 1000),
+) {
+  const params = new URLSearchParams({
+    auth_date: String(authDate),
+    query_id: "AAH-test-query",
+    user: JSON.stringify(user),
+  });
+  const dataCheckString = [...params.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+  const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
+  const hash = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+  params.set("hash", hash);
+  return params.toString();
+}
 
 describe("AuthService", () => {
   let service: AuthService;
@@ -67,6 +88,8 @@ describe("AuthService", () => {
               if (key === "JWT_SECRET") return "test-secret-test-secret-test-secret";
               if (key === "JWT_EXPIRES_IN") return "15m";
               if (key === "JWT_REFRESH_EXPIRES_DAYS") return "7";
+              if (key === "TELEGRAM_BOT_TOKEN") return "123456:test-bot-token";
+              if (key === "TELEGRAM_MINI_APP_AUTH_MAX_AGE_SECONDS") return "86400";
               return def;
             },
             getOrThrow: (key: string) => {
@@ -102,6 +125,8 @@ describe("AuthService", () => {
       role: UserRole.CLIENT,
       passwordHash: "h",
       telegramId: null,
+      phoneNumber: null,
+      phoneVerifiedAt: null,
       emailVerifiedAt: null,
       accountStatus: "ACTIVE",
       deletionScheduledAt: null,
@@ -147,6 +172,69 @@ describe("AuthService", () => {
     );
   });
 
+  it("logs in from Telegram Mini App for a linked active user", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 13,
+      uuid: "13131313-1313-4313-8313-131313131313",
+      email: "tg@user.com",
+      name: "Telegram User",
+      role: UserRole.CLIENT,
+      passwordHash: "hash",
+      telegramId: BigInt(1348887499),
+      phoneNumber: null,
+      phoneVerifiedAt: null,
+      emailVerifiedAt: null,
+      accountStatus: "ACTIVE",
+      deletionScheduledAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    prisma.loginEvent.findFirst.mockResolvedValue(null);
+    prisma.loginEvent.create.mockResolvedValue({ id: "mini-app-device" });
+    prisma.loginEvent.findMany.mockResolvedValue([]);
+    prisma.refreshToken.create.mockResolvedValue({ id: "rt-mini" });
+
+    const result = await service.loginWithTelegramMiniApp(
+      signedTelegramInitData({ id: 1348887499, first_name: "Max" }),
+      { userAgent: "TelegramWebView" },
+    );
+
+    expect(result.accessToken).toBe("access.jwt.token");
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { telegramId: BigInt(1348887499) },
+    });
+    expect(prisma.loginEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 13,
+          userAgent: "TelegramWebView",
+          deviceLabel: "Telegram Mini App",
+        }),
+      }),
+    );
+  });
+
+  it("rejects Telegram Mini App login when the signature is invalid", async () => {
+    const params = new URLSearchParams({
+      auth_date: String(Math.floor(Date.now() / 1000)),
+      user: JSON.stringify({ id: 1348887499 }),
+      hash: "deadbeef",
+    });
+
+    await expect(service.loginWithTelegramMiniApp(params.toString())).rejects.toThrow(
+      "Telegram Mini App auth signature is invalid",
+    );
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects Telegram Mini App login when Telegram is not linked", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.loginWithTelegramMiniApp(signedTelegramInitData({ id: 1348887499 })),
+    ).rejects.toThrow("Telegram account is not linked to WhiteBox");
+  });
+
   it("issueTokens disables onboarding when favorites exist", async () => {
     prisma.userFavoriteCategory.count.mockResolvedValue(2);
     prisma.refreshToken.create.mockResolvedValue({ id: "rt2" });
@@ -159,6 +247,8 @@ describe("AuthService", () => {
       role: UserRole.CLIENT,
       passwordHash: "h",
       telegramId: null,
+      phoneNumber: null,
+      phoneVerifiedAt: null,
       emailVerifiedAt: null,
       accountStatus: "ACTIVE",
       deletionScheduledAt: null,

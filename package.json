@@ -19,6 +19,7 @@
     "dev:web": "next dev",
     "telegram:ping": "node scripts/telegram-ping.mjs",
     "telegram:webhook:set": "node scripts/telegram-set-webhook.mjs",
+    "telegram:menu:set": "node scripts/telegram-set-menu-button.mjs",
     "test:web": "jest --config jest.web.config.cjs",
     "build": "node scripts/railway-build.mjs",
     "build:web": "next build",
