@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -15,6 +15,7 @@ import {
   Headphones,
   Inbox,
   LayoutDashboard,
+  LogOut,
   Menu,
   MoreHorizontal,
   QrCode,
@@ -28,7 +29,7 @@ import {
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { WhiteBoxLogo } from "@/components/brand/WhiteBoxLogo";
 import { PageTransition } from "@/components/PageTransition";
-import { getStoredUser } from "@/lib/api/auth-client";
+import { clearStoredSession, getStoredUser } from "@/lib/api/auth-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 import { cn } from "@/lib/utils";
@@ -128,6 +129,7 @@ export default function PortalLayout({
 }) {
   const { locale, setLocale, t } = useI18n("ru");
   const pathname = usePathname();
+  const router = useRouter();
   const isAdmin = pathname.startsWith("/admin");
   const currentRole = typeof window === "undefined" ? undefined : getStoredUser()?.role;
   const [notifications, setNotifications] = useState<MenuNotifications>({ items: {}, sections: {} });
@@ -179,6 +181,12 @@ export default function PortalLayout({
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 
+  function handleLogout() {
+    clearStoredSession();
+    setMobileMenuOpen(false);
+    router.replace("/login");
+  }
+
   const mobilePrimaryItems = isAdmin
     ? [
         { href: "/admin", label: t("admin.layout.mobileHome"), icon: LayoutDashboard },
@@ -191,7 +199,7 @@ export default function PortalLayout({
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
       <div className="mx-auto grid w-full max-w-[1600px] lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="hidden border-b border-white/10 bg-muted/10 p-4 [scrollbar-width:none] lg:sticky lg:top-0 lg:block lg:h-[100dvh] lg:overflow-y-auto lg:border-b-0 lg:border-r [&::-webkit-scrollbar]:hidden">
+        <aside className="hidden border-b border-white/10 bg-muted/10 p-4 [scrollbar-width:none] lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col lg:overflow-y-auto lg:border-b-0 lg:border-r [&::-webkit-scrollbar]:hidden">
           <Link href={isAdmin ? "/admin" : "/company"} className="mb-5 flex items-center gap-3">
             <WhiteBoxLogo />
             <div>
@@ -279,6 +287,14 @@ export default function PortalLayout({
               </div>
             </div>
           )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="mt-auto inline-flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5 text-sm text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.08] hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" />
+            {t("admin.layout.logout")}
+          </button>
         </aside>
 
         <main className="min-w-0 px-4 pb-24 pt-20 sm:px-6 lg:px-8 lg:py-7">
@@ -419,6 +435,14 @@ export default function PortalLayout({
                 })}
               </div>
             )}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="mt-2 flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-muted-foreground transition hover:bg-white/[0.08] hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              {t("admin.layout.logout")}
+            </button>
           </div>
         </div>
       )}
