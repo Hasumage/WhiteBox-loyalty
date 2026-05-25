@@ -25,6 +25,7 @@ import {
   Tag,
   ShieldAlert,
   ShieldCheck,
+  TicketCheck,
   Trash2,
   Users,
 } from "lucide-react";
@@ -39,6 +40,7 @@ import { SelectField } from "@/components/ui/select-field";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
+  adminCreateCompanySubscriptionEntitlement,
   adminCreateCompanySubscription,
   adminCreateCompanyLocation,
   adminDeleteCompanySubscription,
@@ -99,6 +101,14 @@ type LocationDraft = {
   closeTime: string;
   workingDays: number[];
   isMain: boolean;
+};
+
+type EntitlementDraft = {
+  title: string;
+  description: string;
+  allowance: number;
+  windowValue: number;
+  windowUnit: "DAY" | "WEEK" | "MONTH" | "TERM" | "UNLIMITED";
 };
 
 type SaveOptions = {
@@ -278,6 +288,14 @@ export default function AdminCompanyProfilePage() {
     promoBonusDays: 0,
     slug: "",
     categoryId: "",
+  });
+  const [entitlementEditorUuid, setEntitlementEditorUuid] = useState<string | null>(null);
+  const [entitlementDraft, setEntitlementDraft] = useState<EntitlementDraft>({
+    title: "",
+    description: "",
+    allowance: 1,
+    windowValue: 1,
+    windowUnit: "DAY",
   });
 
   const filteredSubscriptions = useMemo(() => {
@@ -635,6 +653,20 @@ export default function AdminCompanyProfilePage() {
     }
     setError(null);
     setNotice(t("admin.companyDetail.subscriptionDeleted"));
+    await load();
+  }
+
+  async function createEntitlement(subscriptionUuid: string) {
+    if (!entitlementDraft.title.trim()) return;
+    const res = await adminCreateCompanySubscriptionEntitlement(companyUserUuid, subscriptionUuid, entitlementDraft);
+    if (!res.ok) {
+      setError(String(res.message));
+      return;
+    }
+    setError(null);
+    setNotice(t("admin.companyDetail.entitlementCreated"));
+    setEntitlementEditorUuid(null);
+    setEntitlementDraft({ title: "", description: "", allowance: 1, windowValue: 1, windowUnit: "DAY" });
     await load();
   }
 
@@ -1997,6 +2029,83 @@ export default function AdminCompanyProfilePage() {
                     <Button variant="secondary" onClick={() => void saveSubscription(sub)} className="flex-1 xl:max-w-[150px]">{t("admin.companyDetail.save")}</Button>
                     <Button variant="destructive" onClick={() => void removeSubscription(sub.uuid)} className="flex-1 xl:max-w-[150px]">{t("admin.companyDetail.delete")}</Button>
                   </div>
+                </div>
+                <div className="mt-4 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.035] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="inline-flex items-center gap-2 text-sm font-semibold">
+                        <TicketCheck className="h-4 w-4 text-cyan-100" />
+                        {t("admin.companyDetail.entitlements")}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{t("admin.companyDetail.entitlementsHint")}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEntitlementEditorUuid((current) => (current === sub.uuid ? null : sub.uuid))}
+                    >
+                      <Plus className="h-4 w-4" />
+                      {t("admin.companyDetail.addEntitlement")}
+                    </Button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(sub.entitlements ?? []).map((benefit) => (
+                      <Badge key={benefit.uuid} variant="outline" className="gap-2 px-3 py-1">
+                        {benefit.title}
+                        <span className="text-muted-foreground">
+                          {benefit.windowUnit === "UNLIMITED"
+                            ? t("admin.companyDetail.entitlementUnlimited")
+                            : `${benefit.allowance}/${benefit.windowValue} ${benefit.windowUnit.toLowerCase()}`}
+                        </span>
+                      </Badge>
+                    ))}
+                    {(sub.entitlements ?? []).length === 0 && (
+                      <p className="text-xs text-muted-foreground">{t("admin.companyDetail.noEntitlements")}</p>
+                    )}
+                  </div>
+                  {entitlementEditorUuid === sub.uuid && (
+                    <div className="mt-4 grid gap-3 rounded-xl border border-white/10 p-3 md:grid-cols-2 xl:grid-cols-5">
+                      <Input
+                        placeholder={t("admin.companyDetail.entitlementTitlePlaceholder")}
+                        value={entitlementDraft.title}
+                        onChange={(event) => setEntitlementDraft((current) => ({ ...current, title: event.target.value }))}
+                      />
+                      <Input
+                        placeholder={t("admin.companyDetail.entitlementDescriptionPlaceholder")}
+                        value={entitlementDraft.description}
+                        onChange={(event) => setEntitlementDraft((current) => ({ ...current, description: event.target.value }))}
+                      />
+                      <Input
+                          type="number"
+                          min={1}
+                          disabled={entitlementDraft.windowUnit === "UNLIMITED"}
+                          value={entitlementDraft.allowance}
+                        onChange={(event) => setEntitlementDraft((current) => ({ ...current, allowance: Math.max(1, Number(event.target.value || 1)) }))}
+                      />
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          disabled={entitlementDraft.windowUnit === "UNLIMITED"}
+                          value={entitlementDraft.windowValue}
+                          onChange={(event) => setEntitlementDraft((current) => ({ ...current, windowValue: Math.max(1, Number(event.target.value || 1)) }))}
+                        />
+                        <SelectField
+                          value={entitlementDraft.windowUnit}
+                          onChange={(event) => setEntitlementDraft((current) => ({ ...current, windowUnit: event.target.value as EntitlementDraft["windowUnit"] }))}
+                        >
+                          <option value="DAY">{t("admin.companyDetail.entitlementDay")}</option>
+                          <option value="WEEK">{t("admin.companyDetail.entitlementWeek")}</option>
+                          <option value="MONTH">{t("admin.companyDetail.entitlementMonth")}</option>
+                          <option value="TERM">{t("admin.companyDetail.entitlementTerm")}</option>
+                          <option value="UNLIMITED">{t("admin.companyDetail.entitlementUnlimited")}</option>
+                        </SelectField>
+                      </div>
+                      <Button onClick={() => void createEntitlement(sub.uuid)} disabled={!entitlementDraft.title.trim()}>
+                        {t("admin.companyDetail.saveEntitlement")}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

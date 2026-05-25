@@ -20,12 +20,18 @@ jest.mock("@/lib/telegram/telegram-service", () => ({
   sendTelegramMessage: jest.fn(),
 }));
 
+jest.mock("@/lib/admin/admin-tasks", () => ({
+  upsertAdminTaskForAuditEvent: jest.fn().mockResolvedValue({ uuid: "task-1" }),
+}));
+
 import { prisma } from "@/lib/prisma";
+import { upsertAdminTaskForAuditEvent } from "@/lib/admin/admin-tasks";
 import { sendTelegramMessage } from "@/lib/telegram/telegram-service";
 import { processTelegramMessageQueue, sendTelegramMessageQueued } from "./telegram-queue";
 
 const mockedPrisma = jest.mocked(prisma, { shallow: false });
 const mockedSendTelegramMessage = jest.mocked(sendTelegramMessage);
+const mockedUpsertTask = jest.mocked(upsertAdminTaskForAuditEvent);
 
 describe("telegram message queue", () => {
   beforeEach(() => {
@@ -34,7 +40,7 @@ describe("telegram message queue", () => {
     mockedPrisma.telegramMessageQueue.count.mockResolvedValue(5);
     mockedPrisma.notificationDelivery.count.mockResolvedValue(0);
     mockedPrisma.auditEvent.count.mockResolvedValue(0);
-    mockedPrisma.auditEvent.create.mockResolvedValue({} as never);
+    mockedPrisma.auditEvent.create.mockResolvedValue({ id: "incident-1" } as never);
   });
 
   it("stores failed Telegram sends and raises a developer incident when failures spike", async () => {
@@ -70,6 +76,7 @@ describe("telegram message queue", () => {
         tags: ["TELEGRAM", "TELEGRAM_FIRE", "DEVELOPER"],
       }),
     });
+    expect(mockedUpsertTask).toHaveBeenCalledWith(expect.objectContaining({ id: "incident-1" }));
   });
 
   it("drains due queued messages and marks them sent", async () => {

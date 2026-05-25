@@ -81,6 +81,21 @@ Admin routes (`/api/admin/*`, ADMIN only):
 - `POST /api/admin/backups/:backupId/restore` - destructive restore (requires confirmation)
 - `DELETE /api/admin/backups/:backupId` - delete snapshot
 - `GET /api/admin/backups/restore-status` - live restore process status
+- `GET /api/admin/dashboard` - live operational metrics and permission-filtered task queue
+- `GET /api/admin/tasks/:uuid` / `PATCH` - view, take or resolve an admin task
+- `GET /api/admin/system-health` - system incidents and Telegram queue with task routing
+
+Company workspace routes (`/api/company/*`, COMPANY membership):
+
+- `GET /api/company/profile` / `GET /api/company/dashboard` - partner identity and operating metrics
+- `GET /api/company/clients` / `GET /api/company/clients/:uuid` - related customer search and QR-opened customer record
+- `POST /api/company/loyalty/award` - manual points or purchase-based cashback award
+- `GET` / `POST /api/company/team` - company staff and invitations
+- `PATCH /api/company/team/:uuid/role` / `PATCH /api/company/team/:uuid/status` - local company roles and staff access
+- `GET /api/company/finance` / `POST /api/company/finance/payouts` - revenue forecast and payout request
+- `GET` / `POST /api/company/subscriptions` - company tariff workspace
+- `POST /api/company/subscriptions/:uuid/entitlements` - service usage limits
+- `POST /api/company/subscriptions/redemptions` - controlled service redemption
 
 Registered routes (`/api/registered/*`, CLIENT only):
 
@@ -110,7 +125,8 @@ Set `YANDEX_GEOCODER_API_KEY=<key>` to let admin company locations resolve addre
 
 ## Admin UI Overview
 
-- `/admin` - desktop dashboard
+- `/admin` - live operations dashboard and prioritized task board
+- `/admin/tasks/:uuid` - task resolution workspace with a direct route to the source alert/workflow
 - `/admin/users` - users directory
 - `/admin/users/:uuid` - full user profile editor
 - `/admin/categories` - categories CRUD
@@ -122,6 +138,11 @@ Set `YANDEX_GEOCODER_API_KEY=<key>` to let admin company locations resolve addre
 - `/admin/audit` - manager/developer audit feed
 - `/admin/audit/new` - manual audit event creation
 - `/admin/audit/backups` - save/download/restore/delete DB snapshots
+- `/company` - company operational dashboard
+- `/company/clients` - cashier workspace for QR, customer points and subscription redemption
+- `/company/subscriptions` - plans and usage rules
+- `/company/team` - owner/manager/cashier membership management
+- `/company/payments` - subscription forecast and payout requests
 - `/email-change/confirm?token=...` - public confirmation page for user email change
 - `/loyalty-cards` - TWA list of companies where the user has earned points
 
@@ -146,6 +167,10 @@ npm run api:test
 - TWA marketplace, partners, category, wallet, map, and history screens are backed by registered API read models instead of mock data.
 - Company addresses are stored as `CompanyLocation` rows; admin company pages can geocode addresses and `/map` renders saved location coordinates.
 - Partner/category filtering respects multi-category company relations.
+- Company operations separate platform role `COMPANY` from membership roles `OWNER`, `MANAGER` and `CASHIER`.
+- Subscription benefits can be period-limited or marked `UNLIMITED` for repeatable access such as gym entry while still recording each redemption.
+- Subscription redemptions use configured service allowances and periodic windows; QR replay protection remains a required pre-production enhancement.
+- `AdminTask` turns open verification requests, pending finance approvals and critical audit alerts into one deduplicated resolution queue. Task visibility follows granular admin permissions.
 
 ## Build
 
@@ -179,6 +204,7 @@ Key docs:
 - `docs/project-map/project-services.md`
 - `docs/project-map/project-ui.md`
 - `docs/project-map/database-map.md`
+- `docs/company-workspace.md`
 
 ## Contribution Policy
 

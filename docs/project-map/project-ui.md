@@ -24,8 +24,14 @@
 | `/help/*` | FAQ/contact/privacy | Public |
 | `/landing` | Marketing landing and Telegram-backed lead form | Public |
 | `/company/register` | Company onboarding and verification request | Public |
-| `/company/*` | Company portal | COMPANY/ADMIN |
-| `/admin` | Admin dashboard | ADMIN |
+| `/company` | Company operational dashboard | COMPANY member |
+| `/company/clients` | Cashier QR, points and subscription redemption workspace | COMPANY member |
+| `/company/subscriptions` | Plans and entitlement rules | COMPANY member |
+| `/company/team` | Local owner/manager/cashier administration | COMPANY owner/manager |
+| `/company/payments` | Forecast and payout requests | COMPANY owner/manager |
+| `/company/compliance` | Partner profile and verification status | COMPANY member |
+| `/admin` | Live operations dashboard and priority task queue | ADMIN/MANAGER by permission |
+| `/admin/tasks/[uuid]` | Task resolution workspace and source handoff | ADMIN/MANAGER by source permission |
 | `/admin/users`, `/admin/users/[uuid]` | User operations | ADMIN |
 | `/admin/users/[uuid]/permissions` | Granular user permissions | SUPER_ADMIN |
 | `/admin/categories` | Category CRUD | ADMIN |
@@ -90,6 +96,16 @@
 - Mobile admin uses a compact top bar, bottom primary navigation and drawer-based full navigation while preserving the desktop sidebar.
 - Admin menu badges show unresolved company verification counters with `20+` cap.
 - Telegram page shows linked state and reconnect flow instead of asking for a link when already connected.
+- Dashboard figures are DB-backed; its priority queue combines system alerts, company verification requests and finance approvals without duplicated cards.
+- Each task opens a focused resolution screen. Alert tasks can be closed there, while workflow tasks close from their authoritative verification or finance decision.
+- Dashboard and sidebar task counts respect granular permissions, so sensitive queues are not exposed as counters.
+
+## Company UX
+
+- The company portal follows the admin console visual language while keeping permissions isolated from WhiteBox staff roles.
+- Cashiers land on customer operations: QR open, scoped search, fixed point award, purchase cashback and entitlement redemption.
+- Owners and managers maintain plans, usage limits, staff access and payout requests.
+- Finance cards explicitly distinguish monthly forecast from funds approved for payout.
 
 ## Key components
 

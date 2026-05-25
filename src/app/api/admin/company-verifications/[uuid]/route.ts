@@ -86,7 +86,7 @@ export async function PATCH(
 
   const existing = await prisma.companyVerificationApplication.findUnique({
     where: { uuid },
-    select: { id: true, companyId: true },
+    select: { id: true, companyId: true, identityVerificationMode: true },
   });
 
   if (!existing) {
@@ -105,6 +105,7 @@ export async function PATCH(
         data: {
           verificationStatus: status,
           passportVerificationStatus: status === "APPROVED" ? "APPROVED" : status,
+          identityVerificationCompleted: status === "APPROVED" && existing.identityVerificationMode === "FULL",
           isActive: status === "APPROVED",
           verificationReviewedAt: status === "APPROVED" || status === "REJECTED" ? new Date() : undefined,
           passportDataDeletedAt: status === "APPROVED" || status === "REJECTED" ? new Date() : undefined,
@@ -126,6 +127,19 @@ export async function PATCH(
         tags: ["#USER", "#VERIFICATION"],
       },
     });
+    if (status === "APPROVED" || status === "REJECTED") {
+      await tx.adminTask.updateMany({
+        where: {
+          sourceKey: `verification:${uuid}`,
+          status: { in: ["OPEN", "IN_PROGRESS"] },
+        },
+        data: {
+          status: "RESOLVED",
+          resolvedById: session.userId,
+          resolvedAt: new Date(),
+        },
+      });
+    }
   });
 
   if (status === "APPROVED" || status === "REJECTED") {

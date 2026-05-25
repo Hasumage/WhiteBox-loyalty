@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { requireAdminScope } from "@/lib/admin/require-admin-scope";
+import { upsertAdminTaskForAuditEvent } from "@/lib/admin/admin-tasks";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -93,6 +94,14 @@ export async function GET(request: NextRequest) {
 
   const criticalIncidents = developerIncidents.filter((event) => event.level === "CRITICAL").length;
   const openIssues = queueFailed + leadTelegramFailed + developerIncidents.length;
+  const incidentTasks = await Promise.all(
+    developerIncidents.map((event) => upsertAdminTaskForAuditEvent(event).catch(() => null)),
+  );
+  const taskUuidBySource = new Map(
+    incidentTasks
+      .filter((task): task is NonNullable<typeof task> => task !== null)
+      .map((task) => [task.sourceKey, task.uuid]),
+  );
 
   return NextResponse.json({
     generatedAt: now.toISOString(),
@@ -160,6 +169,7 @@ export async function GET(request: NextRequest) {
       tags: event.tags,
       linkUrl: event.linkUrl,
       linkLabel: event.linkLabel,
+      taskUuid: taskUuidBySource.get(`audit:${event.id}`) ?? null,
       createdAt: event.createdAt.toISOString(),
     })),
   });
@@ -197,14 +207,28 @@ export async function POST(request: NextRequest) {
   const actorLabel = session.email || `admin:${session.userId}`;
   const detailsSuffix = `\n\nResolved from System Health at ${resolvedAt} by ${actorLabel}.`;
 
-  const updated = await prisma.auditEvent.update({
-    where: { id: event.id },
-    data: {
-      level: "INFO",
-      tags: Array.from(new Set([...event.tags, RESOLVED_TAG])),
-      details: `${event.details ?? ""}${detailsSuffix}`.trim(),
-    },
-    select: { id: true, tags: true },
+  const updated = await prisma.$transaction(async (tx) => {
+    const incident = await tx.auditEvent.update({
+      where: { id: event.id },
+      data: {
+        level: "INFO",
+        tags: Array.from(new Set([...event.tags, RESOLVED_TAG])),
+        details: `${event.details ?? ""}${detailsSuffix}`.trim(),
+      },
+      select: { id: true, tags: true },
+    });
+    await tx.adminTask.updateMany({
+      where: {
+        sourceKey: `audit:${event.id}`,
+        status: { in: ["OPEN", "IN_PROGRESS"] },
+      },
+      data: {
+        status: "RESOLVED",
+        resolvedById: session.userId,
+        resolvedAt: new Date(),
+      },
+    });
+    return incident;
   });
 
   return NextResponse.json({ ok: true, incident: updated });

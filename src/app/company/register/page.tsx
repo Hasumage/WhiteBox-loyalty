@@ -7,7 +7,7 @@ import { WhiteBoxLogo } from "@/components/brand/WhiteBoxLogo";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SelectField } from "@/components/ui/select-field";
+import { OptionSelect } from "@/components/ui/option-select";
 import { Textarea } from "@/components/ui/textarea";
 import { readClientLocale } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/shared";
@@ -71,10 +71,6 @@ const copy = {
     legalMiddleName: "Отчество, если есть",
     birthDate: "Дата рождения",
     inn: "ИНН",
-    fullVerification: "Полная верификация",
-    deferredVerification: "Тестовый доступ без паспорта",
-    fullVerificationText: "Паспортные данные и фото нужны для подписок, выплат и отчётности.",
-    deferredVerificationText: "Можно пропустить паспорт сейчас. После одобрения менеджера кабинет будет ограничен: без подписок и выплат.",
     passportHint:
       "Для полной верификации введите паспортные данные и приложите фото. Текстовые паспортные данные хранятся зашифрованно, фото хранится зашифрованным файлом и удаляется после approve/reject.",
     passportSeries: "Серия паспорта",
@@ -86,7 +82,6 @@ const copy = {
     passportPhotoButton: "Выбрать файл",
     passportPhotoEmpty: "Файл не выбран",
     passportPhotoHelp: "JPG, PNG, WEBP или HEIC до 8 MB. Лучше фото разворота с данными, без бликов и обрезанных углов.",
-    deferralReason: "Расскажите о себе, бизнесе и почему хотите отложить паспортную верификацию",
     consent:
       "Я подтверждаю достоверность данных и согласен на обработку персональных данных для проверки партнера и подготовки выплат.",
     backButton: "Назад",
@@ -136,10 +131,6 @@ const copy = {
     legalMiddleName: "Middle name, optional",
     birthDate: "Birth date",
     inn: "Tax ID",
-    fullVerification: "Full verification",
-    deferredVerification: "Test access without passport",
-    fullVerificationText: "Passport data and photo are required for subscriptions, payouts and reporting.",
-    deferredVerificationText: "You can skip passport verification now. After manager approval, the account will be limited: no subscriptions and payouts.",
     passportHint:
       "For full verification, enter passport data and attach a photo. Text passport data is encrypted; the photo is stored as an encrypted file and removed after approve/reject.",
     passportSeries: "Passport series",
@@ -151,7 +142,6 @@ const copy = {
     passportPhotoButton: "Choose file",
     passportPhotoEmpty: "No file selected",
     passportPhotoHelp: "JPG, PNG, WEBP or HEIC up to 8 MB. Use a clear photo of the identity page without glare or cropped corners.",
-    deferralReason: "Tell us about yourself, your business and why you want to postpone passport verification",
     consent:
       "I confirm that the data is accurate and consent to personal data processing for partner verification and payout preparation.",
     backButton: "Back",
@@ -172,7 +162,7 @@ export default function CompanyRegisterPage() {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
-  const [identityMode, setIdentityMode] = useState<"FULL" | "DEFERRED">("FULL");
+  const [employmentType, setEmploymentType] = useState("SELF_EMPLOYED");
   const [passportFileName, setPassportFileName] = useState("");
   const t = copy[locale];
   const cards = t.cards as Array<[typeof Building2, string, string]>;
@@ -194,7 +184,7 @@ export default function CompanyRegisterPage() {
         const field = formRef.current.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
         if (field) field.value = value;
       }
-      if (draft.identityVerificationMode === "DEFERRED") setIdentityMode("DEFERRED");
+      if (draft.employmentType) setEmploymentType(draft.employmentType);
       setDraftSavedAt("restored");
     } catch {
       window.localStorage.removeItem("whitebox.company-register-draft");
@@ -243,11 +233,7 @@ export default function CompanyRegisterPage() {
       }
     }
     if (targetStep === 3) {
-      if (identityMode === "FULL") {
-        names.push("passportSeries", "passportNumber", "passportIssuedAt", "passportIssuedBy", "passportPhoto");
-      } else {
-        names.push("verificationDeferralReason");
-      }
+      names.push("passportSeries", "passportNumber", "passportIssuedAt", "passportIssuedBy", "passportPhoto");
     }
     const ok = names.every(validateField);
     if (!ok) {
@@ -276,6 +262,7 @@ export default function CompanyRegisterPage() {
     if (!validateStep(3)) return;
     const form = event.currentTarget;
     const payload = new FormData(form);
+    payload.set("identityVerificationMode", "FULL");
     payload.set("consentAccepted", form.querySelector<HTMLInputElement>("#consentAccepted")?.checked === true ? "true" : "false");
 
     setStatus("sending");
@@ -292,6 +279,7 @@ export default function CompanyRegisterPage() {
       setMessage(String(t.success));
       window.localStorage.removeItem("whitebox.company-register-draft");
       form.reset();
+      setEmploymentType("SELF_EMPLOYED");
       setPassportFileName("");
       setStep(1);
     } catch (error) {
@@ -364,7 +352,19 @@ export default function CompanyRegisterPage() {
             </div>
 
             <div className={cn("grid gap-4", step !== 1 && "hidden")}>
-              <label className="space-y-2"><span className="text-sm text-white/60">{String(t.employmentType)}</span><SelectField name="employmentType" className="h-12 rounded-xl"><option value="SELF_EMPLOYED">{String(t.selfEmployed)}</option><option value="INDIVIDUAL_ENTREPRENEUR">{String(t.entrepreneur)}</option></SelectField></label>
+              <label className="space-y-2">
+                <span className="text-sm text-white/60">{String(t.employmentType)}</span>
+                <OptionSelect
+                  name="employmentType"
+                  required
+                  value={employmentType}
+                  onChange={setEmploymentType}
+                  options={[
+                    { value: "SELF_EMPLOYED", label: String(t.selfEmployed), icon: Building2 },
+                    { value: "INDIVIDUAL_ENTREPRENEUR", label: String(t.entrepreneur), icon: Landmark },
+                  ]}
+                />
+              </label>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input name="contactName" required maxLength={120} placeholder={String(t.contactName)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
                 <Input name="contactEmail" required type="email" maxLength={160} placeholder={String(t.email)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
@@ -389,41 +389,15 @@ export default function CompanyRegisterPage() {
             </div>
 
             <div className={cn("grid gap-4", step !== 3 && "hidden")}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {(["FULL", "DEFERRED"] as const).map((mode) => (
-                  <label
-                    key={mode}
-                    className={cn(
-                      "cursor-pointer rounded-2xl border p-4 transition",
-                      identityMode === mode ? "border-white bg-white text-black" : "border-white/10 bg-black/18 text-white/62 hover:bg-white/[0.07]",
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="identityVerificationMode"
-                      value={mode}
-                      checked={identityMode === mode}
-                      onChange={() => setIdentityMode(mode)}
-                      className="sr-only"
-                    />
-                    <p className="font-semibold">{mode === "FULL" ? String(t.fullVerification) : String(t.deferredVerification)}</p>
-                    <p className={cn("mt-2 text-sm leading-6", identityMode === mode ? "text-black/62" : "text-white/52")}>
-                      {mode === "FULL" ? String(t.fullVerificationText) : String(t.deferredVerificationText)}
-                    </p>
-                  </label>
-                ))}
-              </div>
               <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm leading-6 text-amber-50/82">{String(t.passportHint)}</div>
-              {identityMode === "FULL" ? (
-                <>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Input name="passportSeries" required inputMode="numeric" minLength={4} maxLength={4} pattern="\d{4}" onInput={(event) => normalizeDigits(event, 4)} placeholder={String(t.passportSeries)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
-                    <Input name="passportNumber" required inputMode="numeric" minLength={6} maxLength={6} pattern="\d{6}" onInput={(event) => normalizeDigits(event, 6)} placeholder={String(t.passportNumber)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
-                    <Input name="passportIssuedAt" required type="date" max={new Date().toISOString().slice(0, 10)} placeholder={String(t.passportIssuedAt)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white [color-scheme:dark]" />
-                    <Input name="passportDepartmentCode" inputMode="numeric" minLength={6} maxLength={6} pattern="\d{6}" onInput={(event) => normalizeDigits(event, 6)} placeholder={String(t.passportDepartmentCode)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
-                  </div>
-                  <Textarea name="passportIssuedBy" required maxLength={240} placeholder={String(t.passportIssuedBy)} className="min-h-24 rounded-xl border-white/12 bg-black/22 text-white" />
-                  <label className="group flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-white/18 bg-black/22 p-8 text-center transition hover:border-white/35 hover:bg-white/[0.06]">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input name="passportSeries" required inputMode="numeric" minLength={4} maxLength={4} pattern="\d{4}" onInput={(event) => normalizeDigits(event, 4)} placeholder={String(t.passportSeries)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
+                <Input name="passportNumber" required inputMode="numeric" minLength={6} maxLength={6} pattern="\d{6}" onInput={(event) => normalizeDigits(event, 6)} placeholder={String(t.passportNumber)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
+                <Input name="passportIssuedAt" required type="date" max={new Date().toISOString().slice(0, 10)} placeholder={String(t.passportIssuedAt)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white [color-scheme:dark]" />
+                <Input name="passportDepartmentCode" inputMode="numeric" minLength={6} maxLength={6} pattern="\d{6}" onInput={(event) => normalizeDigits(event, 6)} placeholder={String(t.passportDepartmentCode)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
+              </div>
+              <Textarea name="passportIssuedBy" required maxLength={240} placeholder={String(t.passportIssuedBy)} className="min-h-24 rounded-xl border-white/12 bg-black/22 text-white" />
+              <label className="group flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-white/18 bg-black/22 p-8 text-center transition hover:border-white/35 hover:bg-white/[0.06]">
                     <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/12 bg-white/8 shadow-[0_0_24px_rgba(255,255,255,0.08)]">
                       <UploadCloud className="h-7 w-7 text-white" />
                     </span>
@@ -433,7 +407,7 @@ export default function CompanyRegisterPage() {
                       name="passportPhoto"
                       type="file"
                       accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                      required={identityMode === "FULL"}
+                      required
                       onChange={(event) => setPassportFileName(event.currentTarget.files?.[0]?.name ?? "")}
                       className="sr-only"
                     />
@@ -445,11 +419,7 @@ export default function CompanyRegisterPage() {
                         {passportFileName || String(t.passportPhotoEmpty)}
                       </span>
                     </span>
-                  </label>
-                </>
-              ) : (
-                <Textarea name="verificationDeferralReason" required minLength={40} maxLength={1200} placeholder={String(t.deferralReason)} className="min-h-40 rounded-xl border-white/12 bg-black/22 text-white" />
-              )}
+              </label>
               <label className="flex gap-3 rounded-2xl border border-white/10 bg-black/18 p-4 text-sm leading-6 text-white/64">
                 <input id="consentAccepted" name="consentAccepted" required type="checkbox" className="mt-1 h-4 w-4" />
                 <span>{String(t.consent)}</span>

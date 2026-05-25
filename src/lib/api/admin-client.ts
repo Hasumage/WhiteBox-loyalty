@@ -171,8 +171,50 @@ export type AdminSystemHealthResponse = {
     tags: string[];
     linkUrl: string | null;
     linkLabel: string | null;
+    taskUuid: string | null;
     createdAt: string;
   }>;
+};
+
+export type AdminTaskSource = "AUDIT" | "COMPANY_VERIFICATION" | "FINANCE";
+export type AdminTaskPriority = "NORMAL" | "HIGH" | "CRITICAL";
+export type AdminTaskStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "DISMISSED";
+
+export type AdminTaskRow = {
+  uuid: string;
+  source: AdminTaskSource;
+  sourceKey: string;
+  title: string;
+  description: string | null;
+  priority: AdminTaskPriority;
+  status: AdminTaskStatus;
+  targetUrl: string | null;
+  targetLabel: string | null;
+  assignedToId: number | null;
+  resolvedById: number | null;
+  assignedAt: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignedTo?: { name: string } | null;
+  resolvedBy?: { id: number; name: string; email: string } | null;
+};
+
+export type AdminDashboardResponse = {
+  generatedAt: string;
+  metrics: {
+    usersTotal: number;
+    usersActive: number;
+    companiesActive: number;
+    subscriptionsActive: number;
+    verificationOpen: number;
+    pendingFinance: number;
+    openTasks: number;
+    criticalTasks: number;
+  };
+  permittedSources: AdminTaskSource[];
+  trend: Array<{ date: string; events: number }>;
+  tasks: AdminTaskRow[];
 };
 
 export type AdminCompanyVerificationStatus = "DRAFT" | "SUBMITTED" | "REVIEWING" | "APPROVED" | "REJECTED";
@@ -357,6 +399,15 @@ export type AdminCompanySubscription = {
   companyId: number;
   createdAt: string;
   updatedAt: string;
+  entitlements?: Array<{
+    uuid: string;
+    title: string;
+    description: string | null;
+    allowance: number;
+    windowValue: number;
+    windowUnit: "DAY" | "WEEK" | "MONTH" | "TERM" | "UNLIMITED";
+    isActive: boolean;
+  }>;
 };
 
 export type AdminPairedSubscription = {
@@ -1174,6 +1225,29 @@ export async function adminDeleteCompanySubscription(uuid: string, subscriptionU
   return { ok: true as const };
 }
 
+export async function adminCreateCompanySubscriptionEntitlement(
+  uuid: string,
+  subscriptionUuid: string,
+  input: {
+    title: string;
+    description?: string;
+    allowance: number;
+    windowValue: number;
+    windowUnit: "DAY" | "WEEK" | "MONTH" | "TERM" | "UNLIMITED";
+  },
+) {
+  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/subscriptions/${subscriptionUuid}/entitlements`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to create subscription benefit" };
+  }
+  return { ok: true as const, data: await res.json() };
+}
+
 export async function adminSubscriptionStats() {
   try {
     const res = await fetch(`${apiBase()}/admin/subscriptions/stats`, {
@@ -1567,6 +1641,43 @@ export async function adminGetSystemHealth() {
     return { ok: false as const, message: data.message ?? "Failed to fetch system health" };
   }
   return { ok: true as const, data: (await res.json()) as AdminSystemHealthResponse };
+}
+
+export async function adminGetDashboard() {
+  const res = await fetch("/api/admin/dashboard", {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to fetch dashboard" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminDashboardResponse };
+}
+
+export async function adminGetTask(uuid: string) {
+  const res = await fetch(`/api/admin/tasks/${uuid}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to fetch task" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminTaskRow };
+}
+
+export async function adminUpdateTask(uuid: string, action: "start" | "resolve" | "reopen") {
+  const res = await fetch(`/api/admin/tasks/${uuid}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to update task" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminTaskRow };
 }
 
 export async function adminRetryTelegramQueue() {

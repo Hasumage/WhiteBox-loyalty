@@ -38,6 +38,7 @@ import { UpdateRoleDto } from "./dto/update-role.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UpsertCompanyLocationDto } from "./dto/upsert-company-location.dto";
 import { UpsertCompanyProfileDto } from "./dto/upsert-company-profile.dto";
+import { CreateSubscriptionEntitlementDto } from "../company/dto/company-workspace.dto";
 
 /**
  * Admin-only API surface. Protected by:
@@ -506,6 +507,19 @@ export class AdminController {
   ) {
     await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
     return this.adminService.updateCompanySubscription(uuid, subscriptionUuid, dto, actor.userId);
+  }
+
+  @Post("company-users/:uuid/subscriptions/:subscriptionUuid/entitlements")
+  @ApiOperation({ summary: "Add a redeemable benefit and its usage limit to a company subscription" })
+  @ApiBody({ type: CreateSubscriptionEntitlementDto })
+  async createCompanySubscriptionEntitlement(
+    @Param("uuid") uuid: string,
+    @Param("subscriptionUuid") subscriptionUuid: string,
+    @Body() dto: CreateSubscriptionEntitlementDto,
+    @CurrentUser() actor: RequestUser,
+  ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
+    return this.adminService.createCompanySubscriptionEntitlement(uuid, subscriptionUuid, dto, actor.userId);
   }
 
   @Delete("company-users/:uuid/subscriptions/:subscriptionUuid")

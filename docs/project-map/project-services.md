@@ -17,9 +17,11 @@ Important principles:
 - `src/lib/api/auth-client.ts` - login/register/session/account actions.
 - `src/lib/api/categories-client.ts` - categories and favorite categories.
 - `src/lib/api/admin-client.ts` - admin users, companies, categories, subscriptions, growth, audit and backups.
+- `src/lib/api/company-client.ts` - company dashboard, cashier, team, plans, entitlements, redemptions and payouts.
 - `src/lib/api/twa-client.ts` - TWA profile, dashboard, marketplace, companies, wallet, map/history/subscriptions, QR, promo/referral.
 - `src/lib/i18n/*` - locale detection, persistence and portable dictionaries.
 - `src/lib/telegram/*` - Telegram Bot API delivery, proxy support, webhook parsing and admin account linking.
+- `src/lib/admin/admin-tasks.ts` - signal-to-task routing, source deduplication and automatic workflow task closure.
 
 ## Admin API surface
 
@@ -37,6 +39,9 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/users/:uuid/email-change-request` | POST | Create secure email-change token/link |
 | `/api/admin/users/:uuid/force-logout` | POST | Revoke active refresh sessions |
 | `/api/admin/users/:uuid/reactivate-account` | POST | Clear frozen deletion status |
+| `/api/admin/dashboard` | GET | Live operating metrics and permission-filtered priority queue |
+| `/api/admin/tasks/:uuid` | GET/PATCH | Read/take/resolve a work item and route to its source |
+| `/api/admin/system-health` | GET/POST | System incident cockpit; open/resolve task-linked alerts |
 | `/api/admin/subscriptions/stats` | GET | KPI/SLA/forecast stats payload |
 | `/api/admin/subscriptions/:uuid` | GET | Subscription lookup by UUID |
 | `/api/admin/promo-codes` | GET | Promo inventory with redemption counts |
@@ -74,6 +79,26 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/finance/*` | GET/POST | Finance operation drafts and approval flow |
 | `/api/admin/users/:uuid/permissions` | GET/PUT | Granular admin permission settings |
 
+## Company API surface
+
+All `/api/company/*` routes require an active company membership. Platform role and local company role are deliberately separate.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/company/profile` | GET | Company member and verified partner profile |
+| `/api/company/dashboard` | GET | Customer, subscription, purchase and payout metrics |
+| `/api/company/clients` | GET | Search existing customers scoped to this company |
+| `/api/company/clients/:uuid` | GET | Customer operation card opened from QR |
+| `/api/company/loyalty/award` | POST | Award manual points or cashback from a purchase |
+| `/api/company/team` | GET/POST | List staff or invite a member |
+| `/api/company/team/:uuid/role` | PATCH | Update a local membership role |
+| `/api/company/team/:uuid/status` | PATCH | Enable/disable staff access |
+| `/api/company/finance` | GET | Monthly-normalized subscription forecast and operation history |
+| `/api/company/finance/payouts` | POST | Create payout request for approval |
+| `/api/company/subscriptions` | GET/POST | Read or create company tariff plans |
+| `/api/company/subscriptions/:uuid/entitlements` | POST | Configure controlled service issuance |
+| `/api/company/subscriptions/redemptions` | POST | Consume an entitlement under its allowance |
+
 ## Registered API surface
 
 All `/api/registered/*` routes require `CLIENT`.
@@ -104,11 +129,13 @@ All `/api/registered/*` routes require `CLIENT`.
 - `AuthService`: registration, login, refresh, password change, freeze/reactivate, login events and email confirmation.
 - `AdminService`: users, companies, categories, locations, subscriptions, growth, audit, backups and analytics.
 - `RegisteredService`: DB-backed TWA read models, profile preferences, favorites, promo/referral redemption, QR and subscription activation.
+- `CompanyService`: local staff roles, cashier operations, tier cashback, entitlements/redemptions, revenue forecast and payout requests.
 - `MaintenanceStateService`: restore progress state machine.
 - `MaintenanceGuard`: API lock during restore.
 - Landing lead services: contact intake, duplicate/spam checks, Telegram delivery history and retries.
 - Company onboarding services: user-first company registration, identity verification modes, encrypted passport file lifecycle and admin review.
 - Telegram services: Bot API proxy support, direct-message admin linking and webhook command handling.
+- Admin task services: translate audit fires, verification reviews and finance approvals into deduplicated, permission-scoped resolution cards.
 - i18n services: locale cookie, user preference persistence and structured translation dictionaries.
 
 ## Security and privacy responsibilities
@@ -118,6 +145,9 @@ All `/api/registered/*` routes require `CLIENT`.
 - Passport photos are stored encrypted in private local storage, then removed after approve/reject cleanup.
 - Support users are restricted away from finance, passport review and privileged verification actions.
 - Critical admin actions write audit records where applicable.
+- Customer text search in the company workspace is restricted to customers already related to that company; QR may open a new customer without disclosing email.
+- Purchase cashback and limited entitlement redemption use serializable transactions to prevent double issuance and tier races; `UNLIMITED` entitlements record visits without enforcing a usage cap.
+- Admin tasks never expand an operator's access: each task is visible and actionable only when its source permission permits the same operation.
 
 ## Map/geocoder responsibilities
 

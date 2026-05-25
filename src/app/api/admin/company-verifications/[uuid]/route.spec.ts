@@ -17,6 +17,7 @@ jest.mock("@/lib/prisma", () => ({
         companyVerificationApplication: { update: jest.fn() },
         company: { update: jest.fn() },
         auditEvent: { create: jest.fn() },
+        adminTask: { updateMany: jest.fn() },
       }),
     ),
   },
@@ -38,6 +39,7 @@ type MockVerificationTransaction = {
   companyVerificationApplication: { update: jest.Mock };
   company: { update: jest.Mock };
   auditEvent: { create: jest.Mock };
+  adminTask: { updateMany: jest.Mock };
 };
 
 describe("admin company verification detail route", () => {
@@ -58,13 +60,14 @@ describe("admin company verification detail route", () => {
 
   it("approves an application and activates linked company", async () => {
     mockedPrisma.companyVerificationApplication.findUnique
-      .mockResolvedValueOnce({ id: 1, companyId: 42 } as never)
+      .mockResolvedValueOnce({ id: 1, companyId: 42, identityVerificationMode: "FULL" } as never)
       .mockResolvedValueOnce({ uuid: "application-1", status: "APPROVED", company: { id: 42, isActive: true } } as never);
 
     const tx = {
       companyVerificationApplication: { update: jest.fn() },
       company: { update: jest.fn() },
       auditEvent: { create: jest.fn() },
+      adminTask: { updateMany: jest.fn() },
     };
     (mockedPrisma.$transaction as unknown as jest.Mock).mockImplementationOnce(
       async (callback: (tx: MockVerificationTransaction) => Promise<unknown>) => callback(tx),
@@ -89,7 +92,14 @@ describe("admin company verification detail route", () => {
         isActive: true,
         verificationStatus: "APPROVED",
         passportVerificationStatus: "APPROVED",
+        identityVerificationCompleted: true,
       }),
     });
+    expect(tx.adminTask.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ sourceKey: "verification:application-1" }),
+        data: expect.objectContaining({ status: "RESOLVED", resolvedById: 1 }),
+      }),
+    );
   });
 });

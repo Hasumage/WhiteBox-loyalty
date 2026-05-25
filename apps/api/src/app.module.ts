@@ -6,6 +6,8 @@ import { AdminController } from "./admin/admin.controller";
 import { AdminModule } from "./admin/admin.module";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthMiddleware } from "./auth/middleware/jwt-auth.middleware";
+import { CompanyController } from "./company/company.controller";
+import { CompanyModule } from "./company/company.module";
 import { HealthModule } from "./health/health.module";
 import { MaintenanceGuard } from "./maintenance/maintenance.guard";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
@@ -27,6 +29,7 @@ import { RegisteredModule } from "./registered/registered.module";
     PrismaModule,
     AuthModule,
     AdminModule,
+    CompanyModule,
     RegisteredModule,
     OAuthModule,
     HealthModule,
@@ -41,6 +44,6 @@ import { RegisteredModule } from "./registered/registered.module";
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(JwtAuthMiddleware).forRoutes(AdminController, RegisteredController);
+    consumer.apply(JwtAuthMiddleware).forRoutes(AdminController, CompanyController, RegisteredController);
   }
 }

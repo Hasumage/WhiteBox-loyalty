@@ -72,6 +72,17 @@ export async function PATCH(
         tags: ["#BILLING", "#FINANCE", "#APPROVAL"],
       },
     });
+    await tx.adminTask.updateMany({
+      where: {
+        sourceKey: `finance:${updated.uuid}`,
+        status: { in: ["OPEN", "IN_PROGRESS"] },
+      },
+      data: {
+        status: "RESOLVED",
+        resolvedById: actor.id,
+        resolvedAt: now,
+      },
+    });
     return updated;
   });
 

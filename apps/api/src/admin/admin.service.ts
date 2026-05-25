@@ -32,6 +32,7 @@ import { UpdateCompanyUserDto } from "./dto/update-company-user.dto";
 import { UpdateReferralCampaignDto } from "./dto/update-referral-campaign.dto";
 import { UpsertCompanyLocationDto } from "./dto/upsert-company-location.dto";
 import { UpsertCompanyProfileDto } from "./dto/upsert-company-profile.dto";
+import { CreateSubscriptionEntitlementDto } from "../company/dto/company-workspace.dto";
 
 @Injectable()
 export class AdminService {
@@ -48,10 +49,14 @@ export class AdminService {
     "SubscriptionBundleParticipant",
     "CompanyCategory",
     "CompanyLevelRule",
+    "CompanyMember",
+    "CompanyPurchase",
     "UserFavoriteCategory",
     "UserProfilePreference",
     "UserCompany",
     "UserSubscription",
+    "SubscriptionEntitlement",
+    "SubscriptionRedemption",
     "PromoCode",
     "PromoCodeRedemption",
     "ReferralCampaign",
@@ -61,7 +66,9 @@ export class AdminService {
     "LoginEvent",
     "EmailChangeRequest",
     "LoyaltyTransaction",
+    "FinanceOperation",
     "AuditEvent",
+    "AdminTask",
   ] as const;
 
   constructor(
@@ -451,10 +458,14 @@ export class AdminService {
       subscriptionBundleParticipants,
       companyCategories,
       companyLevelRules,
+      companyMembers,
+      companyPurchases,
       userFavoriteCategories,
       userProfilePreferences,
       userCompanies,
       userSubscriptions,
+      subscriptionEntitlements,
+      subscriptionRedemptions,
       promoCodes,
       promoCodeRedemptions,
       referralCampaigns,
@@ -464,7 +475,9 @@ export class AdminService {
       loginEvents,
       emailChangeRequests,
       loyaltyTransactions,
+      financeOperations,
       auditEvents,
+      adminTasks,
     ] = await Promise.all([
       this.prisma.user.findMany({ orderBy: { id: "asc" } }),
       this.prisma.category.findMany({ orderBy: { id: "asc" } }),
@@ -475,10 +488,14 @@ export class AdminService {
       this.prisma.subscriptionBundleParticipant.findMany({ orderBy: { id: "asc" } }),
       this.prisma.companyCategory.findMany({ orderBy: { id: "asc" } }),
       this.prisma.companyLevelRule.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.companyMember.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.companyPurchase.findMany({ orderBy: { id: "asc" } }),
       this.prisma.userFavoriteCategory.findMany({ orderBy: { id: "asc" } }),
       this.prisma.userProfilePreference.findMany({ orderBy: { id: "asc" } }),
       this.prisma.userCompany.findMany({ orderBy: { id: "asc" } }),
       this.prisma.userSubscription.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.subscriptionEntitlement.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.subscriptionRedemption.findMany({ orderBy: { id: "asc" } }),
       this.prisma.promoCode.findMany({ orderBy: { id: "asc" } }),
       this.prisma.promoCodeRedemption.findMany({ orderBy: { id: "asc" } }),
       this.prisma.referralCampaign.findMany({ orderBy: { id: "asc" } }),
@@ -488,7 +505,9 @@ export class AdminService {
       this.prisma.loginEvent.findMany({ orderBy: { createdAt: "asc" } }),
       this.prisma.emailChangeRequest.findMany({ orderBy: { createdAt: "asc" } }),
       this.prisma.loyaltyTransaction.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.financeOperation.findMany({ orderBy: { createdAt: "asc" } }),
       this.prisma.auditEvent.findMany({ orderBy: { createdAt: "asc" } }),
+      this.prisma.adminTask.findMany({ orderBy: { createdAt: "asc" } }),
     ]);
 
     return {
@@ -501,10 +520,14 @@ export class AdminService {
       SubscriptionBundleParticipant: subscriptionBundleParticipants,
       CompanyCategory: companyCategories,
       CompanyLevelRule: companyLevelRules,
+      CompanyMember: companyMembers,
+      CompanyPurchase: companyPurchases,
       UserFavoriteCategory: userFavoriteCategories,
       UserProfilePreference: userProfilePreferences,
       UserCompany: userCompanies,
       UserSubscription: userSubscriptions,
+      SubscriptionEntitlement: subscriptionEntitlements,
+      SubscriptionRedemption: subscriptionRedemptions,
       PromoCode: promoCodes,
       PromoCodeRedemption: promoCodeRedemptions,
       ReferralCampaign: referralCampaigns,
@@ -514,7 +537,9 @@ export class AdminService {
       LoginEvent: loginEvents,
       EmailChangeRequest: emailChangeRequests,
       LoyaltyTransaction: loyaltyTransactions,
+      FinanceOperation: financeOperations,
       AuditEvent: auditEvents,
+      AdminTask: adminTasks,
     };
   }
 
@@ -566,7 +591,7 @@ export class AdminService {
     })();
 
     const payload = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       backupId,
       createdAt: now.toISOString(),
       kind,
@@ -614,6 +639,12 @@ export class AdminService {
       `SELECT setval(pg_get_serial_sequence('"CompanyLevelRule"', 'id'), COALESCE((SELECT MAX(id) FROM "CompanyLevelRule"), 1), true)`,
     );
     await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"CompanyMember"', 'id'), COALESCE((SELECT MAX(id) FROM "CompanyMember"), 1), true)`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"CompanyPurchase"', 'id'), COALESCE((SELECT MAX(id) FROM "CompanyPurchase"), 1), true)`,
+    );
+    await this.prisma.$executeRawUnsafe(
       `SELECT setval(pg_get_serial_sequence('"UserFavoriteCategory"', 'id'), COALESCE((SELECT MAX(id) FROM "UserFavoriteCategory"), 1), true)`,
     );
     await this.prisma.$executeRawUnsafe(
@@ -624,6 +655,12 @@ export class AdminService {
     );
     await this.prisma.$executeRawUnsafe(
       `SELECT setval(pg_get_serial_sequence('"UserSubscription"', 'id'), COALESCE((SELECT MAX(id) FROM "UserSubscription"), 1), true)`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"SubscriptionEntitlement"', 'id'), COALESCE((SELECT MAX(id) FROM "SubscriptionEntitlement"), 1), true)`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"SubscriptionRedemption"', 'id'), COALESCE((SELECT MAX(id) FROM "SubscriptionRedemption"), 1), true)`,
     );
     await this.prisma.$executeRawUnsafe(
       `SELECT setval(pg_get_serial_sequence('"PromoCode"', 'id'), COALESCE((SELECT MAX(id) FROM "PromoCode"), 1), true)`,
@@ -681,10 +718,14 @@ export class AdminService {
         SubscriptionBundleParticipant?: Array<Record<string, unknown>>;
         CompanyCategory: Array<Record<string, unknown>>;
         CompanyLevelRule: Array<Record<string, unknown>>;
+        CompanyMember?: Array<Record<string, unknown>>;
+        CompanyPurchase?: Array<Record<string, unknown>>;
         UserFavoriteCategory: Array<Record<string, unknown>>;
         UserProfilePreference?: Array<Record<string, unknown>>;
         UserCompany: Array<Record<string, unknown>>;
         UserSubscription: Array<Record<string, unknown>>;
+        SubscriptionEntitlement?: Array<Record<string, unknown>>;
+        SubscriptionRedemption?: Array<Record<string, unknown>>;
         PromoCode?: Array<Record<string, unknown>>;
         PromoCodeRedemption?: Array<Record<string, unknown>>;
         ReferralCampaign?: Array<Record<string, unknown>>;
@@ -694,7 +735,9 @@ export class AdminService {
         LoginEvent: Array<Record<string, unknown>>;
         EmailChangeRequest: Array<Record<string, unknown>>;
         LoyaltyTransaction: Array<Record<string, unknown>>;
+        FinanceOperation?: Array<Record<string, unknown>>;
         AuditEvent: Array<Record<string, unknown>>;
+        AdminTask?: Array<Record<string, unknown>>;
       };
     };
     const tables = backup.tables;
@@ -716,12 +759,16 @@ export class AdminService {
         progressPercent: 42,
       });
       await tx.auditEvent.deleteMany();
+      await tx.adminTask.deleteMany();
       await tx.emailChangeRequest.deleteMany();
       await tx.loginEvent.deleteMany();
       await tx.oAuthAccount.deleteMany();
       await tx.refreshToken.deleteMany();
+      await tx.subscriptionRedemption.deleteMany();
       await tx.loyaltyTransaction.deleteMany();
+      await tx.financeOperation.deleteMany();
       await tx.userSubscription.deleteMany();
+      await tx.subscriptionEntitlement.deleteMany();
       await tx.userCompany.deleteMany();
       await tx.promoCodeRedemption.deleteMany();
       await tx.referralInvite.deleteMany();
@@ -730,6 +777,8 @@ export class AdminService {
       await tx.userFavoriteCategory.deleteMany();
       await tx.referralCampaign.deleteMany();
       await tx.companyLevelRule.deleteMany();
+      await tx.companyPurchase.deleteMany();
+      await tx.companyMember.deleteMany();
       await tx.companyCategory.deleteMany();
       await tx.companyLocation.deleteMany();
       await tx.promoCode.deleteMany();
@@ -778,6 +827,12 @@ export class AdminService {
       if (tables.CompanyLevelRule.length) {
         await tx.companyLevelRule.createMany({ data: tables.CompanyLevelRule as never });
       }
+      if (tables.CompanyMember?.length) {
+        await tx.companyMember.createMany({ data: tables.CompanyMember as never });
+      }
+      if (tables.CompanyPurchase?.length) {
+        await tx.companyPurchase.createMany({ data: tables.CompanyPurchase as never });
+      }
       if (tables.UserFavoriteCategory.length) {
         await tx.userFavoriteCategory.createMany({ data: tables.UserFavoriteCategory as never });
       }
@@ -787,6 +842,12 @@ export class AdminService {
       if (tables.UserCompany.length) await tx.userCompany.createMany({ data: tables.UserCompany as never });
       if (tables.UserSubscription.length) {
         await tx.userSubscription.createMany({ data: tables.UserSubscription as never });
+      }
+      if (tables.SubscriptionEntitlement?.length) {
+        await tx.subscriptionEntitlement.createMany({ data: tables.SubscriptionEntitlement as never });
+      }
+      if (tables.SubscriptionRedemption?.length) {
+        await tx.subscriptionRedemption.createMany({ data: tables.SubscriptionRedemption as never });
       }
       if (tables.PromoCode?.length) await tx.promoCode.createMany({ data: tables.PromoCode as never });
       if (tables.PromoCodeRedemption?.length) {
@@ -809,7 +870,11 @@ export class AdminService {
       if (tables.LoyaltyTransaction.length) {
         await tx.loyaltyTransaction.createMany({ data: tables.LoyaltyTransaction as never });
       }
+      if (tables.FinanceOperation?.length) {
+        await tx.financeOperation.createMany({ data: tables.FinanceOperation as never });
+      }
       if (tables.AuditEvent.length) await tx.auditEvent.createMany({ data: tables.AuditEvent as never });
+      if (tables.AdminTask?.length) await tx.adminTask.createMany({ data: tables.AdminTask as never });
     });
 
     this.maintenance.setRestoreStage({
@@ -1897,6 +1962,7 @@ export class AdminService {
             },
             subscriptions: {
               orderBy: { createdAt: "desc" },
+              include: { entitlements: { orderBy: { createdAt: "asc" } } },
             },
           },
         },
@@ -2097,6 +2163,7 @@ export class AdminService {
       orderBy: { createdAt: "desc" },
       include: {
         category: { select: { id: true, name: true, slug: true } },
+        entitlements: { orderBy: { createdAt: "asc" } },
       },
     });
   }
@@ -2552,7 +2619,7 @@ export class AdminService {
         companyId: user.managedCompany.id,
         categoryId: dto.categoryId ?? user.managedCompany.categoryId,
       },
-      include: { category: true, company: true },
+      include: { category: true, company: true, entitlements: true },
     });
     await this.recordManagerCompanyChangeWarning(actorUserId, {
       action: "Manager created company subscription",
@@ -2620,7 +2687,7 @@ export class AdminService {
         ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
         companyId: user.managedCompany.id,
       },
-      include: { category: true, company: true },
+      include: { category: true, company: true, entitlements: true },
     });
     await this.recordManagerCompanyChangeWarning(actorUserId, {
       action: "Manager changed company subscription",
@@ -2630,6 +2697,43 @@ export class AdminService {
       category: AuditCategory.SUBSCRIPTION,
     });
     return subscription;
+  }
+
+  async createCompanySubscriptionEntitlement(
+    companyUserUuid: string,
+    subscriptionUuid: string,
+    dto: CreateSubscriptionEntitlementDto,
+    actorUserId?: number,
+  ) {
+    const user = await this.requireCompanyUser(companyUserUuid);
+    if (!user.managedCompany) {
+      throw new BadRequestException("Company profile must exist before managing subscriptions.");
+    }
+    const subscription = await this.prisma.subscription.findUnique({ where: { uuid: subscriptionUuid } });
+    if (!subscription || subscription.companyId !== user.managedCompany.id) {
+      throw new NotFoundException("Subscription not found for this company user.");
+    }
+    const unlimited = dto.windowUnit === "UNLIMITED";
+    const entitlement = await this.prisma.subscriptionEntitlement.create({
+      data: {
+        subscriptionId: subscription.id,
+        title: dto.title.trim(),
+        description: dto.description?.trim() || null,
+        allowance: unlimited ? 1 : dto.allowance,
+        windowValue: unlimited ? 1 : dto.windowValue,
+        windowUnit: dto.windowUnit,
+      },
+    });
+    await this.recordManagerCompanyChangeWarning(actorUserId, {
+      action: "Manager created subscription benefit",
+      details: unlimited
+        ? `Added benefit "${entitlement.title}" with unlimited usage.`
+        : `Added benefit "${entitlement.title}" with limit ${entitlement.allowance}/${entitlement.windowValue} ${entitlement.windowUnit}.`,
+      targetUuid: subscriptionUuid,
+      targetLabel: subscription.name,
+      category: AuditCategory.SUBSCRIPTION,
+    });
+    return entitlement;
   }
 
   async deleteCompanySubscription(companyUserUuid: string, subscriptionUuid: string, actorUserId?: number) {

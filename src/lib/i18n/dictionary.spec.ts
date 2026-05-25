@@ -15,7 +15,7 @@ describe("i18n dictionary", () => {
   it("contains admin shell and page namespaces for future framework migration", () => {
     expect(translate("ru", "admin.nav.usersPartners")).toBe("Пользователи и партнёры");
     expect(translate("en", "admin.nav.companyVerification")).toBe("Company verification");
-    expect(translate("ru", "admin.dashboard.title")).toBe("Доброе утро, команда. Вот текущий пульс платформы.");
+    expect(translate("ru", "admin.dashboard.title")).toBe("Пульс платформы и очередь решений.");
     expect(translate("en", "admin.leads.retryDue")).toBe("Retry due Telegram sends");
     expect(translate("ru", "admin.verifications.syncStorage")).toBe("Синхронизировать");
   });

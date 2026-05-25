@@ -49,6 +49,20 @@ enum SubscriptionSpendPolicy {
   INCLUDE_WITH_BONUS
 }
 
+enum CompanyMemberRole {
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+enum SubscriptionEntitlementWindow {
+  DAY
+  WEEK
+  MONTH
+  TERM
+  UNLIMITED
+}
+
 enum AuditWorkspace {
   MANAGER
   DEVELOPER
@@ -71,6 +85,25 @@ enum AuditCategory {
 enum AuditResult {
   SUCCESS
   BLOCKED
+}
+
+enum AdminTaskSource {
+  AUDIT
+  COMPANY_VERIFICATION
+  FINANCE
+}
+
+enum AdminTaskPriority {
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum AdminTaskStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  DISMISSED
 }
 
 enum LandingLeadStatus {
@@ -180,6 +213,10 @@ model User {
   emailChangeRequests EmailChangeRequest[] @relation("EmailChangeTarget")
   requestedEmailChanges EmailChangeRequest[] @relation("EmailChangeRequester")
   managedCompany Company? @relation("CompanyOwner")
+  companyMemberships CompanyMember[]
+  companyPurchases CompanyPurchase[] @relation("CompanyPurchaseCustomer")
+  processedCompanyPurchases CompanyPurchase[] @relation("CompanyPurchaseProcessor")
+  processedSubscriptionRedemptions SubscriptionRedemption[] @relation("SubscriptionRedemptionProcessor")
   loginEvents LoginEvent[]
   loyaltyTransactions LoyaltyTransaction[]
   actorAuditEvents AuditEvent[] @relation("AuditActor")
@@ -192,6 +229,8 @@ model User {
   permissions AdminUserPermission[]
   requestedFinanceOperations FinanceOperation[] @relation("FinanceRequestedBy")
   approvedFinanceOperations FinanceOperation[] @relation("FinanceApprovedBy")
+  assignedAdminTasks AdminTask[] @relation("AdminTaskAssignee")
+  resolvedAdminTasks AdminTask[] @relation("AdminTaskResolver")
 }
 
 model AdminUserPermission {
@@ -288,6 +327,9 @@ model Company {
   loyaltyTransactions LoyaltyTransaction[]
   verificationApplications CompanyVerificationApplication[]
   financeOperations FinanceOperation[]
+  members           CompanyMember[]
+  purchases         CompanyPurchase[]
+  subscriptionRedemptions SubscriptionRedemption[]
 
   @@index([categoryId])
   @@index([verificationStatus, verificationSubmittedAt])
@@ -423,6 +465,7 @@ model Subscription {
   category       Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   userPlans      UserSubscription[]
   promoCodes     PromoCode[]
+  entitlements   SubscriptionEntitlement[]
 
   @@index([companyId])
   @@index([categoryId])
@@ -524,6 +567,44 @@ model CompanyLevelRule {
   @@unique([companyId, sortOrder])
 }
 
+model CompanyMember {
+  id        Int               @id @default(autoincrement())
+  uuid      String            @unique @default(uuid())
+  companyId Int
+  userId    Int
+  role      CompanyMemberRole @default(CASHIER)
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([userId, isActive])
+  @@index([companyId, role, isActive])
+}
+
+model CompanyPurchase {
+  id              Int      @id @default(autoincrement())
+  uuid            String   @unique @default(uuid())
+  companyId       Int
+  userId          Int
+  processedById   Int
+  amount          Decimal  @db.Decimal(12, 2)
+  cashbackPercent Decimal  @db.Decimal(5, 2)
+  pointsAwarded   Int
+  description     String?
+  createdAt       DateTime @default(now())
+
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User    @relation("CompanyPurchaseCustomer", fields: [userId], references: [id], onDelete: Cascade)
+  processedBy User    @relation("CompanyPurchaseProcessor", fields: [processedById], references: [id], onDelete: Restrict)
+
+  @@index([companyId, userId, createdAt])
+  @@index([processedById, createdAt])
+}
+
 model UserCompany {
   id               Int       @id @default(autoincrement())
   userId           Int
@@ -555,9 +636,50 @@ model UserSubscription {
 
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  redemptions    SubscriptionRedemption[]
 
   @@index([userId, status])
   @@index([subscriptionId])
+}
+
+model SubscriptionEntitlement {
+  id             Int                           @id @default(autoincrement())
+  uuid           String                        @unique @default(uuid())
+  subscriptionId Int
+  title          String
+  description    String?
+  allowance      Int                           @default(1)
+  windowValue    Int                           @default(1)
+  windowUnit     SubscriptionEntitlementWindow @default(MONTH)
+  isActive       Boolean                       @default(true)
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+
+  subscription Subscription             @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  redemptions  SubscriptionRedemption[]
+
+  @@index([subscriptionId, isActive])
+}
+
+model SubscriptionRedemption {
+  id                 Int      @id @default(autoincrement())
+  uuid               String   @unique @default(uuid())
+  userSubscriptionId Int
+  entitlementId      Int
+  companyId          Int
+  processedById      Int
+  quantity           Int      @default(1)
+  note               String?
+  redeemedAt         DateTime @default(now())
+
+  userSubscription UserSubscription       @relation(fields: [userSubscriptionId], references: [id], onDelete: Cascade)
+  entitlement      SubscriptionEntitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+  company          Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  processedBy      User                   @relation("SubscriptionRedemptionProcessor", fields: [processedById], references: [id], onDelete: Restrict)
+
+  @@index([userSubscriptionId, entitlementId, redeemedAt])
+  @@index([companyId, redeemedAt])
+  @@index([processedById, redeemedAt])
 }
 
 model UserProfilePreference {
@@ -759,6 +881,32 @@ model AuditEvent {
   @@index([targetUserId, createdAt])
   @@index([targetEmail])
   @@index([targetUuid])
+}
+
+model AdminTask {
+  id           String            @id @default(cuid())
+  uuid         String            @unique @default(uuid())
+  source       AdminTaskSource
+  sourceKey    String            @unique
+  title        String
+  description  String?           @db.Text
+  priority     AdminTaskPriority @default(NORMAL)
+  status       AdminTaskStatus   @default(OPEN)
+  targetUrl    String?
+  targetLabel  String?
+  assignedToId Int?
+  resolvedById Int?
+  assignedAt   DateTime?
+  resolvedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  assignedTo User? @relation("AdminTaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  resolvedBy User? @relation("AdminTaskResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status, priority, createdAt])
+  @@index([source, status, createdAt])
+  @@index([assignedToId, status])
 }
 
 model LandingLead {

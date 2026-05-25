@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { upsertAdminTaskForAuditEvent } from "@/lib/admin/admin-tasks";
 import { prisma } from "@/lib/prisma";
 import { sendTelegramMessage } from "@/lib/telegram/telegram-service";
 
@@ -70,7 +71,7 @@ async function createTelegramFailureIncidentIfNeeded(now = new Date()) {
   const totalFailures = queueFailures + leadFailures;
   if (totalFailures < TELEGRAM_FIRE_THRESHOLD || recentIncident > 0) return;
 
-  await prisma.auditEvent.create({
+  const incident = await prisma.auditEvent.create({
     data: {
       workspace: "DEVELOPER",
       level: "CRITICAL",
@@ -86,6 +87,7 @@ async function createTelegramFailureIncidentIfNeeded(now = new Date()) {
       tags: ["TELEGRAM", "TELEGRAM_FIRE", "DEVELOPER"],
     },
   });
+  await upsertAdminTaskForAuditEvent(incident).catch(() => undefined);
 }
 
 export async function checkTelegramDeliveryFire(now = new Date()) {

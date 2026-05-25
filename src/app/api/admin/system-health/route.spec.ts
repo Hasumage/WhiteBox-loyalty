@@ -13,6 +13,10 @@ jest.mock("@/lib/prisma", () => ({
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    adminTask: {
+      updateMany: jest.fn(),
+    },
+    $transaction: jest.fn(),
   },
 }));
 
@@ -25,7 +29,12 @@ jest.mock("@/lib/admin/require-admin-scope", () => ({
   requireAdminScope: jest.fn(),
 }));
 
+jest.mock("@/lib/admin/admin-tasks", () => ({
+  upsertAdminTaskForAuditEvent: jest.fn(),
+}));
+
 import { NextRequest } from "next/server";
+import { upsertAdminTaskForAuditEvent } from "@/lib/admin/admin-tasks";
 import { requireAdminSession } from "@/lib/admin/require-admin-session";
 import { requireAdminScope } from "@/lib/admin/require-admin-scope";
 import { prisma } from "@/lib/prisma";
@@ -34,12 +43,17 @@ import { GET, POST } from "./route";
 const mockedRequireAdminSession = jest.mocked(requireAdminSession);
 const mockedRequireAdminScope = jest.mocked(requireAdminScope);
 const mockedPrisma = jest.mocked(prisma, { shallow: false });
+const mockedUpsertTask = jest.mocked(upsertAdminTaskForAuditEvent);
 
 describe("admin system health route", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedRequireAdminSession.mockResolvedValue({ userId: 1, email: "admin@test.local", role: "SUPER_ADMIN" });
     mockedRequireAdminScope.mockResolvedValue({ ok: true, actor: {}, permission: {} } as never);
+    mockedUpsertTask.mockResolvedValue({ uuid: "task-1", sourceKey: "audit:audit-1" } as never);
+    (mockedPrisma.$transaction as unknown as jest.Mock).mockImplementation(
+      async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma),
+    );
   });
 
   it("returns system health with Telegram queue and developer incidents", async () => {
@@ -132,6 +146,7 @@ describe("admin system health route", () => {
       id: "audit-1",
       level: "CRITICAL",
       action: "Telegram delivery fire",
+      taskUuid: "task-1",
     });
   });
 
@@ -167,6 +182,12 @@ describe("admin system health route", () => {
           level: "INFO",
           tags: ["TELEGRAM", "TELEGRAM_FIRE", "RESOLVED"],
         }),
+      }),
+    );
+    expect(mockedPrisma.adminTask.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ sourceKey: "audit:audit-1" }),
+        data: expect.objectContaining({ status: "RESOLVED", resolvedById: 1 }),
       }),
     );
     expect(body).toMatchObject({ ok: true, incident: { id: "audit-1" } });

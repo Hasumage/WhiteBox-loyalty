@@ -38,8 +38,7 @@ async function readCompanyRegisterPayload(request: NextRequest): Promise<{
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
     const passportPhoto = form.get("passportPhoto");
-    const mode = String(form.get("identityVerificationMode") || "FULL");
-    validatePassportPhoto(passportPhoto, mode === "FULL");
+    validatePassportPhoto(passportPhoto, true);
     let passportUpload: StoredPassportUpload | undefined;
     if (isUploadLike(passportPhoto) && passportPhoto.size > 0) {
       const passportFile = passportPhoto as File;
@@ -57,13 +56,16 @@ async function readCompanyRegisterPayload(request: NextRequest): Promise<{
         .map(([key, value]) => [key, String(value)]),
     ) as Record<string, unknown>;
     payload.consentAccepted = payload.consentAccepted === "true" || payload.consentAccepted === "on";
+    payload.identityVerificationMode = "FULL";
     payload.passportPhotoProvided = Boolean(passportUpload);
     return { raw: payload, passportUpload };
   }
 
   const raw = (await request.json()) as Record<string, unknown>;
   raw.consentAccepted = raw.consentAccepted === true;
-  raw.passportPhotoProvided = raw.passportPhotoProvided === true;
+  raw.identityVerificationMode = "FULL";
+  // Full verification requires a real encrypted upload, not a JSON assertion.
+  raw.passportPhotoProvided = false;
   return { raw };
 }
 

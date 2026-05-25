@@ -12,6 +12,7 @@ Identity and access:
 - `LoginEvent`
 - `EmailChangeRequest`
 - `AuditEvent`
+- `AdminTask`
 
 Catalog and partners:
 
@@ -20,7 +21,11 @@ Catalog and partners:
 - `CompanyCategory`
 - `CompanyLocation`
 - `CompanyLevelRule`
+- `CompanyMember`
+- `CompanyPurchase`
 - `Subscription`
+- `SubscriptionEntitlement`
+- `SubscriptionRedemption`
 
 Client state and ledger:
 
@@ -40,7 +45,9 @@ Growth:
 ## Enum highlights
 
 - `UserRole`: `CLIENT | COMPANY | ADMIN | SUPER_ADMIN | MANAGER | SUPPORT`
-- `AccountStatus`: `ACTIVE | FROZEN_PENDING_DELETION`
+- `AccountStatus`: `ACTIVE | FROZEN_PENDING_DELETION | BLOCKED`
+- `CompanyMemberRole`: `OWNER | MANAGER | CASHIER`
+- `SubscriptionEntitlementWindow`: `DAY | WEEK | MONTH | TERM | UNLIMITED`
 - `SubscriptionStatus`: `ACTIVE | EXPIRED | CANCELED`
 - `LoyaltyTransactionType`: `EARN | SPEND`
 - `LoyaltyTransactionStatus`: `ACTIVE | EXPIRED`
@@ -49,6 +56,9 @@ Growth:
 - `AuditLevel`: `INFO | WARN | CRITICAL`
 - `AuditCategory`: `SECURITY | USER | SUBSCRIPTION | BILLING | SYSTEM`
 - `AuditResult`: `SUCCESS | BLOCKED`
+- `AdminTaskSource`: `AUDIT | COMPANY_VERIFICATION | FINANCE`
+- `AdminTaskPriority`: `NORMAL | HIGH | CRITICAL`
+- `AdminTaskStatus`: `OPEN | IN_PROGRESS | RESOLVED | DISMISSED`
 - `PromoCodeRewardType`: `POINTS | SUBSCRIPTION`
 - `ReferralInviteStatus`: `CREATED | REDEEMED | REWARDED`
 
@@ -62,9 +72,13 @@ Growth:
 - `User 1:1 Company` through `Company.ownerUserId`.
 - `User 1:N ReferralInvite` as inviter; `User 1:1 ReferralInvite` as invited user.
 - `User 1:N AuditEvent` as actor and as target.
+- `User 1:N AdminTask` as assignee and as resolver.
 - `Category 1:N Company` as primary category.
 - `Company N:M Category` through `CompanyCategory`.
 - `Company 1:N CompanyLocation`, `CompanyLevelRule`, `Subscription`, `LoyaltyTransaction`.
+- `Company 1:N CompanyMember`, `CompanyPurchase`, `SubscriptionRedemption`.
+- `Subscription 1:N SubscriptionEntitlement`.
+- `UserSubscription 1:N SubscriptionRedemption`.
 - `Company 1:N PromoCode` for points rewards.
 - `Company 1:N ReferralCampaign` for referral bonus company.
 - `Subscription 1:N PromoCode` for activation promos.
@@ -99,4 +113,13 @@ Duplicate addresses are rejected server-side per company after normalization/geo
 
 ## Backup payload
 
-DB backups serialize operational tables including users, catalog, locations, subscriptions, growth models, sessions, audit, loyalty and history. Restore is destructive and protected by maintenance mode.
+DB backup schema version `2` serializes operational tables including company memberships, purchases, subscription entitlements, redemptions, finance operations and admin tasks. Restore is destructive and protected by maintenance mode.
+
+## Admin work queue
+
+`AdminTask` is a deduplicated operational work item, not one copy per administrator:
+
+- `sourceKey` uniquely connects a task to its origin, for example `audit:<id>` or `verification:<uuid>`.
+- Open company verifications and pending finance operations synchronize into tasks and close when the linked workflow is completed.
+- Critical audit signals, including Telegram delivery fire alerts, create an actionable task leading to the source context.
+- Task visibility is filtered by the administrator's matching permission scope: audit, company verification or finance.

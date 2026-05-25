@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import {
@@ -418,17 +419,27 @@ export default function AdminSystemHealthPage() {
                   <div className="space-y-3 text-sm text-muted-foreground lg:text-right">
                     <p>{formatDate(event.createdAt, locale)}</p>
                     <p className="mt-1">{t("admin.systemHealth.actor")}: {event.actorLabel}</p>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void resolveIncident(event.id)}
-                      disabled={resolvingId === event.id}
-                      className="w-full lg:w-auto"
-                    >
-                      <CheckCircle2 className={cn("h-4 w-4", resolvingId === event.id && "animate-pulse")} />
-                      {resolvingId === event.id ? t("admin.systemHealth.resolving") : t("admin.systemHealth.resolveIncident")}
-                    </Button>
+                    <div className="flex flex-col gap-2 lg:items-end">
+                      {event.taskUuid && (
+                        <Button asChild variant="outline" size="sm" className="w-full lg:w-auto">
+                          <Link href={`/admin/tasks/${event.taskUuid}`}>
+                            <BellRing className="h-4 w-4" />
+                            {t("admin.systemHealth.openTask")}
+                          </Link>
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void resolveIncident(event.id)}
+                        disabled={resolvingId === event.id}
+                        className="w-full lg:w-auto"
+                      >
+                        <CheckCircle2 className={cn("h-4 w-4", resolvingId === event.id && "animate-pulse")} />
+                        {resolvingId === event.id ? t("admin.systemHealth.resolving") : t("admin.systemHealth.resolveIncident")}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}

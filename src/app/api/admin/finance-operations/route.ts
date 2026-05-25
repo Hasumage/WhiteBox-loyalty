@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
+import { upsertAdminTaskForFinance } from "@/lib/admin/admin-tasks";
 import { resolveEffectivePermission } from "@/lib/admin/access-control";
 import { prisma } from "@/lib/prisma";
 
@@ -110,5 +111,7 @@ export async function POST(request: NextRequest) {
     return created;
   });
 
+  // The dashboard reconciliation will recreate a missed task; do not fail a persisted payout request.
+  await upsertAdminTaskForFinance(operation).catch(() => undefined);
   return NextResponse.json(operation);
 }

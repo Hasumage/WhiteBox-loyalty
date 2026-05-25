@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CompanyEmploymentType, IdentityVerificationMode } from "@prisma/client";
+import type { CompanyEmploymentType, IdentityVerificationMode, Prisma } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
 import { sendTelegramMessageQueued } from "@/lib/telegram/telegram-queue";
@@ -39,6 +39,10 @@ type ApplicationPayload = {
   consentAccepted: boolean;
 };
 
+type ParseApplicationOptions = {
+  existingCompany?: boolean;
+};
+
 export function normalizeText(value: unknown, max = MAX_TEXT) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
 }
@@ -63,15 +67,16 @@ function ageFromBirthDate(birthDate: Date, now = new Date()) {
   return age;
 }
 
-export function parseCompanyApplicationPayload(input: Record<string, unknown>): ApplicationPayload {
+export function parseCompanyApplicationPayload(
+  input: Record<string, unknown>,
+  options: ParseApplicationOptions = {},
+): ApplicationPayload {
   const employmentType = normalizeText(input.employmentType) as CompanyEmploymentType;
   if (employmentType !== "SELF_EMPLOYED" && employmentType !== "INDIVIDUAL_ENTREPRENEUR") {
     throw new Error("Choose employment type.");
   }
-  const identityVerificationMode = normalizeText(input.identityVerificationMode) as IdentityVerificationMode || "FULL";
-  if (identityVerificationMode !== "FULL" && identityVerificationMode !== "DEFERRED") {
-    throw new Error("Choose identity verification mode.");
-  }
+  // Every new partner application requires full verification. The enum stays for historical records.
+  const identityVerificationMode: IdentityVerificationMode = "FULL";
 
   const legalInn = onlyDigits(input.legalInn, 12);
   if (employmentType === "SELF_EMPLOYED" && legalInn.length !== 12) {
@@ -94,16 +99,17 @@ export function parseCompanyApplicationPayload(input: Record<string, unknown>): 
   const birthDate = parseBirthDate(input.birthDate);
   const age = ageFromBirthDate(birthDate);
   const passportPhotoProvided = input.passportPhotoProvided === true;
-  const verificationDeferralReason = normalizeText(input.verificationDeferralReason, 1200);
 
   if (!contactName || !contactEmail || !companyName || !businessCategory || !legalFirstName || !legalLastName) {
     throw new Error("Fill in required fields.");
   }
-  if (password.length < 8 || password.length > 72) {
-    throw new Error("Password must be between 8 and 72 characters.");
-  }
-  if (password !== passwordConfirm) {
-    throw new Error("Passwords do not match.");
+  if (!options.existingCompany) {
+    if (password.length < 8 || password.length > 72) {
+      throw new Error("Password must be between 8 and 72 characters.");
+    }
+    if (password !== passwordConfirm) {
+      throw new Error("Passwords do not match.");
+    }
   }
   if (age < 16) {
     throw new Error("Company access is available only for applicants aged 16 or older.");
@@ -114,25 +120,19 @@ export function parseCompanyApplicationPayload(input: Record<string, unknown>): 
   if (input.consentAccepted !== true) {
     throw new Error("Consent is required.");
   }
-  let passportData: ManualPassportData | undefined;
-  let encryptedPassportData: EncryptedPassportData | undefined;
-  if (identityVerificationMode === "FULL") {
-    const series = onlyDigits(input.passportSeries, 4);
-    const number = onlyDigits(input.passportNumber, 6);
-    const issuedBy = normalizeText(input.passportIssuedBy, 240);
-    const issuedAt = normalizeText(input.passportIssuedAt, 20);
-    const departmentCode = onlyDigits(input.passportDepartmentCode, 6);
-    if (series.length !== 4 || number.length !== 6 || !issuedBy || !issuedAt) {
-      throw new Error("Fill in passport data or choose deferred verification.");
-    }
-    if (!passportPhotoProvided) {
-      throw new Error("Passport photo is required for full verification.");
-    }
-    passportData = { series, number, issuedBy, issuedAt, departmentCode: departmentCode || undefined };
-    encryptedPassportData = encryptPassportData(passportData);
-  } else if (verificationDeferralReason.length < 40) {
-    throw new Error("Tell us about your business and why you want to postpone passport verification.");
+  const series = onlyDigits(input.passportSeries, 4);
+  const number = onlyDigits(input.passportNumber, 6);
+  const issuedBy = normalizeText(input.passportIssuedBy, 240);
+  const issuedAt = normalizeText(input.passportIssuedAt, 20);
+  const departmentCode = onlyDigits(input.passportDepartmentCode, 6);
+  if (series.length !== 4 || number.length !== 6 || !issuedBy || !issuedAt) {
+    throw new Error("Fill in passport data.");
   }
+  if (!passportPhotoProvided) {
+    throw new Error("Passport photo is required for full verification.");
+  }
+  const passportData: ManualPassportData = { series, number, issuedBy, issuedAt, departmentCode: departmentCode || undefined };
+  const encryptedPassportData: EncryptedPassportData = encryptPassportData(passportData);
 
   return {
     employmentType,
@@ -159,7 +159,7 @@ export function parseCompanyApplicationPayload(input: Record<string, unknown>): 
     payoutCardLast4: undefined,
     passportData,
     encryptedPassportData,
-    verificationDeferralReason: verificationDeferralReason || undefined,
+    verificationDeferralReason: undefined,
     passportPhotoProvided,
     consentAccepted: true,
   };
@@ -183,6 +183,63 @@ async function uniqueCompanySlug(name: string) {
     index += 1;
   }
   return candidate;
+}
+
+function applicationData(
+  payload: ApplicationPayload,
+  companyId: number,
+  params: { ipAddress?: string | null; userAgent?: string | null },
+) {
+  return {
+    companyId,
+    employmentType: payload.employmentType,
+    identityVerificationMode: payload.identityVerificationMode,
+    contactName: payload.contactName,
+    contactEmail: payload.contactEmail,
+    contactTelegram: payload.contactTelegram ?? null,
+    companyName: payload.companyName,
+    businessCategory: payload.businessCategory,
+    legalFirstName: payload.legalFirstName,
+    legalMiddleName: payload.legalMiddleName ?? null,
+    legalLastName: payload.legalLastName,
+    birthDate: payload.birthDate,
+    legalFullName: payload.legalFullName,
+    legalInn: payload.legalInn,
+    legalOgrnip: payload.legalOgrnip ?? null,
+    legalRegistrationRegion: payload.legalRegistrationRegion ?? null,
+    payoutBankName: payload.payoutBankName ?? null,
+    payoutBik: payload.payoutBik ?? null,
+    payoutAccount: payload.payoutAccount ?? null,
+    payoutCorrespondentAccount: payload.payoutCorrespondentAccount ?? null,
+    payoutCardLast4: payload.payoutCardLast4 ?? null,
+    passportEncryptedPayload: payload.encryptedPassportData?.payload ?? null,
+    passportEncryptionIv: payload.encryptedPassportData?.iv ?? null,
+    passportEncryptionTag: payload.encryptedPassportData?.tag ?? null,
+    passportLast4: payload.passportData?.number.slice(-4) ?? null,
+    verificationDeferralReason: payload.verificationDeferralReason ?? null,
+    passportDataDeletedAt: null,
+    consentAcceptedAt: new Date(),
+    ipAddress: params.ipAddress ?? null,
+    userAgent: params.userAgent ?? null,
+  };
+}
+
+async function createPassportRecord(
+  create: (data: Prisma.PassportVerificationFileUncheckedCreateInput) => PromiseLike<unknown>,
+  applicationId: number,
+  passportUpload?: StoredPassportUpload,
+) {
+  if (!passportUpload) return;
+  await create({
+    applicationId,
+    storageKey: passportUpload.storageKey,
+    originalName: passportUpload.originalName ?? null,
+    mimeType: passportUpload.mimeType,
+    size: passportUpload.size,
+    sha256: passportUpload.sha256,
+    encryptionIv: passportUpload.encryptionIv,
+    encryptionTag: passportUpload.encryptionTag,
+  });
 }
 
 export async function createCompanyVerificationApplication(params: {
@@ -221,7 +278,7 @@ export async function createCompanyVerificationApplication(params: {
         ownerUserId: user.id,
         employmentType: params.payload.employmentType,
         identityVerificationMode: params.payload.identityVerificationMode,
-        identityVerificationCompleted: params.payload.identityVerificationMode === "FULL",
+        identityVerificationCompleted: false,
         verificationStatus: "SUBMITTED",
         legalFirstName: params.payload.legalFirstName,
         legalMiddleName: params.payload.legalMiddleName ?? null,
@@ -250,57 +307,96 @@ export async function createCompanyVerificationApplication(params: {
       },
     });
 
-    const application = await tx.companyVerificationApplication.create({
+    await tx.companyMember.create({
       data: {
+        userId: user.id,
         companyId: company.id,
-        employmentType: params.payload.employmentType,
-        identityVerificationMode: params.payload.identityVerificationMode,
-        contactName: params.payload.contactName,
-        contactEmail: params.payload.contactEmail,
-        contactTelegram: params.payload.contactTelegram ?? null,
-        companyName: params.payload.companyName,
-        businessCategory: params.payload.businessCategory,
-        legalFirstName: params.payload.legalFirstName,
-        legalMiddleName: params.payload.legalMiddleName ?? null,
-        legalLastName: params.payload.legalLastName,
-        birthDate: params.payload.birthDate,
-        legalFullName: params.payload.legalFullName,
-        legalInn: params.payload.legalInn,
-        legalOgrnip: params.payload.legalOgrnip ?? null,
-        legalRegistrationRegion: params.payload.legalRegistrationRegion ?? null,
-        payoutBankName: params.payload.payoutBankName ?? null,
-        payoutBik: params.payload.payoutBik ?? null,
-        payoutAccount: params.payload.payoutAccount ?? null,
-        payoutCorrespondentAccount: params.payload.payoutCorrespondentAccount ?? null,
-        payoutCardLast4: params.payload.payoutCardLast4 ?? null,
-        passportEncryptedPayload: params.payload.encryptedPassportData?.payload ?? null,
-        passportEncryptionIv: params.payload.encryptedPassportData?.iv ?? null,
-        passportEncryptionTag: params.payload.encryptedPassportData?.tag ?? null,
-        passportLast4: params.payload.passportData?.number.slice(-4) ?? null,
-        verificationDeferralReason: params.payload.verificationDeferralReason ?? null,
-        passportDataDeletedAt: null,
-        consentAcceptedAt: new Date(),
-        ipAddress: params.ipAddress ?? null,
-        userAgent: params.userAgent ?? null,
+        role: "OWNER",
       },
     });
 
-    if (params.passportUpload) {
-      await tx.passportVerificationFile.create({
-        data: {
-          applicationId: application.id,
-          storageKey: params.passportUpload.storageKey,
-          originalName: params.passportUpload.originalName ?? null,
-          mimeType: params.passportUpload.mimeType,
-          size: params.passportUpload.size,
-          sha256: params.passportUpload.sha256,
-          encryptionIv: params.passportUpload.encryptionIv,
-          encryptionTag: params.passportUpload.encryptionTag,
-        },
-      });
-    }
+    const application = await tx.companyVerificationApplication.create({
+      data: applicationData(params.payload, company.id, params),
+    });
+
+    await createPassportRecord((data) => tx.passportVerificationFile.create({ data }), application.id, params.passportUpload);
 
     return { user, company, application };
+  });
+}
+
+export async function createExistingCompanyVerificationApplication(params: {
+  userId: number;
+  payload: ApplicationPayload;
+  passportUpload?: StoredPassportUpload;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}) {
+  const membership = await prisma.companyMember.findFirst({
+    where: { userId: params.userId, isActive: true },
+    include: {
+      user: { select: { name: true, email: true } },
+      company: {
+        select: {
+          id: true,
+          name: true,
+          identityVerificationCompleted: true,
+          verificationStatus: true,
+        },
+      },
+    },
+  });
+  if (!membership || membership.role !== "OWNER") {
+    throw new Error("Only the company owner can submit verification.");
+  }
+  if (membership.company.identityVerificationCompleted && membership.company.verificationStatus === "APPROVED") {
+    throw new Error("Company verification is already complete.");
+  }
+
+  const openApplication = await prisma.companyVerificationApplication.findFirst({
+    where: {
+      companyId: membership.company.id,
+      status: { in: ["SUBMITTED", "REVIEWING"] },
+    },
+    select: { uuid: true },
+  });
+  if (openApplication) {
+    throw new Error("A verification request is already being reviewed.");
+  }
+
+  const payload: ApplicationPayload = {
+    ...params.payload,
+    contactName: membership.user.name,
+    contactEmail: membership.user.email.toLowerCase(),
+    companyName: membership.company.name,
+  };
+
+  return prisma.$transaction(async (tx) => {
+    const company = await tx.company.update({
+      where: { id: membership.company.id },
+      data: {
+        employmentType: payload.employmentType,
+        identityVerificationMode: payload.identityVerificationMode,
+        identityVerificationCompleted: false,
+        verificationStatus: "SUBMITTED",
+        legalFirstName: payload.legalFirstName,
+        legalMiddleName: payload.legalMiddleName ?? null,
+        legalLastName: payload.legalLastName,
+        birthDate: payload.birthDate,
+        legalFullName: payload.legalFullName,
+        legalInn: payload.legalInn,
+        passportVerificationStatus: "SUBMITTED",
+        passportLast4: null,
+        passportDataDeletedAt: null,
+        verificationSubmittedAt: new Date(),
+        verificationReviewedAt: null,
+      },
+    });
+    const application = await tx.companyVerificationApplication.create({
+      data: applicationData(payload, membership.company.id, params),
+    });
+    await createPassportRecord((data) => tx.passportVerificationFile.create({ data }), application.id, params.passportUpload);
+    return { company, application };
   });
 }
 

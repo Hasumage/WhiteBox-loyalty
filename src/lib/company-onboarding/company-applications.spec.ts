@@ -3,6 +3,8 @@ jest.mock("@/lib/prisma", () => ({
     category: { findFirst: jest.fn() },
     user: { findUnique: jest.fn() },
     company: { findUnique: jest.fn() },
+    companyMember: { findFirst: jest.fn() },
+    companyVerificationApplication: { findFirst: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -16,7 +18,12 @@ jest.mock("bcrypt", () => ({
 
 import { prisma } from "@/lib/prisma";
 import * as bcrypt from "bcrypt";
-import { createCompanyVerificationApplication, onlyDigits, parseCompanyApplicationPayload } from "./company-applications";
+import {
+  createCompanyVerificationApplication,
+  createExistingCompanyVerificationApplication,
+  onlyDigits,
+  parseCompanyApplicationPayload,
+} from "./company-applications";
 
 const mockedPrisma = jest.mocked(prisma, { shallow: false });
 const mockedBcrypt = jest.mocked(bcrypt);
@@ -61,6 +68,12 @@ describe("company application helpers", () => {
     expect(() => parseCompanyApplicationPayload({ ...base, passwordConfirm: "another-password" })).toThrow("Passwords do not match");
   });
 
+  it("does not ask an existing company owner to create a second password", () => {
+    const payload = parseCompanyApplicationPayload({ ...base, password: "", passwordConfirm: "" }, { existingCompany: true });
+
+    expect(payload.contactEmail).toBe("max@example.com");
+  });
+
   it("requires 12 digit INN for self-employed", () => {
     expect(() => parseCompanyApplicationPayload({ ...base, legalInn: "123" })).toThrow("12 digits");
   });
@@ -77,8 +90,8 @@ describe("company application helpers", () => {
     expect(payload.payoutBankName).toBeUndefined();
   });
 
-  it("allows deferred verification with a business explanation", () => {
-    const payload = parseCompanyApplicationPayload({
+  it("does not allow legacy deferred mode to bypass full verification", () => {
+    expect(() => parseCompanyApplicationPayload({
       ...base,
       identityVerificationMode: "DEFERRED",
       passportSeries: "",
@@ -87,10 +100,7 @@ describe("company application helpers", () => {
       passportIssuedAt: "",
       passportPhotoProvided: false,
       verificationDeferralReason: "I want to test the cabinet first and will provide passport verification before subscriptions and payouts.",
-    });
-
-    expect(payload.identityVerificationMode).toBe("DEFERRED");
-    expect(payload.encryptedPassportData).toBeUndefined();
+    })).toThrow("passport data");
   });
 
   it("requires passport data and photo for full verification", () => {
@@ -112,6 +122,7 @@ describe("company application helpers", () => {
       user: { create: jest.fn().mockResolvedValue({ id: 41, email: "max@example.com" }) },
       company: { create: jest.fn().mockResolvedValue({ id: 77 }) },
       userCompany: { create: jest.fn().mockResolvedValue({ id: 1 }) },
+      companyMember: { create: jest.fn().mockResolvedValue({ id: 2, role: "OWNER" }) },
       companyVerificationApplication: { create: jest.fn().mockResolvedValue({ id: 5, uuid: "application-1" }) },
       passportVerificationFile: { create: jest.fn() },
     };
@@ -132,9 +143,62 @@ describe("company application helpers", () => {
       data: expect.objectContaining({
         ownerUserId: 41,
         isActive: false,
+        identityVerificationCompleted: false,
+        verificationStatus: "SUBMITTED",
       }),
     });
     expect(tx.userCompany.create).toHaveBeenCalledWith({ data: { userId: 41, companyId: 77 } });
+    expect(tx.companyMember.create).toHaveBeenCalledWith({
+      data: { userId: 41, companyId: 77, role: "OWNER" },
+    });
     expect(result.user.id).toBe(41);
+  });
+
+  it("creates a verification request for an existing owner without duplicating the company account", async () => {
+    const payload = parseCompanyApplicationPayload({ ...base, password: "", passwordConfirm: "" }, { existingCompany: true });
+    mockedPrisma.companyMember.findFirst.mockResolvedValue({
+      role: "OWNER",
+      user: { name: "Current Owner", email: "owner@example.com" },
+      company: { id: 77, name: "Aurora Coffee", identityVerificationCompleted: false, verificationStatus: "DRAFT" },
+    } as never);
+    mockedPrisma.companyVerificationApplication.findFirst.mockResolvedValue(null);
+
+    const tx = {
+      company: { update: jest.fn().mockResolvedValue({ id: 77, verificationStatus: "SUBMITTED" }) },
+      companyVerificationApplication: { create: jest.fn().mockResolvedValue({ id: 8, uuid: "existing-request" }) },
+      passportVerificationFile: { create: jest.fn() },
+    };
+    mockedPrisma.$transaction.mockImplementation(async (callback) => callback(tx as never));
+
+    const result = await createExistingCompanyVerificationApplication({ userId: 41, payload });
+
+    expect(mockedBcrypt.hash).not.toHaveBeenCalled();
+    expect(tx.company.update).toHaveBeenCalledWith({
+      where: { id: 77 },
+      data: expect.objectContaining({ verificationStatus: "SUBMITTED", identityVerificationCompleted: false }),
+    });
+    expect(tx.companyVerificationApplication.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        companyId: 77,
+        companyName: "Aurora Coffee",
+        contactEmail: "owner@example.com",
+      }),
+    });
+    expect(result.application.uuid).toBe("existing-request");
+  });
+
+  it("does not create a second open verification request for the same company", async () => {
+    const payload = parseCompanyApplicationPayload({ ...base, password: "", passwordConfirm: "" }, { existingCompany: true });
+    mockedPrisma.companyMember.findFirst.mockResolvedValue({
+      role: "OWNER",
+      user: { name: "Current Owner", email: "owner@example.com" },
+      company: { id: 77, name: "Aurora Coffee", identityVerificationCompleted: false, verificationStatus: "SUBMITTED" },
+    } as never);
+    mockedPrisma.companyVerificationApplication.findFirst.mockResolvedValue({ uuid: "active-request" } as never);
+
+    await expect(createExistingCompanyVerificationApplication({ userId: 41, payload })).rejects.toThrow(
+      "already being reviewed",
+    );
+    expect(mockedPrisma.$transaction).not.toHaveBeenCalled();
   });
 });

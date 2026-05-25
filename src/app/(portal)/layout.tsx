@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   Menu,
   MoreHorizontal,
+  QrCode,
   X,
   Send,
   ServerCrash,
@@ -86,9 +87,12 @@ const adminMenu: AdminMenuSection[] = [
 ] satisfies AdminMenuSection[];
 
 const companyMenu: NavItem[] = [
-  { href: "/company", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/company/payments", label: "Payments", icon: CreditCard },
-  { href: "/company/compliance", label: "Compliance", icon: FileCheck },
+  { href: "/company", label: "Дашборд", icon: LayoutDashboard },
+  { href: "/company/clients", label: "Касса и клиенты", icon: QrCode },
+  { href: "/company/subscriptions", label: "Подписки", icon: Gift },
+  { href: "/company/team", label: "Команда", icon: Users },
+  { href: "/company/payments", label: "Финансы", icon: CreditCard },
+  { href: "/company/compliance", label: "Профиль компании", icon: FileCheck },
 ];
 
 type MenuNotifications = {
@@ -134,7 +138,7 @@ export default function PortalLayout({
         .filter((item) => currentRole !== "SUPPORT" || item.href === "/admin/support")
         .map((item) => ({ ...item, label: t(item.labelKey) }))
     : companyMenu;
-  const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : "Company");
+  const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : "Кабинет компании");
 
   const adminSections = useMemo(
     () =>
@@ -192,7 +196,7 @@ export default function PortalLayout({
             <WhiteBoxLogo />
             <div>
               <p className="text-xl font-semibold tracking-tight">WhiteBox</p>
-              <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.workspace") : "Company workspace"}</p>
+              <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.workspace") : "Кабинет партнёра"}</p>
             </div>
           </Link>
           {isAdmin && <LanguageSwitcher locale={locale} onChange={setLocale} className="mb-5" />}
@@ -234,8 +238,29 @@ export default function PortalLayout({
               })}
             </div>
           ) : (
-            <div className="space-y-1">
-              {menu.map(({ href, label, icon: Icon }) => {
+            <div className="space-y-5">
+              <div>
+                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Рабочий стол</p>
+                {menu.slice(0, 3).map(({ href, label, icon: Icon }) => {
+                  const active = isItemActive(href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors lg:flex",
+                        active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/20",
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {label}
+                    </Link>
+                  );
+                })}
+              </div>
+              <div>
+                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Управление</p>
+                {menu.slice(3).map(({ href, label, icon: Icon }) => {
                 const active = isItemActive(href);
                 return (
                   <Link
@@ -250,7 +275,8 @@ export default function PortalLayout({
                     {label}
                   </Link>
                 );
-              })}
+                })}
+              </div>
             </div>
           )}
         </aside>
@@ -327,7 +353,7 @@ export default function PortalLayout({
                 <WhiteBoxLogo className="h-10 w-10" />
                 <div>
                   <p className="font-semibold">WhiteBox</p>
-                  <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.navigation") : "Company navigation"}</p>
+                  <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.navigation") : "Кабинет партнёра"}</p>
                 </div>
               </div>
               {isAdmin && <LanguageSwitcher locale={locale} onChange={setLocale} />}
