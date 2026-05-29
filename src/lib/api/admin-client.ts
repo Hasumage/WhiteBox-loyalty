@@ -336,6 +336,25 @@ export type AdminFinanceOperation = {
   company: { id: number; slug: string; name: string } | null;
   requestedBy: { id: number; uuid: string; email: string; name: string } | null;
   approvedBy: { id: number; uuid: string; email: string; name: string } | null;
+  companySnapshot?: {
+    subscriptionGross: number;
+    recognizedRevenue: number;
+    potentialRevenue: number;
+    dailyRevenue: number;
+    activeSubscriptions: number;
+    reservedPayouts: number;
+    paidPayouts: number;
+    availableForPayout: number;
+    availableBeforeThisRequest: number;
+    requestCovered: boolean | null;
+    sources: Array<{
+      name: string;
+      activeSubscriptions: number;
+      dailyRevenue: number;
+      recognizedRevenue: number;
+      potentialRevenue: number;
+    }>;
+  } | null;
 };
 
 export type AdminBackupItem = {
@@ -772,6 +791,33 @@ export type AdminUserDetail = {
   }>;
 };
 
+export type AdminProfileStatusRarity = "RARE" | "EPIC" | "LEGENDARY";
+
+export type AdminProfileStatus = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  rarity: AdminProfileStatusRarity;
+  icon: string;
+  isActive: boolean;
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+  unlockCount: number;
+  unlocked?: boolean;
+  unlockedAt?: string | null;
+  seenAt?: string | null;
+  source?: string | null;
+  selected?: boolean;
+};
+
+export type AdminProfileStatusResponse = {
+  statuses: AdminProfileStatus[];
+  selectedStatusId: string | null;
+  userFound: boolean | null;
+};
+
 export type AdminUpdateUserInput = {
   name?: string;
   role?: AdminRole;
@@ -930,6 +976,50 @@ export async function adminRequestEmailChange(uuid: string, newEmail: string) {
       previewUrl?: string;
     },
   };
+}
+
+export async function adminListProfileStatuses(userUuid?: string) {
+  const params = new URLSearchParams();
+  if (userUuid) params.set("userUuid", userUuid);
+  const suffix = params.toString() ? `?${params}` : "";
+  const res = await fetch(`/api/admin/profile-statuses${suffix}`, { headers: authHeaders() });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to load profile statuses" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminProfileStatusResponse };
+}
+
+export async function adminCreateProfileStatus(input: {
+  title: string;
+  description: string;
+  rarity: AdminProfileStatusRarity;
+  icon?: string;
+  slug?: string;
+}) {
+  const res = await fetch("/api/admin/profile-statuses", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to create profile status" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminProfileStatus };
+}
+
+export async function adminGrantProfileStatus(userUuid: string, statusId: string) {
+  const res = await fetch(`/api/admin/users/${userUuid}/profile-statuses`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ statusId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to grant profile status" };
+  }
+  return { ok: true as const, data: await res.json() };
 }
 
 export async function adminListCategories() {
@@ -1171,6 +1261,13 @@ export async function adminCreateCompanySubscription(uuid: string, input: {
   promoEndsAt?: string | null;
   slug?: string;
   categoryId?: number;
+  entitlements: Array<{
+    title: string;
+    description?: string;
+    allowance: number;
+    windowValue: number;
+    windowUnit: "DAY" | "WEEK" | "MONTH" | "TERM" | "UNLIMITED";
+  }>;
 }) {
   const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/subscriptions`, {
     method: "POST",

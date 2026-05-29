@@ -12,6 +12,7 @@ import {
   FileBadge2,
   Mail,
   MapPin,
+  LockKeyhole,
   Phone,
   ShieldCheck,
   ShieldX,
@@ -104,6 +105,7 @@ export default function CompanyVerificationDetailPage({
   const [auditRows, setAuditRows] = useState<AdminAuditRow[]>([]);
   const [showAudit, setShowAudit] = useState(false);
   const passportFile = application?.passportFiles?.[0];
+  const decisionFinal = application?.status === "APPROVED" || application?.status === "REJECTED";
 
   const telegramHref = useMemo(() => {
     if (!application?.contactTelegram) return undefined;
@@ -179,17 +181,29 @@ export default function CompanyVerificationDetailPage({
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" disabled={saving} onClick={() => updateStatus("REVIEWING")}>
-            <Clock3 className="h-4 w-4" /> {t("admin.verifications.detail.markReviewing")}
-          </Button>
-          <Button disabled={saving} onClick={() => updateStatus("APPROVED")}>
-            <CheckCircle2 className="h-4 w-4" /> {t("admin.verifications.detail.approve")}
-          </Button>
-          <Button variant="destructive" disabled={saving} onClick={() => updateStatus("REJECTED")}>
-            <XCircle className="h-4 w-4" /> {t("admin.verifications.detail.reject")}
-          </Button>
-        </div>
+        {decisionFinal ? (
+          <div className="flex max-w-sm items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3">
+            <span className="rounded-xl border border-cyan-200/15 bg-cyan-200/[0.06] p-2 text-cyan-100">
+              <LockKeyhole className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold">{t("admin.verifications.detail.finalDecision")}</p>
+              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{t("admin.verifications.detail.finalDecisionHint")}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" disabled={saving} onClick={() => updateStatus("REVIEWING")}>
+              <Clock3 className="h-4 w-4" /> {t("admin.verifications.detail.markReviewing")}
+            </Button>
+            <Button disabled={saving} onClick={() => updateStatus("APPROVED")}>
+              <CheckCircle2 className="h-4 w-4" /> {t("admin.verifications.detail.approve")}
+            </Button>
+            <Button variant="destructive" disabled={saving} onClick={() => updateStatus("REJECTED")}>
+              <XCircle className="h-4 w-4" /> {t("admin.verifications.detail.reject")}
+            </Button>
+          </div>
+        )}
       </div>
 
       {(error || notice) && (

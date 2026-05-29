@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, Clock3, FilePlus2, ShieldCheck } from "lucide-react";
+import { Banknote, Building2, CircleAlert, CircleCheckBig, Clock3, FilePlus2, ShieldCheck, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -139,6 +139,11 @@ export default function AdminFinancePage() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     {item.requestedBy?.email ?? t("admin.finance.system")} · {new Date(item.createdAt).toLocaleString(locale)}
                   </p>
+                  {item.company && (
+                    <p className="mt-2 flex items-center gap-1.5 text-sm text-cyan-100">
+                      <Building2 className="h-4 w-4" /> {item.company.name}
+                    </p>
+                  )}
                   {item.details && <p className="mt-2 text-sm text-muted-foreground">{item.details}</p>}
                 </div>
                 <p className="font-semibold">{money(item.amount, item.currency, locale)}</p>
@@ -147,15 +152,68 @@ export default function AdminFinancePage() {
                   <ShieldCheck className="h-4 w-4" />
                   {item.approvedBy?.email ?? t("admin.finance.approvalRequired")}
                 </div>
+                {item.companySnapshot ? (
+                  <section className="space-y-3 rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.035] p-4 lg:col-span-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="flex items-center gap-2 font-semibold">
+                        <Wallet className="h-4 w-4 text-cyan-100" /> {t("admin.finance.companyPosition")}
+                      </h3>
+                      {item.companySnapshot.requestCovered ? (
+                        <Badge className="gap-1 border-emerald-300/25 bg-emerald-300/10 text-emerald-100">
+                          <CircleCheckBig className="h-3.5 w-3.5" /> {t("admin.finance.covered")}
+                        </Badge>
+                      ) : (
+                        <Badge className="gap-1 border-red-300/25 bg-red-300/10 text-red-100">
+                          <CircleAlert className="h-3.5 w-3.5" /> {t("admin.finance.notCovered")}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                      {[
+                        [t("admin.finance.availableBeforeRequest"), money(String(item.companySnapshot.availableBeforeThisRequest), item.currency, locale)],
+                        [t("admin.finance.earned"), money(String(item.companySnapshot.recognizedRevenue), item.currency, locale)],
+                        [t("admin.finance.reservedAfter"), money(String(item.companySnapshot.reservedPayouts), item.currency, locale)],
+                        [t("admin.finance.activeSubscriptions"), String(item.companySnapshot.activeSubscriptions)],
+                        [t("admin.finance.futureRevenue"), money(String(item.companySnapshot.potentialRevenue), item.currency, locale)],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-xl border border-white/8 bg-black/15 p-3">
+                          <p className="text-xs text-muted-foreground">{label}</p>
+                          <p className="mt-1 font-semibold">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs leading-5 text-muted-foreground">{t("admin.finance.revenueSource")}</p>
+                    {item.companySnapshot.sources.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {item.companySnapshot.sources.map((source) => (
+                          <Badge key={source.name} variant="outline" className="px-3 py-1.5 font-normal">
+                            {source.name}: {source.activeSubscriptions} · {money(String(source.dailyRevenue), item.currency, locale)} {t("admin.finance.perDay")}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                ) : (
+                  <p className="rounded-xl border border-white/8 bg-white/[0.025] p-3 text-xs text-muted-foreground lg:col-span-4">
+                    {t("admin.finance.internalRequest")}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2 lg:col-span-4">
                   {item.status === "PENDING_APPROVAL" && (
                     <>
-                      <Button size="sm" variant="secondary" onClick={() => setStatus(item.uuid, "APPROVED")}>{t("admin.finance.approve")}</Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={item.companySnapshot?.requestCovered === false}
+                        onClick={() => setStatus(item.uuid, "APPROVED")}
+                      >
+                        {t("admin.finance.approve")}
+                      </Button>
                       <Button size="sm" variant="destructive" onClick={() => setStatus(item.uuid, "REJECTED")}>{t("admin.finance.reject")}</Button>
                     </>
                   )}
                   {item.status === "APPROVED" && (
-                    <Button size="sm" onClick={() => setStatus(item.uuid, "PAID")}>{t("admin.finance.markPaid")}</Button>
+                    <Button size="sm" disabled={item.companySnapshot?.requestCovered === false} onClick={() => setStatus(item.uuid, "PAID")}>{t("admin.finance.markPaid")}</Button>
                   )}
                 </div>
               </div>

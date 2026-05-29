@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { upsertAdminTaskForFinance } from "@/lib/admin/admin-tasks";
 import { resolveEffectivePermission } from "@/lib/admin/access-control";
+import { calculateCompanyFinancialSnapshot, evaluatePayoutCoverage } from "@/lib/finance/company-finance";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -47,7 +48,56 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  return NextResponse.json({ items });
+  const companyIds = [...new Set(items.flatMap((item) => (item.companyId ? [item.companyId] : [])))];
+  if (companyIds.length === 0) return NextResponse.json({ items });
+
+  const now = new Date();
+  const [subscriptions, companyPayouts] = await Promise.all([
+    prisma.userSubscription.findMany({
+      where: {
+        status: { in: ["ACTIVE", "EXPIRED"] },
+        subscription: { companyId: { in: companyIds } },
+      },
+      select: {
+        status: true,
+        activatedAt: true,
+        expiresAt: true,
+        subscription: { select: { companyId: true, name: true, price: true } },
+      },
+    }),
+    prisma.financeOperation.findMany({
+      where: {
+        companyId: { in: companyIds },
+        type: "PAYOUT_REQUEST",
+        status: { in: ["PENDING_APPROVAL", "APPROVED", "PAID"] },
+      },
+      select: { companyId: true, type: true, status: true, amount: true },
+    }),
+  ]);
+  const revenueRows = subscriptions.map((item) => ({
+    companyId: item.subscription.companyId!,
+    name: item.subscription.name,
+    price: item.subscription.price,
+    status: item.status,
+    activatedAt: item.activatedAt,
+    expiresAt: item.expiresAt,
+  }));
+  const snapshots = new Map(
+    companyIds.map((companyId) => [
+      companyId,
+      calculateCompanyFinancialSnapshot(companyId, revenueRows, companyPayouts, now),
+    ]),
+  );
+
+  return NextResponse.json({
+    items: items.map((item) => ({
+      ...item,
+      companySnapshot:
+        item.companyId && snapshots.has(item.companyId)
+          ? evaluatePayoutCoverage(snapshots.get(item.companyId)!, item)
+          : null,
+    })),
+  });
 }
 
 export async function POST(request: NextRequest) {

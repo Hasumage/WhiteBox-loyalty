@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
+import { categoryName } from "@/lib/i18n/categories";
+import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
 
 type CategoryOption = {
   id: number;
+  slug?: string;
   name: string;
   icon: string;
 };
@@ -30,6 +33,7 @@ export function CategoryMultiSelect({
   id,
   className,
 }: CategoryMultiSelectProps) {
+  const { t } = useI18n("ru");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -37,8 +41,8 @@ export function CategoryMultiSelect({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return options;
-    return options.filter((item) => item.name.toLowerCase().includes(q));
-  }, [options, query]);
+    return options.filter((item) => `${item.name} ${categoryName({ slug: item.slug ?? "", name: item.name }, t)}`.toLowerCase().includes(q));
+  }, [options, query, t]);
 
   const selectedItems = useMemo(
     () => options.filter((item) => value.includes(item.id)),
@@ -88,7 +92,7 @@ export function CategoryMultiSelect({
                 className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-muted/70 px-2 py-0.5 text-xs"
               >
                 <CategoryIcon iconName={item.icon} className="h-3.5 w-3.5 text-primary" />
-                {item.name}
+                {categoryName({ slug: item.slug ?? "", name: item.name }, t)}
                 <span
                   role="button"
                   tabIndex={0}
@@ -139,7 +143,7 @@ export function CategoryMultiSelect({
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <CategoryIcon iconName={item.icon} className="h-4 w-4 shrink-0 text-primary" />
-                  <span className="truncate">{item.name}</span>
+                  <span className="truncate">{categoryName({ slug: item.slug ?? "", name: item.name }, t)}</span>
                 </span>
                 {value.includes(item.id) && <Check className="h-4 w-4 text-primary" />}
               </button>

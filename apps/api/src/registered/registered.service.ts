@@ -1,6 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { LoyaltyTransactionStatus, LoyaltyTransactionType, Prisma, PromoCodeRewardType, ReferralInviteStatus, SubscriptionStatus } from "@prisma/client";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  LoyaltyTransactionStatus,
+  LoyaltyTransactionType,
+  Prisma,
+  PromoCodeRewardType,
+  ReferralInviteStatus,
+  SubscriptionBundleParticipantStatus,
+  SubscriptionBundleStatus,
+  SubscriptionSpendPolicy,
+  SubscriptionStatus,
+} from "@prisma/client";
+import { createHash, randomInt } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
+
+const CUSTOMER_LOOKUP_CODE_TTL_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class RegisteredService {
@@ -17,6 +30,10 @@ export class RegisteredService {
 
   private normalizeCode(code: string) {
     return code.trim().toUpperCase().replace(/\s+/g, "");
+  }
+
+  private customerLookupHash(code: string) {
+    return createHash("sha256").update(code).digest("hex");
   }
 
   private async ensurePreferences(userId: number) {
@@ -95,6 +112,56 @@ export class RegisteredService {
     }
 
     return result;
+  }
+
+  private async recordSubscriptionSpend(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    subscription: {
+      id: number;
+      name: string;
+      price: Prisma.Decimal | number | string;
+      companyId: number | null;
+      company: {
+        subscriptionSpendPolicy: SubscriptionSpendPolicy;
+        levelRules: Array<{
+          id: number;
+          levelName: string;
+          minTotalSpend: Prisma.Decimal | number | string;
+          cashbackPercent: Prisma.Decimal | number | string;
+          sortOrder: number;
+        }>;
+      } | null;
+    },
+  ) {
+    const policy = subscription.company?.subscriptionSpendPolicy ?? SubscriptionSpendPolicy.EXCLUDE;
+    if (!subscription.companyId || !subscription.company || policy === SubscriptionSpendPolicy.EXCLUDE) {
+      return;
+    }
+    const amount = this.decimalToNumber(subscription.price);
+    const previous = await tx.companyPurchase.aggregate({
+      where: { companyId: subscription.companyId, userId },
+      _sum: { amount: true },
+    });
+    const level = this.resolveLevel(this.decimalToNumber(previous._sum.amount) + amount, subscription.company.levelRules);
+    const points =
+      policy === SubscriptionSpendPolicy.INCLUDE_WITH_BONUS
+        ? Math.round((amount * (level.current?.cashbackPercent ?? 0)) / 100)
+        : 0;
+    await tx.companyPurchase.create({
+      data: {
+        companyId: subscription.companyId,
+        userId,
+        processedById: userId,
+        amount: new Prisma.Decimal(amount),
+        cashbackPercent: new Prisma.Decimal(level.current?.cashbackPercent ?? 0),
+        pointsAwarded: points,
+        description: `Subscription purchase: ${subscription.name}`,
+      },
+    });
+    if (points > 0) {
+      await this.addCompanyPoints(tx, userId, subscription.companyId, points, `Subscription cashback at ${subscription.name}`);
+    }
   }
 
   private resolveLevel(
@@ -176,8 +243,18 @@ export class RegisteredService {
     updatedAt: Date;
     company: { id: number; slug: string; name: string; isActive: boolean } | null;
     category: { id: number; slug: string; name: string; icon: string } | null;
+    entitlements?: Array<{
+      uuid: string;
+      title: string;
+      description: string | null;
+      allowance: number;
+      windowValue: number;
+      windowUnit: string;
+      isActive: boolean;
+    }>;
   }) {
     return {
+      type: "subscription" as const,
       uuid: plan.uuid,
       slug: plan.slug,
       name: plan.name,
@@ -193,6 +270,83 @@ export class RegisteredService {
       updatedAt: plan.updatedAt,
       company: plan.company,
       category: plan.category,
+      entitlements: plan.entitlements ?? [],
+    };
+  }
+
+  private serializeSubscriptionBundle(bundle: {
+    uuid: string;
+    slug: string;
+    name: string;
+    description: string;
+    price: Prisma.Decimal | number | string;
+    renewalPeriod: string;
+    renewalValue: number;
+    renewalUnit: string;
+    promoBonusDays: number;
+    status: SubscriptionBundleStatus;
+    isActive: boolean;
+    activatedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    category: { id: number; slug: string; name: string; icon: string } | null;
+    participants: Array<{
+      uuid: string;
+      benefitTitle: string;
+      benefitDescription: string | null;
+      fulfillmentNote: string | null;
+      revenueSharePercent: Prisma.Decimal | number | string;
+      allowance: number;
+      windowValue: number;
+      windowUnit: string;
+      approvalStatus: SubscriptionBundleParticipantStatus;
+      company: { id: number; slug: string; name: string; isActive: boolean };
+    }>;
+  }) {
+    const approvedParticipants = bundle.participants.filter(
+      (participant) => participant.approvalStatus === SubscriptionBundleParticipantStatus.APPROVED,
+    );
+    return {
+      type: "bundle" as const,
+      uuid: bundle.uuid,
+      slug: bundle.slug,
+      name: bundle.name,
+      description: bundle.description,
+      price: this.decimalToMoney(bundle.price),
+      renewalPeriod: bundle.renewalPeriod,
+      renewalValue: bundle.renewalValue,
+      renewalUnit: bundle.renewalUnit,
+      promoBonusDays: bundle.promoBonusDays,
+      promoEndsAt: null,
+      isActive: bundle.isActive && bundle.status === SubscriptionBundleStatus.ACTIVE,
+      createdAt: bundle.createdAt,
+      updatedAt: bundle.updatedAt,
+      company: null,
+      partners: approvedParticipants.map((participant) => participant.company.name).join(" + "),
+      category: bundle.category,
+      participants: approvedParticipants.map((participant) => ({
+        uuid: participant.uuid,
+        company: participant.company,
+        benefitTitle: participant.benefitTitle,
+        benefitDescription: participant.benefitDescription,
+        fulfillmentNote: participant.fulfillmentNote,
+        revenueSharePercent: this.decimalToNumber(participant.revenueSharePercent),
+        allowance: participant.allowance,
+        windowValue: participant.windowValue,
+        windowUnit: participant.windowUnit,
+      })),
+      entitlements: approvedParticipants.map((participant) => ({
+        uuid: participant.uuid,
+        title: participant.benefitTitle,
+        description: participant.benefitDescription,
+        allowance: participant.allowance,
+        windowValue: participant.windowValue,
+        windowUnit: participant.windowUnit,
+        isActive: true,
+        company: participant.company,
+        fulfillmentNote: participant.fulfillmentNote,
+        revenueSharePercent: this.decimalToNumber(participant.revenueSharePercent),
+      })),
     };
   }
 
@@ -225,6 +379,32 @@ export class RegisteredService {
       payload,
       generatedAt: new Date(),
     };
+  }
+
+  async createCustomerLookupCode(userId: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new NotFoundException("User not found.");
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + CUSTOMER_LOOKUP_CODE_TTL_MS);
+    await this.prisma.customerLookupCode.updateMany({
+      where: { userId, usedAt: null, expiresAt: { gt: now } },
+      data: { usedAt: now },
+    });
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const code = randomInt(0, 100_000).toString().padStart(5, "0");
+      try {
+        await this.prisma.customerLookupCode.create({
+          data: { userId, codeHash: this.customerLookupHash(code), expiresAt },
+        });
+        return { code, expiresAt };
+      } catch (error) {
+        if ((error as { code?: string }).code !== "P2002") throw error;
+      }
+    }
+
+    throw new ConflictException("Could not generate a customer code. Please try again.");
   }
 
   async profile(userId: number) {
@@ -364,8 +544,18 @@ export class RegisteredService {
         company: { select: { id: true, slug: true, name: true, isActive: true } },
         subscription: {
           include: {
-            company: { select: { id: true, slug: true, name: true, isActive: true } },
+            company: {
+              select: {
+                id: true,
+                slug: true,
+                name: true,
+                isActive: true,
+                subscriptionSpendPolicy: true,
+                levelRules: { orderBy: { sortOrder: "asc" } },
+              },
+            },
             category: { select: { id: true, slug: true, name: true, icon: true } },
+            entitlements: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
           },
         },
         redemptions: { select: { userId: true } },
@@ -402,6 +592,7 @@ export class RegisteredService {
           update: {},
           create: { userId, companyId: promo.subscription.companyId },
         });
+        await this.recordSubscriptionSpend(tx, userId, promo.subscription);
       }
       const created = await tx.userSubscription.create({
         data: {
@@ -440,12 +631,35 @@ export class RegisteredService {
     const [categories, favorites] = await Promise.all([
       this.prisma.category.findMany({
         where: {
-          subscriptions: {
-            some: {
-              isActive: true,
-              OR: [{ companyId: null }, { company: { isActive: true } }],
+          OR: [
+            {
+              subscriptions: {
+                some: {
+                  isActive: true,
+                  OR: [{ companyId: null }, { company: { isActive: true } }],
+                },
+              },
             },
-          },
+            {
+              subscriptionBundles: {
+                some: {
+                  isActive: true,
+                  status: SubscriptionBundleStatus.ACTIVE,
+                  AND: [
+                    { participants: { some: {} } },
+                    {
+                      participants: {
+                        every: {
+                          approvalStatus: SubscriptionBundleParticipantStatus.APPROVED,
+                          company: { isActive: true, identityVerificationCompleted: true },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
         },
         orderBy: { name: "asc" },
         select: { id: true, slug: true, name: true, icon: true },
@@ -502,28 +716,74 @@ export class RegisteredService {
 
   async marketplace(userId: number, categorySlug?: string) {
     const categories = await this.listMarketplaceCategories(userId);
-    const subscriptions = await this.prisma.subscription.findMany({
-      where: {
-        isActive: true,
-        ...(categorySlug ? { category: { slug: categorySlug } } : {}),
-        OR: [{ companyId: null }, { company: { isActive: true } }],
-      },
-      orderBy: [{ createdAt: "desc" }, { name: "asc" }],
-      include: {
-        company: { select: { id: true, slug: true, name: true, isActive: true } },
-        category: { select: { id: true, slug: true, name: true, icon: true } },
-      },
-    });
-
-    const activeRows = await this.listActiveSubscriptions(userId);
+    const [subscriptions, bundles, activeRows, activeBundleRows] = await Promise.all([
+      this.prisma.subscription.findMany({
+        where: {
+          isActive: true,
+          entitlements: { some: { isActive: true } },
+          ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+          OR: [{ companyId: null }, { company: { isActive: true } }],
+        },
+        orderBy: [{ createdAt: "desc" }, { name: "asc" }],
+        include: {
+          company: { select: { id: true, slug: true, name: true, isActive: true } },
+          category: { select: { id: true, slug: true, name: true, icon: true } },
+          entitlements: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
+        },
+      }),
+      this.prisma.subscriptionBundle.findMany({
+        where: {
+          isActive: true,
+          status: SubscriptionBundleStatus.ACTIVE,
+          ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+          AND: [
+            { participants: { some: {} } },
+            {
+              participants: {
+                every: {
+                  approvalStatus: SubscriptionBundleParticipantStatus.APPROVED,
+                  company: { isActive: true, identityVerificationCompleted: true },
+                },
+              },
+            },
+          ],
+        },
+        orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+        include: {
+          category: { select: { id: true, slug: true, name: true, icon: true } },
+          participants: {
+            where: { approvalStatus: SubscriptionBundleParticipantStatus.APPROVED },
+            include: { company: { select: { id: true, slug: true, name: true, isActive: true } } },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
+      }),
+      this.listActiveSubscriptions(userId),
+      this.prisma.userSubscriptionBundle.findMany({
+        where: {
+          userId,
+          status: SubscriptionStatus.ACTIVE,
+          OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
+        },
+        include: { bundle: { select: { uuid: true } } },
+      }),
+    ]);
     const activePlanIds = new Set(activeRows.map((row) => row.subscription.uuid));
+    const activeBundleIds = new Set(activeBundleRows.map((row) => row.bundle.uuid));
+    const bundledSubscriptions = bundles.map((bundle) => ({
+      ...this.serializeSubscriptionBundle(bundle),
+      isOwned: activeBundleIds.has(bundle.uuid),
+    }));
 
     return {
       categories,
-      subscriptions: subscriptions.map((plan) => ({
-        ...this.serializeSubscriptionPlan(plan),
-        isOwned: activePlanIds.has(plan.uuid),
-      })),
+      subscriptions: [
+        ...bundledSubscriptions,
+        ...subscriptions.map((plan) => ({
+          ...this.serializeSubscriptionPlan(plan),
+          isOwned: activePlanIds.has(plan.uuid),
+        })),
+      ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
     };
   }
 
@@ -651,24 +911,47 @@ export class RegisteredService {
 
   async listActiveSubscriptions(userId: number) {
     const now = new Date();
-    const rows = await this.prisma.userSubscription.findMany({
-      where: {
-        userId,
-        status: SubscriptionStatus.ACTIVE,
-        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-      },
-      orderBy: { activatedAt: "desc" },
-      include: {
-        subscription: {
-          include: {
-            company: { select: { id: true, slug: true, name: true, isActive: true } },
-            category: { select: { id: true, slug: true, name: true, icon: true } },
+    const [rows, bundleRows] = await Promise.all([
+      this.prisma.userSubscription.findMany({
+        where: {
+          userId,
+          status: SubscriptionStatus.ACTIVE,
+          OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        },
+        orderBy: { activatedAt: "desc" },
+        include: {
+          subscription: {
+            include: {
+              company: { select: { id: true, slug: true, name: true, isActive: true } },
+              category: { select: { id: true, slug: true, name: true, icon: true } },
+              entitlements: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
+            },
           },
         },
-      },
-    });
+      }),
+      this.prisma.userSubscriptionBundle.findMany({
+        where: {
+          userId,
+          status: SubscriptionStatus.ACTIVE,
+          OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        },
+        orderBy: { activatedAt: "desc" },
+        include: {
+          bundle: {
+            include: {
+              category: { select: { id: true, slug: true, name: true, icon: true } },
+              participants: {
+                where: { approvalStatus: SubscriptionBundleParticipantStatus.APPROVED },
+                include: { company: { select: { id: true, slug: true, name: true, isActive: true } } },
+                orderBy: { sortOrder: "asc" },
+              },
+            },
+          },
+        },
+      }),
+    ]);
 
-    return rows.map((row) => ({
+    const ordinary = rows.map((row) => ({
       id: row.id,
       status: row.status,
       activatedAt: row.activatedAt,
@@ -678,30 +961,68 @@ export class RegisteredService {
       updatedAt: row.updatedAt,
       subscription: this.serializeSubscriptionPlan(row.subscription),
     }));
+    const bundled = bundleRows.map((row) => ({
+      id: row.id,
+      status: row.status,
+      activatedAt: row.activatedAt,
+      expiresAt: row.expiresAt,
+      willAutoRenew: row.willAutoRenew,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      subscription: this.serializeSubscriptionBundle(row.bundle),
+    }));
+    return [...ordinary, ...bundled].sort(
+      (a, b) => new Date(b.activatedAt).getTime() - new Date(a.activatedAt).getTime(),
+    );
   }
 
   async listArchivedSubscriptions(userId: number) {
     const now = new Date();
-    const rows = await this.prisma.userSubscription.findMany({
-      where: {
-        userId,
-        OR: [
-          { status: { in: [SubscriptionStatus.EXPIRED, SubscriptionStatus.CANCELED] } },
-          { status: SubscriptionStatus.ACTIVE, expiresAt: { lt: now } },
-        ],
-      },
-      orderBy: [{ expiresAt: "desc" }, { activatedAt: "desc" }],
-      include: {
-        subscription: {
-          include: {
-            company: { select: { id: true, slug: true, name: true, isActive: true } },
-            category: { select: { id: true, slug: true, name: true, icon: true } },
+    const [rows, bundleRows] = await Promise.all([
+      this.prisma.userSubscription.findMany({
+        where: {
+          userId,
+          OR: [
+            { status: { in: [SubscriptionStatus.EXPIRED, SubscriptionStatus.CANCELED] } },
+            { status: SubscriptionStatus.ACTIVE, expiresAt: { lt: now } },
+          ],
+        },
+        orderBy: [{ expiresAt: "desc" }, { activatedAt: "desc" }],
+        include: {
+          subscription: {
+            include: {
+              company: { select: { id: true, slug: true, name: true, isActive: true } },
+              category: { select: { id: true, slug: true, name: true, icon: true } },
+              entitlements: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
+            },
           },
         },
-      },
-    });
+      }),
+      this.prisma.userSubscriptionBundle.findMany({
+        where: {
+          userId,
+          OR: [
+            { status: { in: [SubscriptionStatus.EXPIRED, SubscriptionStatus.CANCELED] } },
+            { status: SubscriptionStatus.ACTIVE, expiresAt: { lt: now } },
+          ],
+        },
+        orderBy: [{ expiresAt: "desc" }, { activatedAt: "desc" }],
+        include: {
+          bundle: {
+            include: {
+              category: { select: { id: true, slug: true, name: true, icon: true } },
+              participants: {
+                where: { approvalStatus: SubscriptionBundleParticipantStatus.APPROVED },
+                include: { company: { select: { id: true, slug: true, name: true, isActive: true } } },
+                orderBy: { sortOrder: "asc" },
+              },
+            },
+          },
+        },
+      }),
+    ]);
 
-    return rows.map((row) => ({
+    const ordinary = rows.map((row) => ({
       id: row.id,
       status: row.expiresAt && row.expiresAt < now && row.status === SubscriptionStatus.ACTIVE
         ? SubscriptionStatus.EXPIRED
@@ -713,10 +1034,25 @@ export class RegisteredService {
       updatedAt: row.updatedAt,
       subscription: this.serializeSubscriptionPlan(row.subscription),
     }));
+    const bundled = bundleRows.map((row) => ({
+      id: row.id,
+      status: row.expiresAt && row.expiresAt < now && row.status === SubscriptionStatus.ACTIVE
+        ? SubscriptionStatus.EXPIRED
+        : row.status,
+      activatedAt: row.activatedAt,
+      expiresAt: row.expiresAt,
+      willAutoRenew: row.willAutoRenew,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      subscription: this.serializeSubscriptionBundle(row.bundle),
+    }));
+    return [...ordinary, ...bundled].sort(
+      (a, b) => new Date(b.activatedAt).getTime() - new Date(a.activatedAt).getTime(),
+    );
   }
 
   async history(userId: number) {
-    const [transactions, archivedSubscriptions] = await Promise.all([
+    const [transactions, activeSubscriptions, archivedSubscriptions] = await Promise.all([
       this.prisma.loyaltyTransaction.findMany({
         where: { userId },
         orderBy: { occurredAt: "desc" },
@@ -732,6 +1068,7 @@ export class RegisteredService {
           },
         },
       }),
+      this.listActiveSubscriptions(userId),
       this.listArchivedSubscriptions(userId),
     ]);
 
@@ -745,6 +1082,9 @@ export class RegisteredService {
         occurredAt: transaction.occurredAt,
         company: transaction.company,
       })),
+      subscriptions: [...activeSubscriptions, ...archivedSubscriptions].sort(
+        (a, b) => new Date(b.activatedAt).getTime() - new Date(a.activatedAt).getTime(),
+      ),
       archivedSubscriptions,
     };
   }
@@ -768,12 +1108,25 @@ export class RegisteredService {
     const plan = await this.prisma.subscription.findUnique({
       where: { uuid: subscriptionUuid },
       include: {
-        company: { select: { id: true, slug: true, name: true, isActive: true } },
+        company: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            isActive: true,
+            subscriptionSpendPolicy: true,
+            levelRules: { orderBy: { sortOrder: "asc" } },
+          },
+        },
         category: { select: { id: true, slug: true, name: true, icon: true } },
+        entitlements: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
       },
     });
     if (!plan || !plan.isActive || (plan.company && !plan.company.isActive)) {
-      throw new NotFoundException("Active subscription not found.");
+      return this.activateSubscriptionBundle(userId, subscriptionUuid);
+    }
+    if (plan.entitlements.length === 0) {
+      throw new BadRequestException("Subscription has no active services.");
     }
 
     const now = new Date();
@@ -805,6 +1158,7 @@ export class RegisteredService {
           update: {},
           create: { userId, companyId: plan.companyId },
         });
+        await this.recordSubscriptionSpend(tx, userId, plan);
       }
 
       return tx.userSubscription.create({
@@ -821,6 +1175,7 @@ export class RegisteredService {
             include: {
               company: { select: { id: true, slug: true, name: true, isActive: true } },
               category: { select: { id: true, slug: true, name: true, icon: true } },
+              entitlements: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
             },
           },
         },
@@ -836,6 +1191,95 @@ export class RegisteredService {
       createdAt: created.createdAt,
       updatedAt: created.updatedAt,
       subscription: this.serializeSubscriptionPlan(created.subscription),
+    };
+  }
+
+  private async activateSubscriptionBundle(userId: number, bundleUuid: string) {
+    const bundle = await this.prisma.subscriptionBundle.findUnique({
+      where: { uuid: bundleUuid },
+      include: {
+        category: { select: { id: true, slug: true, name: true, icon: true } },
+        participants: {
+          include: { company: { select: { id: true, slug: true, name: true, isActive: true } } },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
+    });
+    if (
+      !bundle ||
+      !bundle.isActive ||
+      bundle.status !== SubscriptionBundleStatus.ACTIVE ||
+      bundle.participants.length < 2 ||
+      bundle.participants.some(
+        (participant) =>
+          participant.approvalStatus !== SubscriptionBundleParticipantStatus.APPROVED ||
+          !participant.company.isActive,
+      )
+    ) {
+      throw new NotFoundException("Active subscription not found.");
+    }
+
+    const now = new Date();
+    const existing = await this.prisma.userSubscriptionBundle.findFirst({
+      where: {
+        userId,
+        bundleId: bundle.id,
+        status: SubscriptionStatus.ACTIVE,
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new BadRequestException("Subscription is already active.");
+    }
+
+    const expiresAt = this.addSubscriptionPeriod(now, bundle.renewalValue, bundle.renewalUnit, bundle.promoBonusDays);
+    const participantCompanyIds = [...new Set(bundle.participants.map((participant) => participant.companyId))];
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      await Promise.all(
+        participantCompanyIds.map((companyId) =>
+          tx.userCompany.upsert({
+            where: { userId_companyId: { userId, companyId } },
+            update: {},
+            create: { userId, companyId },
+          }),
+        ),
+      );
+
+      return tx.userSubscriptionBundle.create({
+        data: {
+          userId,
+          bundleId: bundle.id,
+          status: SubscriptionStatus.ACTIVE,
+          activatedAt: now,
+          expiresAt,
+          willAutoRenew: true,
+        },
+        include: {
+          bundle: {
+            include: {
+              category: { select: { id: true, slug: true, name: true, icon: true } },
+              participants: {
+                where: { approvalStatus: SubscriptionBundleParticipantStatus.APPROVED },
+                include: { company: { select: { id: true, slug: true, name: true, isActive: true } } },
+                orderBy: { sortOrder: "asc" },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    return {
+      id: created.id,
+      status: created.status,
+      activatedAt: created.activatedAt,
+      expiresAt: created.expiresAt,
+      willAutoRenew: created.willAutoRenew,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+      subscription: this.serializeSubscriptionBundle(created.bundle),
     };
   }
 }

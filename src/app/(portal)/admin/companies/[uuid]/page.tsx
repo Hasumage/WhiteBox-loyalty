@@ -297,6 +297,13 @@ export default function AdminCompanyProfilePage() {
     windowValue: 1,
     windowUnit: "DAY",
   });
+  const [initialEntitlementDraft, setInitialEntitlementDraft] = useState<EntitlementDraft>({
+    title: "",
+    description: "",
+    allowance: 1,
+    windowValue: 1,
+    windowUnit: "DAY",
+  });
 
   const filteredSubscriptions = useMemo(() => {
     const q = subscriptionQuery.trim().toLowerCase();
@@ -592,6 +599,12 @@ export default function AdminCompanyProfilePage() {
   }
 
   async function createSubscription() {
+    const initialServiceTitle = initialEntitlementDraft.title.trim();
+    if (!initialServiceTitle) {
+      setError("Добавьте хотя бы одну услугу: подписка без услуг не может быть создана.");
+      return;
+    }
+    const initialServiceHasLimit = initialEntitlementDraft.windowUnit !== "UNLIMITED";
     const res = await adminCreateCompanySubscription(companyUserUuid, {
       name: draft.name,
       description: draft.description,
@@ -602,6 +615,15 @@ export default function AdminCompanyProfilePage() {
       promoEndsAt: null,
       slug: draft.slug || undefined,
       categoryId: draft.categoryId === "" ? undefined : Number(draft.categoryId),
+      entitlements: [
+        {
+          title: initialServiceTitle,
+          description: initialEntitlementDraft.description.trim() || undefined,
+          allowance: initialServiceHasLimit ? Math.max(1, Number(initialEntitlementDraft.allowance || 1)) : 1,
+          windowValue: initialServiceHasLimit ? Math.max(1, Number(initialEntitlementDraft.windowValue || 1)) : 1,
+          windowUnit: initialEntitlementDraft.windowUnit,
+        },
+      ],
     });
     if (!res.ok) {
       setError(String(res.message));
@@ -616,6 +638,13 @@ export default function AdminCompanyProfilePage() {
       promoBonusDays: 0,
       slug: "",
       categoryId: "",
+    });
+    setInitialEntitlementDraft({
+      title: "",
+      description: "",
+      allowance: 1,
+      windowValue: 1,
+      windowUnit: "DAY",
     });
     setError(null);
     setNotice(t("admin.companyDetail.subscriptionCreated"));
@@ -1886,10 +1915,110 @@ export default function AdminCompanyProfilePage() {
                   onChange={(e) => setDraft((p) => ({ ...p, description: e.target.value }))}
                 />
               </div>
+              <div className="xl:col-span-12">
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.055] p-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="inline-flex items-center gap-2 font-semibold">
+                        <Gift className="h-4 w-4 text-primary" />
+                        Первая услуга обязательна
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Подписка без услуги не создаётся: кассе нужно понимать, что именно можно погасить клиенту.
+                      </p>
+                    </div>
+                    <Badge variant="outline">минимум 1 услуга</Badge>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
+                    <div className="space-y-2 xl:col-span-4">
+                      <Label htmlFor="sub-initial-entitlement-title">Название услуги</Label>
+                      <Input
+                        id="sub-initial-entitlement-title"
+                        placeholder="Капучино 350 мл"
+                        value={initialEntitlementDraft.title}
+                        onChange={(e) =>
+                          setInitialEntitlementDraft((p) => ({ ...p, title: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 xl:col-span-3">
+                      <Label htmlFor="sub-initial-entitlement-window">Период лимита</Label>
+                      <SelectField
+                        id="sub-initial-entitlement-window"
+                        value={initialEntitlementDraft.windowUnit}
+                        onChange={(e) =>
+                          setInitialEntitlementDraft((p) => ({
+                            ...p,
+                            windowUnit: e.target.value as EntitlementDraft["windowUnit"],
+                          }))
+                        }
+                      >
+                        <option value="DAY">Каждый день</option>
+                        <option value="WEEK">Каждую неделю</option>
+                        <option value="MONTH">Каждый месяц</option>
+                        <option value="TERM">Один раз за срок</option>
+                        <option value="UNLIMITED">Без лимита</option>
+                      </SelectField>
+                    </div>
+                    <div className="space-y-2 xl:col-span-5">
+                      <Label htmlFor="sub-initial-entitlement-note">Что получает клиент</Label>
+                      <Input
+                        id="sub-initial-entitlement-note"
+                        placeholder="Короткое описание услуги"
+                        value={initialEntitlementDraft.description}
+                        onChange={(e) =>
+                          setInitialEntitlementDraft((p) => ({ ...p, description: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 xl:col-span-3">
+                      <Label htmlFor="sub-initial-entitlement-allowance">Сколько раз</Label>
+                      <Input
+                        id="sub-initial-entitlement-allowance"
+                        type="number"
+                        min={1}
+                        disabled={initialEntitlementDraft.windowUnit === "UNLIMITED"}
+                        value={initialEntitlementDraft.windowUnit === "UNLIMITED" ? "" : initialEntitlementDraft.allowance}
+                        placeholder="∞"
+                        onChange={(e) =>
+                          setInitialEntitlementDraft((p) => ({
+                            ...p,
+                            allowance: Math.max(1, Number(e.target.value || 1)),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 xl:col-span-3">
+                      <Label htmlFor="sub-initial-entitlement-window-value">За периодов</Label>
+                      <Input
+                        id="sub-initial-entitlement-window-value"
+                        type="number"
+                        min={1}
+                        disabled={initialEntitlementDraft.windowUnit === "UNLIMITED"}
+                        value={initialEntitlementDraft.windowUnit === "UNLIMITED" ? "" : initialEntitlementDraft.windowValue}
+                        placeholder="∞"
+                        onChange={(e) =>
+                          setInitialEntitlementDraft((p) => ({
+                            ...p,
+                            windowValue: Math.max(1, Number(e.target.value || 1)),
+                          }))
+                        }
+                      />
+                    </div>
+                    {initialEntitlementDraft.windowUnit === "UNLIMITED" && (
+                      <div className="flex items-end xl:col-span-6">
+                        <p className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                          Безлимит подходит для прохода в клуб, доступа к зоне или другой услуги без счётчика погашений.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div className="flex items-end justify-end xl:col-span-12">
                 <Button
                   onClick={() => void createSubscription()}
-                  disabled={!draft.name || !draft.description || !draft.price}
+                  disabled={!draft.name || !draft.description || !draft.price || !initialEntitlementDraft.title.trim()}
                   className="h-11 w-full xl:w-[220px]"
                 >
                   <Plus className="h-4 w-4" />

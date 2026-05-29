@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BadgeCheck, Camera, Coins, QrCode, ReceiptText, Search, Square, TicketCheck, UserRound } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, BadgeCheck, Camera, Coins, Hash, History, MinusCircle, QrCode, ReceiptText, Search, Square, TicketCheck, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +10,10 @@ import {
   awardCompanyPoints,
   companyClient,
   companyClients,
+  lookupCompanyClientCode,
+  redeemCompanyBundleBenefit,
   redeemCompanyEntitlement,
+  spendCompanyPoints,
   type CompanyClient,
   type CompanyClientDetail,
 } from "@/lib/api/company-client";
@@ -34,7 +37,9 @@ export default function CompanyClientsPage() {
   const [items, setItems] = useState<CompanyClient[]>([]);
   const [selected, setSelected] = useState<CompanyClientDetail | null>(null);
   const [manualPoints, setManualPoints] = useState("");
+  const [spendPoints, setSpendPoints] = useState("");
   const [purchaseAmount, setPurchaseAmount] = useState("");
+  const [quickCode, setQuickCode] = useState("");
   const [feedback, setFeedback] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -46,7 +51,9 @@ export default function CompanyClientsPage() {
     setScannerOpen(false);
   }
 
-  useEffect(() => () => stopScanner(), []);
+  useEffect(() => {
+    return () => stopScanner();
+  }, []);
 
   async function openClient(value: string) {
     const uuid = extractUserUuid(value);
@@ -56,7 +63,7 @@ export default function CompanyClientsPage() {
       const result = await companyClient(uuid);
       setSelected(result);
       setQuery(uuid);
-      setItems([result]);
+      setItems([]);
       setFeedback(`Клиент найден: ${result.name}`);
       stopScanner();
     } catch (reason) {
@@ -74,11 +81,33 @@ export default function CompanyClientsPage() {
     try {
       setLoading(true);
       const results = await companyClients(extractUserUuid(query));
-      setItems(results);
-      if (results.length === 1) await openClient(results[0].uuid);
+      setItems(results.slice(0, 6));
+      if (results.length > 1) {
+        setFeedback(`Найдено ${results.length} клиентов. Показываем первые 6, при необходимости уточните поиск.`);
+      }
+      if (results.length === 1) {
+        await openClient(results[0].uuid);
+        return;
+      }
       if (!results.length) setFeedback("Клиенты по запросу не найдены.");
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "Поиск недоступен.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function findByQuickCode() {
+    if (quickCode.length !== 5) return;
+    try {
+      setLoading(true);
+      const result = await lookupCompanyClientCode(quickCode);
+      setSelected(result);
+      setItems([]);
+      setFeedback(`Клиент найден по коду: ${result.name}. Теперь можно провести операцию.`);
+      setQuickCode("");
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Не удалось использовать код клиента.");
     } finally {
       setLoading(false);
     }
@@ -128,8 +157,26 @@ export default function CompanyClientsPage() {
       setManualPoints("");
       setPurchaseAmount("");
       setSelected(await companyClient(selected.uuid));
+      setItems([]);
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "Не удалось начислить баллы.");
+    }
+  }
+
+  async function spend() {
+    if (!selected || !Number(spendPoints)) return;
+    try {
+      const result = await spendCompanyPoints({
+        userUuid: selected.uuid,
+        points: Number(spendPoints),
+        description: "Оплата покупки баллами на кассе",
+      });
+      setFeedback(`Списано ${result.pointsSpent} баллов. Новый баланс: ${result.balance}.`);
+      setSpendPoints("");
+      setSelected(await companyClient(selected.uuid));
+      setItems([]);
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Не удалось списать баллы.");
     }
   }
 
@@ -142,8 +189,24 @@ export default function CompanyClientsPage() {
           ? `Зафиксировано посещение: ${result.benefit}. Услуга доступна без лимита использований.`
           : `Погашено: ${result.benefit}. Использовано ${result.used} из ${result.allowance}.`,
       );
+      setSelected(await companyClient(selected.uuid));
     } catch (reason) {
       setFeedback(reason instanceof Error ? reason.message : "Не удалось погасить услугу.");
+    }
+  }
+
+  async function redeemBundle(participantUuid: string) {
+    if (!selected) return;
+    try {
+      const result = await redeemCompanyBundleBenefit({ userUuid: selected.uuid, participantUuid });
+      setFeedback(
+        result.unlimited
+          ? `Погашено преимущество “${result.benefit}” по парной подписке “${result.bundle}”. Услуга без лимита использований.`
+          : `Погашено преимущество “${result.benefit}” по парной подписке “${result.bundle}”: ${result.used} из ${result.allowance}.`,
+      );
+      setSelected(await companyClient(selected.uuid));
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : "Не удалось погасить преимущество парной подписки.");
     }
   }
 
@@ -177,7 +240,30 @@ export default function CompanyClientsPage() {
       )}
 
       <Card className="glass border-white/10 py-0">
-        <CardContent className="p-5">
+        <CardContent className="space-y-5 p-5">
+          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.05] p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Hash className="h-5 w-5 text-cyan-100" />
+              <div>
+                <h2 className="font-semibold">Быстрый поиск по коду</h2>
+                <p className="text-xs text-muted-foreground">Клиент открывает код на экране QR и называет вам 5 цифр. Код одноразовый.</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Input
+                inputMode="numeric"
+                maxLength={5}
+                value={quickCode}
+                onChange={(event) => setQuickCode(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                onKeyDown={(event) => event.key === "Enter" && void findByQuickCode()}
+                placeholder="Например, 42107"
+                className="h-12 rounded-xl font-mono text-lg tracking-[0.25em]"
+              />
+              <Button onClick={() => void findByQuickCode()} disabled={loading || quickCode.length !== 5} className="h-12 rounded-xl px-7">
+                <Hash /> Открыть клиента
+              </Button>
+            </div>
+          </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Input
               value={query}
@@ -194,28 +280,35 @@ export default function CompanyClientsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <Card className="glass border-white/10 py-0">
-          <CardContent className="space-y-2 p-4">
-            <h2 className="mb-3 flex items-center gap-2 font-semibold"><UserRound className="h-4 w-4 text-cyan-100" /> Результаты</h2>
-            {items.map((item) => (
-              <button
-                key={item.uuid}
-                type="button"
-                onClick={() => void openClient(item.uuid)}
-                className={`w-full rounded-2xl border p-4 text-left transition ${selected?.uuid === item.uuid ? "border-cyan-200/35 bg-cyan-200/[0.08]" : "border-white/10 bg-white/[0.02] hover:bg-white/[0.05]"}`}
-              >
-                <p className="font-semibold">{item.name}</p>
-                <p className="truncate text-xs text-muted-foreground">{item.email}</p>
-                <div className="mt-3 flex items-center justify-between text-xs">
-                  <Badge variant="outline">{item.level.name} · {item.level.cashbackPercent}%</Badge>
-                  <span>{item.balance} баллов</span>
-                </div>
-              </button>
-            ))}
-            {items.length === 0 && <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-muted-foreground">Поиск показывает только клиентов вашей компании. Для нового клиента отсканируйте его QR.</p>}
+      {items.length > 0 && (
+        <Card className="glass border-cyan-300/15 bg-cyan-300/[0.035] py-0">
+          <CardContent className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-semibold"><UserRound className="h-4 w-4 text-cyan-100" /> Найдено несколько клиентов</h2>
+              <Badge variant="outline">{items.length} показано</Badge>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {items.map((item) => (
+                <button
+                  key={item.uuid}
+                  type="button"
+                  onClick={() => void openClient(item.uuid)}
+                  className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-left transition hover:border-cyan-200/35 hover:bg-cyan-200/[0.06]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{item.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{item.email}</p>
+                    </div>
+                    <Badge variant="outline" className="shrink-0">{item.balance} баллов</Badge>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">{item.level.name} · {item.level.cashbackPercent}%</p>
+                </button>
+              ))}
+            </div>
           </CardContent>
         </Card>
+      )}
 
         {selected ? (
           <div className="space-y-4">
@@ -233,7 +326,7 @@ export default function CompanyClientsPage() {
               </CardContent>
             </Card>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-3">
               <Card className="glass border-white/10 py-0">
                 <CardContent className="space-y-4 p-5">
                   <h3 className="flex items-center gap-2 font-semibold"><Coins className="h-4 w-4 text-cyan-100" /> Просто начислить баллы</h3>
@@ -250,7 +343,51 @@ export default function CompanyClientsPage() {
                   <Button onClick={() => void award("PURCHASE")} disabled={!purchaseAmount} className="w-full rounded-xl">Провести покупку</Button>
                 </CardContent>
               </Card>
+              <Card className="border-amber-300/20 bg-amber-300/[0.035] py-0">
+                <CardContent className="space-y-4 p-5">
+                  <h3 className="flex items-center gap-2 font-semibold"><MinusCircle className="h-4 w-4 text-amber-100" /> Списать баллы</h3>
+                  <p className="text-xs text-muted-foreground">Баланс проверяется сервером: списать больше доступного нельзя.</p>
+                  <Input type="number" min={1} max={selected.balance} value={spendPoints} onChange={(event) => setSpendPoints(event.target.value)} placeholder={`Доступно: ${selected.balance}`} className="h-11 rounded-xl" />
+                  <Button variant="secondary" onClick={() => void spend()} disabled={!spendPoints || Number(spendPoints) > selected.balance} className="w-full rounded-xl">Списать</Button>
+                </CardContent>
+              </Card>
             </div>
+
+            <Card className="glass border-white/10 py-0">
+              <CardContent className="p-5">
+                <h3 className="mb-4 flex items-center gap-2 font-semibold"><History className="h-4 w-4 text-cyan-100" /> История операций клиента</h3>
+                <div className="space-y-2">
+                  {selected.recentPointOperations.map((operation) => (
+                    <div key={operation.uuid} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className={`rounded-lg p-2 ${operation.type === "EARN" ? "bg-emerald-300/10 text-emerald-200" : "bg-amber-300/10 text-amber-200"}`}>
+                          {operation.type === "EARN" ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{operation.type === "EARN" ? "Начисление баллов" : "Списание баллов"}</p>
+                          <p className="truncate text-xs text-muted-foreground">{operation.description || new Date(operation.occurredAt).toLocaleString("ru-RU")}</p>
+                        </div>
+                      </div>
+                      <p className={`shrink-0 text-sm font-semibold ${operation.type === "EARN" ? "text-emerald-200" : "text-amber-200"}`}>
+                        {operation.type === "EARN" ? "+" : "-"}{operation.amount}
+                      </p>
+                    </div>
+                  ))}
+                  {selected.recentPurchases.map((purchase) => (
+                    <div key={purchase.uuid} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">Покупка по программе уровней</p>
+                        <p className="truncate text-xs text-muted-foreground">{new Date(purchase.createdAt).toLocaleString("ru-RU")} · начислено {purchase.pointsAwarded} баллов</p>
+                      </div>
+                      <p className="shrink-0 text-sm font-semibold">{purchase.amount.toLocaleString("ru-RU")} ₽</p>
+                    </div>
+                  ))}
+                  {selected.recentPointOperations.length === 0 && selected.recentPurchases.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-white/10 p-5 text-sm text-muted-foreground">Операций с баллами пока нет.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
             <Card className="glass border-white/10 py-0">
               <CardContent className="p-5">
@@ -271,8 +408,28 @@ export default function CompanyClientsPage() {
                       </div>
                     )),
                   )}
-                  {selected.activeSubscriptions.flatMap((plan) => plan.subscription.entitlements).length === 0 && (
-                    <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-muted-foreground">У клиента нет доступных услуг для погашения.</p>
+                  {(selected.activeBundleSubscriptions ?? []).flatMap((plan) =>
+                    plan.bundle.participants.map((benefit) => (
+                      <div key={benefit.uuid} className="flex flex-col justify-between gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.045] p-4 sm:flex-row sm:items-center">
+                        <div>
+                          <p className="font-semibold">{benefit.benefitTitle}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Парная подписка: {plan.bundle.name} · {benefit.windowUnit === "UNLIMITED"
+                              ? "без лимита использований"
+                              : `${benefit.allowance} шт. / ${benefit.windowValue} ${benefit.windowUnit.toLowerCase()}`}
+                          </p>
+                        </div>
+                        <Button variant="secondary" onClick={() => void redeemBundle(benefit.uuid)} className="rounded-xl">Погасить</Button>
+                      </div>
+                    )),
+                  )}
+                  {selected.activeSubscriptions.length === 0 && (selected.activeBundleSubscriptions ?? []).length === 0 && (
+                    <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-muted-foreground">У клиента нет активной подписки этой компании. Сначала клиент оформляет тариф в приложении.</p>
+                  )}
+                  {selected.activeSubscriptions.length > 0 &&
+                    selected.activeSubscriptions.flatMap((plan) => plan.subscription.entitlements).length === 0 &&
+                    (selected.activeBundleSubscriptions ?? []).flatMap((plan) => plan.bundle.participants).length === 0 && (
+                    <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-muted-foreground">В активной подписке ещё не настроены услуги. Добавьте правила погашения в разделе подписок.</p>
                   )}
                 </div>
               </CardContent>
@@ -283,7 +440,6 @@ export default function CompanyClientsPage() {
             Карточка обслуживания появится после выбора клиента.
           </div>
         )}
-      </div>
     </div>
   );
 }

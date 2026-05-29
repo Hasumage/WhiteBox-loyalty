@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { CompanyMemberRole, SubscriptionEntitlementWindow } from "@prisma/client";
-import { IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
+import { CompanyMemberRole, SubscriptionEntitlementWindow, SubscriptionSpendPolicy } from "@prisma/client";
+import { Type } from "class-transformer";
+import { ArrayMinSize, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
 
 export class AwardCompanyPointsDto {
   @ApiProperty({ example: "whitebox-user-uuid" })
@@ -31,6 +32,56 @@ export class AwardCompanyPointsDto {
   @IsString()
   @MaxLength(240)
   description?: string;
+}
+
+export class SpendCompanyPointsDto {
+  @ApiProperty({ example: "whitebox-user-uuid" })
+  @IsString()
+  @MinLength(4)
+  userUuid!: string;
+
+  @ApiProperty({ example: 50 })
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  points!: number;
+
+  @ApiPropertyOptional({ example: "Оплата покупки баллами" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  description?: string;
+}
+
+export class LookupCompanyClientCodeDto {
+  @ApiProperty({ example: "42107" })
+  @IsString()
+  @Matches(/^\d{5}$/, { message: "Customer code must contain exactly 5 digits." })
+  code!: string;
+}
+
+export class UpdateCompanyProfileDto {
+  @ApiProperty({ example: "Aurora Coffee" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  name!: string;
+
+  @ApiPropertyOptional({ example: "Specialty coffee and daily rewards." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  @ApiProperty({ example: false })
+  @IsBoolean()
+  operatesOnline!: boolean;
+
+  @ApiProperty({ type: [Number], example: [1, 4] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsInt({ each: true })
+  categoryIds!: number[];
 }
 
 export class CreateCompanyMemberDto {
@@ -69,7 +120,7 @@ export class UpdateCompanyMemberStatusDto {
 export class RequestCompanyPayoutDto {
   @ApiProperty({ example: 25000 })
   @IsNumber()
-  @Min(1)
+  @Min(5_000)
   amount!: number;
 
   @ApiPropertyOptional({ example: "Выплата за май" })
@@ -109,6 +160,91 @@ export class CreateSubscriptionEntitlementDto {
   windowUnit!: SubscriptionEntitlementWindow;
 }
 
+export class UpdateCompanyOwnedSubscriptionDto {
+  @ApiPropertyOptional({ example: "Coffee Monthly Pass" })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  name?: string;
+
+  @ApiPropertyOptional({ example: "Daily coffee and weekly dessert for subscribers." })
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(1000)
+  description?: string;
+
+  @ApiPropertyOptional({ example: 999 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(10_000_000)
+  price?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(36)
+  renewalValue?: number;
+
+  @ApiPropertyOptional({ example: "month", enum: ["week", "month", "year"] })
+  @IsOptional()
+  @IsString()
+  @IsIn(["week", "month", "year"])
+  renewalUnit?: "week" | "month" | "year";
+
+  @ApiPropertyOptional({ example: true, description: "Required when active subscribers may be affected." })
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeSubscriberRefundPolicy?: boolean;
+}
+
+export class UpdateSubscriptionEntitlementDto {
+  @ApiPropertyOptional({ example: "Coffee of the day" })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  title?: string;
+
+  @ApiPropertyOptional({ example: "Any hot drink up to 350 ml." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  allowance?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  windowValue?: number;
+
+  @ApiPropertyOptional({ enum: SubscriptionEntitlementWindow, example: SubscriptionEntitlementWindow.DAY })
+  @IsOptional()
+  @IsEnum(SubscriptionEntitlementWindow)
+  windowUnit?: SubscriptionEntitlementWindow;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: "Required when active subscribers may be affected." })
+  @IsOptional()
+  @IsBoolean()
+  acknowledgeSubscriberRefundPolicy?: boolean;
+}
+
 export class RedeemSubscriptionEntitlementDto {
   @ApiProperty({ example: "whitebox-user-uuid" })
   @IsString()
@@ -132,4 +268,197 @@ export class RedeemSubscriptionEntitlementDto {
   @IsString()
   @MaxLength(240)
   note?: string;
+}
+
+export class RedeemSubscriptionBundleBenefitDto {
+  @ApiProperty({ example: "whitebox-user-uuid" })
+  @IsString()
+  @MinLength(4)
+  userUuid!: string;
+
+  @ApiProperty({ example: "bundle-participant-uuid" })
+  @IsString()
+  @MinLength(4)
+  participantUuid!: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  quantity?: number;
+
+  @ApiPropertyOptional({ example: "Выдано по парной подписке" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  note?: string;
+}
+
+export class CreateCompanyClubBundleDto {
+  @ApiProperty({ example: "Кофе + фитнес после работы" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ example: "Одна подписка: ежедневный напиток и безлимитный проход в зал." })
+  @IsString()
+  @MinLength(10)
+  @MaxLength(1200)
+  description!: string;
+
+  @ApiProperty({ example: 3490 })
+  @IsNumber()
+  @Min(0)
+  @Max(10_000_000)
+  price!: number;
+
+  @ApiProperty({ example: 22 })
+  @IsInt()
+  @Min(1)
+  partnerCompanyId!: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(36)
+  renewalValue?: number;
+
+  @ApiPropertyOptional({ example: "month", enum: ["week", "month", "year"] })
+  @IsOptional()
+  @IsString()
+  @IsIn(["week", "month", "year"])
+  renewalUnit?: "week" | "month" | "year";
+
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  promoBonusDays?: number;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  categoryId?: number;
+
+  @ApiProperty({ example: "Тонизирующий напиток каждый день" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  myBenefitTitle!: string;
+
+  @ApiProperty({ example: "Один напиток до 350 мл каждый день." })
+  @IsString()
+  @MinLength(5)
+  @MaxLength(800)
+  myBenefitDescription!: string;
+
+  @ApiPropertyOptional({ example: "Выдаётся на кассе кофейни." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  myFulfillmentNote?: string;
+
+  @ApiProperty({ example: 40 })
+  @IsNumber()
+  @Min(1)
+  @Max(99)
+  myRevenueSharePercent!: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  myAllowance?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  myWindowValue?: number;
+
+  @ApiPropertyOptional({ enum: SubscriptionEntitlementWindow, example: SubscriptionEntitlementWindow.DAY })
+  @IsOptional()
+  @IsEnum(SubscriptionEntitlementWindow)
+  myWindowUnit?: SubscriptionEntitlementWindow;
+
+  @ApiProperty({ example: "Безлимитный проход в фитнес-клуб" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  partnerBenefitTitle!: string;
+
+  @ApiProperty({ example: "Клиент может заходить в зал без ограничения по количеству проходов." })
+  @IsString()
+  @MinLength(5)
+  @MaxLength(800)
+  partnerBenefitDescription!: string;
+
+  @ApiPropertyOptional({ example: "Гасится на ресепшене фитнес-клуба." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  partnerFulfillmentNote?: string;
+
+  @ApiProperty({ example: 60 })
+  @IsNumber()
+  @Min(1)
+  @Max(99)
+  partnerRevenueSharePercent!: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  partnerAllowance?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  partnerWindowValue?: number;
+
+  @ApiPropertyOptional({ enum: SubscriptionEntitlementWindow, example: SubscriptionEntitlementWindow.UNLIMITED })
+  @IsOptional()
+  @IsEnum(SubscriptionEntitlementWindow)
+  partnerWindowUnit?: SubscriptionEntitlementWindow;
+}
+
+export class CompanyLevelRuleDto {
+  @ApiProperty({ example: "Gold" })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  levelName!: string;
+
+  @ApiProperty({ example: 10000 })
+  @IsNumber()
+  @Min(0)
+  minTotalSpend!: number;
+
+  @ApiProperty({ example: 5 })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  cashbackPercent!: number;
+}
+
+export class UpdateCompanyLoyaltySettingsDto {
+  @ApiProperty({ enum: SubscriptionSpendPolicy })
+  @IsEnum(SubscriptionSpendPolicy)
+  subscriptionSpendPolicy!: SubscriptionSpendPolicy;
+
+  @ApiProperty({ type: [CompanyLevelRuleDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CompanyLevelRuleDto)
+  levelRules!: CompanyLevelRuleDto[];
 }

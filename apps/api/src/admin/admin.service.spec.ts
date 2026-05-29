@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
-import { AccountStatus, PermissionScope, UserRole } from "@prisma/client";
+import { AccountStatus, PermissionScope, SubscriptionEntitlementWindow, UserRole } from "@prisma/client";
 import { AdminService } from "./admin.service";
 
 describe("AdminService", () => {
@@ -68,7 +68,7 @@ describe("AdminService", () => {
     };
     $transaction: jest.Mock;
     userSubscription: { count: jest.Mock; findMany: jest.Mock };
-    subscription: { findUnique: jest.Mock; findMany: jest.Mock; count: jest.Mock };
+    subscription: { findUnique: jest.Mock; findMany: jest.Mock; count: jest.Mock; create: jest.Mock };
     subscriptionBundle: { findUnique: jest.Mock; findMany: jest.Mock; create: jest.Mock };
     subscriptionBundleParticipant: { findMany: jest.Mock };
     promoCode: { findMany: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
@@ -151,7 +151,7 @@ describe("AdminService", () => {
       },
       $transaction: jest.fn().mockResolvedValue([]),
       userSubscription: { count: jest.fn(), findMany: jest.fn() },
-      subscription: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+      subscription: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn() },
       subscriptionBundle: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
       subscriptionBundleParticipant: { findMany: jest.fn() },
       promoCode: {
@@ -599,8 +599,114 @@ describe("AdminService", () => {
         description: "desc value",
         price: 10,
         renewalPeriod: "month",
+        entitlements: [
+          {
+            title: "Coffee",
+            allowance: 1,
+            windowValue: 1,
+            windowUnit: SubscriptionEntitlementWindow.DAY,
+          },
+        ],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("createCompanySubscription requires at least one service", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 3,
+      uuid: "c-1",
+      role: "COMPANY",
+      managedCompany: {
+        id: 44,
+        categoryId: 2,
+        identityVerificationCompleted: true,
+        categories: [],
+        levelRules: [],
+      },
+    });
+
+    await expect(
+      service.createCompanySubscription("c-1", {
+        name: "Monthly",
+        description: "desc value",
+        price: 10,
+        renewalPeriod: "month",
+        entitlements: [],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.subscription.create).not.toHaveBeenCalled();
+  });
+
+  it("createCompanySubscription creates the first service with the subscription", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 3,
+      uuid: "c-1",
+      role: "COMPANY",
+      managedCompany: {
+        id: 44,
+        categoryId: 2,
+        identityVerificationCompleted: true,
+        categories: [],
+        levelRules: [],
+      },
+    });
+    prisma.subscription.findUnique.mockResolvedValue(null);
+    prisma.subscription.create.mockResolvedValue({
+      uuid: "sub-uuid",
+      name: "Monthly",
+      price: { toString: () => "10" },
+      entitlements: [{ uuid: "benefit-uuid" }],
+    });
+
+    await service.createCompanySubscription("c-1", {
+      name: "Monthly",
+      description: "desc value",
+      price: 10,
+      renewalPeriod: "month",
+      entitlements: [
+        {
+          title: "Coffee",
+          description: "Any classic coffee",
+          allowance: 3,
+          windowValue: 1,
+          windowUnit: SubscriptionEntitlementWindow.DAY,
+        },
+        {
+          title: "Gym entry",
+          allowance: 25,
+          windowValue: 30,
+          windowUnit: SubscriptionEntitlementWindow.UNLIMITED,
+        },
+      ],
+    });
+
+    expect(prisma.subscription.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          companyId: 44,
+          entitlements: {
+            create: [
+              {
+                title: "Coffee",
+                description: "Any classic coffee",
+                allowance: 3,
+                windowValue: 1,
+                windowUnit: SubscriptionEntitlementWindow.DAY,
+              },
+              {
+                title: "Gym entry",
+                description: null,
+                allowance: 1,
+                windowValue: 1,
+                windowUnit: SubscriptionEntitlementWindow.UNLIMITED,
+              },
+            ],
+          },
+        }),
+        include: { category: true, company: true, entitlements: { orderBy: { createdAt: "asc" } } },
+      }),
+    );
   });
 
   it("createPromoCode creates normalized points campaign", async () => {

@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { formatPlanPrice as formatLocalizedPlanPrice, relativeDate } from "@/lib/i18n/format";
+import { categoryName } from "@/lib/i18n/categories";
 import type { Locale } from "@/lib/i18n/shared";
 import type { TranslateFn } from "@/lib/i18n/format";
 
@@ -47,13 +48,13 @@ const item = {
 
 export default function HistoryPage() {
   const { locale, t } = useI18n("ru");
-  const [history, setHistory] = useState<TwaHistory>({ transactions: [], archivedSubscriptions: [] });
+  const [history, setHistory] = useState<TwaHistory>({ transactions: [], subscriptions: [], archivedSubscriptions: [] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let ignore = false;
     const cached = getCachedTwaHistory();
-    if (cached.transactions.length || cached.archivedSubscriptions.length) {
+    if (cached.transactions.length || cached.subscriptions.length || cached.archivedSubscriptions.length) {
       setHistory(cached);
       setLoading(false);
     }
@@ -67,7 +68,7 @@ export default function HistoryPage() {
     };
   }, []);
 
-  if (loading && history.transactions.length === 0 && history.archivedSubscriptions.length === 0) {
+  if (loading && history.transactions.length === 0 && history.subscriptions.length === 0 && history.archivedSubscriptions.length === 0) {
     return <TwaLoadingScreen title={t("client.history.loadingTitle")} subtitle={t("client.history.loadingSubtitle")} />;
   }
 
@@ -149,7 +150,7 @@ export default function HistoryPage() {
         <TabsContent value="subscriptions" className="mt-0">
           <ScrollArea className="h-[calc(100dvh-14rem)] pr-2">
             <div className="space-y-1.5">
-              {history.archivedSubscriptions.map((subscription, index) => {
+              {history.subscriptions.map((subscription, index) => {
                 const plan = subscription.subscription;
                 const category = plan.category;
                 return (
@@ -174,7 +175,7 @@ export default function HistoryPage() {
                                   <p className="truncate text-base font-semibold">{plan.name}</p>
                                   <p className="mt-0.5 truncate text-xs leading-snug text-muted-foreground">
                                     {formatPlanPrice(subscription, t)}
-                                    {category ? ` В· ${category.name}` : ""}
+                                    {category ? ` · ${categoryName(category, t)}` : ""}
                                   </p>
                                 </div>
                               </div>
@@ -198,7 +199,7 @@ export default function HistoryPage() {
                 );
               })}
             </div>
-            {!loading && history.archivedSubscriptions.length === 0 && (
+            {!loading && history.subscriptions.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">{t("client.history.noArchivedSubscriptions")}</p>
             )}
           </ScrollArea>

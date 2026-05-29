@@ -31,6 +31,9 @@ describe("AuthService", () => {
   let service: AuthService;
   let prisma: {
     user: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+    profileStatus: { findUnique: jest.Mock };
+    platformCounter: { upsert: jest.Mock };
+    userProfileStatusUnlock: { upsert: jest.Mock };
     refreshToken: { findFirst: jest.Mock; create: jest.Mock; update: jest.Mock };
     loginEvent: {
       create: jest.Mock;
@@ -52,6 +55,15 @@ describe("AuthService", () => {
         create: jest.fn(),
         update: jest.fn(),
       },
+      profileStatus: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      platformCounter: {
+        upsert: jest.fn(),
+      },
+      userProfileStatusUnlock: {
+        upsert: jest.fn(),
+      },
       refreshToken: {
         findFirst: jest.fn(),
         create: jest.fn(),
@@ -69,7 +81,7 @@ describe("AuthService", () => {
         update: jest.fn(),
         updateMany: jest.fn(),
       },
-      $transaction: jest.fn().mockResolvedValue([]),
+      $transaction: jest.fn((input) => (typeof input === "function" ? input(prisma) : Promise.resolve(input))),
       userFavoriteCategory: {
         count: jest.fn().mockResolvedValue(0),
       },
@@ -130,9 +142,13 @@ describe("AuthService", () => {
       emailVerifiedAt: null,
       accountStatus: "ACTIVE",
       deletionScheduledAt: null,
+      selectedProfileStatusId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    prisma.profileStatus.findUnique.mockResolvedValue({ id: "top-100-status" });
+    prisma.platformCounter.upsert.mockResolvedValue({ key: "top100_client_registrations", value: 1 });
+    prisma.userProfileStatusUnlock.upsert.mockResolvedValue({ id: "top-100-unlock" });
     prisma.refreshToken.create.mockResolvedValue({ id: "rt" });
 
     const result = await service.register({
@@ -145,7 +161,50 @@ describe("AuthService", () => {
     expect(result.refreshToken).toHaveLength(96);
     expect(result.needsCategoryOnboarding).toBe(true);
     expect(prisma.user.create).toHaveBeenCalled();
+    expect(prisma.userProfileStatusUnlock.upsert).toHaveBeenCalledWith({
+      where: { userId_statusId: { userId: 1, statusId: "top-100-status" } },
+      create: { userId: 1, statusId: "top-100-status", source: "TOP_100" },
+      update: {},
+    });
     expect(prisma.refreshToken.create).toHaveBeenCalled();
+  });
+
+  it("register does not grant Top 100 after the first 100 client registrations", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({
+      id: 101,
+      uuid: "10110110-1011-4101-8101-101101101101",
+      email: "late@user.com",
+      name: "Late User",
+      role: UserRole.CLIENT,
+      passwordHash: "h",
+      telegramId: null,
+      phoneNumber: null,
+      phoneVerifiedAt: null,
+      emailVerifiedAt: null,
+      accountStatus: "ACTIVE",
+      deletionScheduledAt: null,
+      selectedProfileStatusId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    prisma.profileStatus.findUnique.mockResolvedValue({ id: "top-100-status" });
+    prisma.platformCounter.upsert.mockResolvedValue({ key: "top100_client_registrations", value: 101 });
+    prisma.refreshToken.create.mockResolvedValue({ id: "rt-late" });
+
+    const result = await service.register({
+      name: "Late User",
+      email: "late@user.com",
+      password: "password12",
+    });
+
+    expect(result.accessToken).toBe("access.jwt.token");
+    expect(prisma.platformCounter.upsert).toHaveBeenCalledWith({
+      where: { key: "top100_client_registrations" },
+      create: { key: "top100_client_registrations", value: 1 },
+      update: { value: { increment: 1 } },
+    });
+    expect(prisma.userProfileStatusUnlock.upsert).not.toHaveBeenCalled();
   });
 
   it("login fails for unknown user", async () => {
@@ -251,6 +310,7 @@ describe("AuthService", () => {
         emailVerifiedAt: null,
         accountStatus: "ACTIVE",
         deletionScheduledAt: null,
+        selectedProfileStatusId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -286,6 +346,7 @@ describe("AuthService", () => {
       emailVerifiedAt: null,
       accountStatus: "ACTIVE",
       deletionScheduledAt: null,
+      selectedProfileStatusId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

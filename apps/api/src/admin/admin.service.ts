@@ -13,6 +13,7 @@ import {
   Prisma,
   ReferralInviteStatus,
   SubscriptionBundleStatus,
+  SubscriptionEntitlementWindow,
   SubscriptionSpendPolicy,
   UserRole,
 } from "@prisma/client";
@@ -47,6 +48,8 @@ export class AdminService {
     "Subscription",
     "SubscriptionBundle",
     "SubscriptionBundleParticipant",
+    "UserSubscriptionBundle",
+    "SubscriptionBundleRedemption",
     "CompanyCategory",
     "CompanyLevelRule",
     "CompanyMember",
@@ -456,6 +459,8 @@ export class AdminService {
       subscriptions,
       subscriptionBundles,
       subscriptionBundleParticipants,
+      userSubscriptionBundles,
+      subscriptionBundleRedemptions,
       companyCategories,
       companyLevelRules,
       companyMembers,
@@ -486,6 +491,8 @@ export class AdminService {
       this.prisma.subscription.findMany({ orderBy: { id: "asc" } }),
       this.prisma.subscriptionBundle.findMany({ orderBy: { id: "asc" } }),
       this.prisma.subscriptionBundleParticipant.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.userSubscriptionBundle.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.subscriptionBundleRedemption.findMany({ orderBy: { id: "asc" } }),
       this.prisma.companyCategory.findMany({ orderBy: { id: "asc" } }),
       this.prisma.companyLevelRule.findMany({ orderBy: { id: "asc" } }),
       this.prisma.companyMember.findMany({ orderBy: { id: "asc" } }),
@@ -518,6 +525,8 @@ export class AdminService {
       Subscription: subscriptions,
       SubscriptionBundle: subscriptionBundles,
       SubscriptionBundleParticipant: subscriptionBundleParticipants,
+      UserSubscriptionBundle: userSubscriptionBundles,
+      SubscriptionBundleRedemption: subscriptionBundleRedemptions,
       CompanyCategory: companyCategories,
       CompanyLevelRule: companyLevelRules,
       CompanyMember: companyMembers,
@@ -633,6 +642,18 @@ export class AdminService {
       `SELECT setval(pg_get_serial_sequence('"Subscription"', 'id'), COALESCE((SELECT MAX(id) FROM "Subscription"), 1), true)`,
     );
     await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"SubscriptionBundle"', 'id'), COALESCE((SELECT MAX(id) FROM "SubscriptionBundle"), 1), true)`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"SubscriptionBundleParticipant"', 'id'), COALESCE((SELECT MAX(id) FROM "SubscriptionBundleParticipant"), 1), true)`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"UserSubscriptionBundle"', 'id'), COALESCE((SELECT MAX(id) FROM "UserSubscriptionBundle"), 1), true)`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"SubscriptionBundleRedemption"', 'id'), COALESCE((SELECT MAX(id) FROM "SubscriptionBundleRedemption"), 1), true)`,
+    );
+    await this.prisma.$executeRawUnsafe(
       `SELECT setval(pg_get_serial_sequence('"CompanyCategory"', 'id'), COALESCE((SELECT MAX(id) FROM "CompanyCategory"), 1), true)`,
     );
     await this.prisma.$executeRawUnsafe(
@@ -716,6 +737,8 @@ export class AdminService {
         Subscription: Array<Record<string, unknown>>;
         SubscriptionBundle?: Array<Record<string, unknown>>;
         SubscriptionBundleParticipant?: Array<Record<string, unknown>>;
+        UserSubscriptionBundle?: Array<Record<string, unknown>>;
+        SubscriptionBundleRedemption?: Array<Record<string, unknown>>;
         CompanyCategory: Array<Record<string, unknown>>;
         CompanyLevelRule: Array<Record<string, unknown>>;
         CompanyMember?: Array<Record<string, unknown>>;
@@ -764,9 +787,11 @@ export class AdminService {
       await tx.loginEvent.deleteMany();
       await tx.oAuthAccount.deleteMany();
       await tx.refreshToken.deleteMany();
+      await tx.subscriptionBundleRedemption.deleteMany();
       await tx.subscriptionRedemption.deleteMany();
       await tx.loyaltyTransaction.deleteMany();
       await tx.financeOperation.deleteMany();
+      await tx.userSubscriptionBundle.deleteMany();
       await tx.userSubscription.deleteMany();
       await tx.subscriptionEntitlement.deleteMany();
       await tx.userCompany.deleteMany();
@@ -819,6 +844,14 @@ export class AdminService {
       if (tables.SubscriptionBundleParticipant?.length) {
         await tx.subscriptionBundleParticipant.createMany({
           data: tables.SubscriptionBundleParticipant as never,
+        });
+      }
+      if (tables.UserSubscriptionBundle?.length) {
+        await tx.userSubscriptionBundle.createMany({ data: tables.UserSubscriptionBundle as never });
+      }
+      if (tables.SubscriptionBundleRedemption?.length) {
+        await tx.subscriptionBundleRedemption.createMany({
+          data: tables.SubscriptionBundleRedemption as never,
         });
       }
       if (tables.CompanyCategory.length) {
@@ -2589,6 +2622,10 @@ export class AdminService {
     if (!user.managedCompany.identityVerificationCompleted) {
       throw new BadRequestException("Full identity verification is required before creating subscriptions.");
     }
+    const entitlements = dto.entitlements ?? [];
+    if (entitlements.length === 0) {
+      throw new BadRequestException("Subscription must include at least one service.");
+    }
     const slug = await this.createUniqueSubscriptionSlug(dto.slug || dto.name);
     if (!slug) throw new BadRequestException("Subscription slug is invalid.");
 
@@ -2618,8 +2655,20 @@ export class AdminService {
         promoEndsAt,
         companyId: user.managedCompany.id,
         categoryId: dto.categoryId ?? user.managedCompany.categoryId,
+        entitlements: {
+          create: entitlements.map((entitlement) => {
+            const unlimited = entitlement.windowUnit === SubscriptionEntitlementWindow.UNLIMITED;
+            return {
+              title: entitlement.title.trim(),
+              description: entitlement.description?.trim() || null,
+              allowance: unlimited ? 1 : entitlement.allowance,
+              windowValue: unlimited ? 1 : entitlement.windowValue,
+              windowUnit: entitlement.windowUnit,
+            };
+          }),
+        },
       },
-      include: { category: true, company: true, entitlements: true },
+      include: { category: true, company: true, entitlements: { orderBy: { createdAt: "asc" } } },
     });
     await this.recordManagerCompanyChangeWarning(actorUserId, {
       action: "Manager created company subscription",

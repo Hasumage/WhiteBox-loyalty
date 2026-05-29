@@ -17,6 +17,7 @@ import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import { categoryName } from "@/lib/i18n/categories";
 
 const item = {
   hidden: { opacity: 0, y: 8 },
@@ -87,13 +88,15 @@ export default function LoyaltyCardsPage() {
         !query ||
         company.name.toLowerCase().includes(query) ||
         (company.description ?? "").toLowerCase().includes(query) ||
-        companyCategoryList.some((category) => category.name.toLowerCase().includes(query));
+        companyCategoryList.some((category) =>
+          `${category.name} ${categoryName(category, t)}`.toLowerCase().includes(query),
+        );
 
       if (!matchesSearch) return false;
       if (selectedCategory && !companyCategoryList.some((category) => category.slug === selectedCategory)) return false;
       return true;
     });
-  }, [loyaltyCompanies, searchQuery, selectedCategory]);
+  }, [loyaltyCompanies, searchQuery, selectedCategory, t]);
 
   if (loading && !dashboard) {
     return <TwaLoadingScreen title={t("client.cards.loadingTitle")} subtitle={t("client.cards.loadingSubtitle")} />;
@@ -162,7 +165,7 @@ export default function LoyaltyCardsPage() {
             )}
           >
             <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3.5 w-3.5" />
-            {category.name}
+            {categoryName(category, t)}
           </button>
         ))}
       </CategoryChipStrip>
@@ -194,7 +197,7 @@ export default function LoyaltyCardsPage() {
                             className="inline-flex items-center gap-1 text-[10px] font-normal"
                           >
                             <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
-                            {category.name}
+                            {categoryName(category, t)}
                           </Badge>
                         ))}
                         {extraCount > 0 && (

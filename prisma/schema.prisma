@@ -33,6 +33,12 @@ enum AccountStatus {
   BLOCKED
 }
 
+enum ProfileStatusRarity {
+  RARE
+  EPIC
+  LEGENDARY
+}
+
 enum LoyaltyTransactionType {
   EARN
   SPEND
@@ -154,6 +160,12 @@ enum SubscriptionBundleStatus {
   ARCHIVED
 }
 
+enum SubscriptionBundleParticipantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum ReferralInviteStatus {
   CREATED
   REDEEMED
@@ -207,6 +219,7 @@ model User {
 
   companyLinks  UserCompany[]
   subscriptions UserSubscription[]
+  subscriptionBundles UserSubscriptionBundle[]
   refreshTokens RefreshToken[]
   oauthAccounts OAuthAccount[]
   favoriteCategories UserFavoriteCategory[]
@@ -217,6 +230,7 @@ model User {
   companyPurchases CompanyPurchase[] @relation("CompanyPurchaseCustomer")
   processedCompanyPurchases CompanyPurchase[] @relation("CompanyPurchaseProcessor")
   processedSubscriptionRedemptions SubscriptionRedemption[] @relation("SubscriptionRedemptionProcessor")
+  processedSubscriptionBundleRedemptions SubscriptionBundleRedemption[] @relation("SubscriptionBundleRedemptionProcessor")
   loginEvents LoginEvent[]
   loyaltyTransactions LoyaltyTransaction[]
   actorAuditEvents AuditEvent[] @relation("AuditActor")
@@ -226,11 +240,61 @@ model User {
   referralInvites ReferralInvite[] @relation("ReferralInviter")
   redeemedReferralInvites ReferralInvite[] @relation("ReferralInvited")
   telegramLinkTokens TelegramLinkToken[]
+  customerLookupCodes CustomerLookupCode[]
   permissions AdminUserPermission[]
+  selectedProfileStatusId String?
+  selectedProfileStatus ProfileStatus? @relation("SelectedProfileStatus", fields: [selectedProfileStatusId], references: [id], onDelete: SetNull)
+  profileStatusUnlocks UserProfileStatusUnlock[] @relation("UserProfileStatusUnlocks")
+  grantedProfileStatuses UserProfileStatusUnlock[] @relation("ProfileStatusUnlockedBy")
   requestedFinanceOperations FinanceOperation[] @relation("FinanceRequestedBy")
   approvedFinanceOperations FinanceOperation[] @relation("FinanceApprovedBy")
   assignedAdminTasks AdminTask[] @relation("AdminTaskAssignee")
   resolvedAdminTasks AdminTask[] @relation("AdminTaskResolver")
+  proposedSubscriptionBundles SubscriptionBundle[] @relation("SubscriptionBundleProposer")
+  approvedSubscriptionBundleParticipants SubscriptionBundleParticipant[] @relation("SubscriptionBundleParticipantApprover")
+}
+
+model ProfileStatus {
+  id          String              @id @default(cuid())
+  slug        String              @unique
+  title       String
+  description String
+  rarity      ProfileStatusRarity
+  icon        String              @default("Sparkles")
+  isActive    Boolean             @default(true)
+  isSystem    Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  unlocks         UserProfileStatusUnlock[]
+  selectedByUsers User[]                    @relation("SelectedProfileStatus")
+
+  @@index([rarity, isActive])
+}
+
+model UserProfileStatusUnlock {
+  id           String   @id @default(cuid())
+  userId       Int
+  statusId     String
+  source       String   @default("MANUAL")
+  unlockedById Int?
+  unlockedAt   DateTime @default(now())
+  seenAt       DateTime?
+
+  user       User          @relation("UserProfileStatusUnlocks", fields: [userId], references: [id], onDelete: Cascade)
+  status     ProfileStatus @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  unlockedBy User?         @relation("ProfileStatusUnlockedBy", fields: [unlockedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, statusId])
+  @@index([userId, seenAt])
+  @@index([statusId])
+  @@index([unlockedById])
+}
+
+model PlatformCounter {
+  key       String   @id
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt
 }
 
 model AdminUserPermission {
@@ -321,6 +385,7 @@ model Company {
   owner             User?           @relation("CompanyOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   subscriptions     Subscription[]
   subscriptionBundleParts SubscriptionBundleParticipant[]
+  proposedSubscriptionBundles SubscriptionBundle[] @relation("SubscriptionBundleProposerCompany")
   promoPointCodes   PromoCode[]     @relation("PromoPointCompany")
   referralCampaigns ReferralCampaign[] @relation("ReferralBonusCompany")
   userLinks         UserCompany[]
@@ -330,6 +395,7 @@ model Company {
   members           CompanyMember[]
   purchases         CompanyPurchase[]
   subscriptionRedemptions SubscriptionRedemption[]
+  subscriptionBundleRedemptions SubscriptionBundleRedemption[]
 
   @@index([categoryId])
   @@index([verificationStatus, verificationSubmittedAt])
@@ -443,6 +509,20 @@ model TelegramLinkToken {
   @@index([userId, expiresAt])
 }
 
+model CustomerLookupCode {
+  id        String    @id @default(cuid())
+  codeHash  String    @unique
+  userId    Int
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt, usedAt])
+}
+
 model Subscription {
   id             Int       @id @default(autoincrement())
   uuid           String    @unique @default(uuid())
@@ -485,33 +565,71 @@ model SubscriptionBundle {
   status         SubscriptionBundleStatus @default(DRAFT)
   isActive       Boolean                  @default(false)
   categoryId     Int?
+  proposedByCompanyId Int?
+  proposedByUserId Int?
+  activatedAt    DateTime?
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt
 
   category       Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  proposedByCompany Company?              @relation("SubscriptionBundleProposerCompany", fields: [proposedByCompanyId], references: [id], onDelete: SetNull)
+  proposedByUser User?                    @relation("SubscriptionBundleProposer", fields: [proposedByUserId], references: [id], onDelete: SetNull)
   participants   SubscriptionBundleParticipant[]
+  userBundles    UserSubscriptionBundle[]
 
   @@index([status, isActive])
   @@index([categoryId])
+  @@index([proposedByCompanyId])
 }
 
 model SubscriptionBundleParticipant {
   id                  Int                @id @default(autoincrement())
+  uuid                String             @unique @default(uuid())
   bundleId            Int
   companyId           Int
   benefitTitle        String
   benefitDescription  String             @db.Text
   fulfillmentNote     String?            @db.Text
   revenueSharePercent Decimal            @db.Decimal(5, 2)
+  allowance           Int                @default(1)
+  windowValue         Int                @default(1)
+  windowUnit          SubscriptionEntitlementWindow @default(MONTH)
+  approvalStatus      SubscriptionBundleParticipantStatus @default(APPROVED)
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  approvedById        Int?
   sortOrder           Int                @default(1)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
   bundle              SubscriptionBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
   company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  approvedBy          User?              @relation("SubscriptionBundleParticipantApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  redemptions         SubscriptionBundleRedemption[]
 
   @@unique([bundleId, companyId])
   @@index([companyId])
+  @@index([approvalStatus])
+}
+
+model UserSubscriptionBundle {
+  id             Int                @id @default(autoincrement())
+  uuid           String             @unique @default(uuid())
+  userId         Int
+  bundleId       Int
+  status         SubscriptionStatus @default(ACTIVE)
+  activatedAt    DateTime           @default(now())
+  expiresAt      DateTime?
+  willAutoRenew  Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bundle         SubscriptionBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  redemptions    SubscriptionBundleRedemption[]
+
+  @@index([userId, status])
+  @@index([bundleId])
 }
 
 model CompanyLocation {
@@ -678,6 +796,27 @@ model SubscriptionRedemption {
   processedBy      User                   @relation("SubscriptionRedemptionProcessor", fields: [processedById], references: [id], onDelete: Restrict)
 
   @@index([userSubscriptionId, entitlementId, redeemedAt])
+  @@index([companyId, redeemedAt])
+  @@index([processedById, redeemedAt])
+}
+
+model SubscriptionBundleRedemption {
+  id                       Int      @id @default(autoincrement())
+  uuid                     String   @unique @default(uuid())
+  userSubscriptionBundleId Int
+  participantId            Int
+  companyId                Int
+  processedById            Int
+  quantity                 Int      @default(1)
+  note                     String?
+  redeemedAt               DateTime @default(now())
+
+  userSubscriptionBundle UserSubscriptionBundle       @relation(fields: [userSubscriptionBundleId], references: [id], onDelete: Cascade)
+  participant            SubscriptionBundleParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  company                Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  processedBy            User                         @relation("SubscriptionBundleRedemptionProcessor", fields: [processedById], references: [id], onDelete: Restrict)
+
+  @@index([userSubscriptionBundleId, participantId, redeemedAt])
   @@index([companyId, redeemedAt])
   @@index([processedById, redeemedAt])
 }

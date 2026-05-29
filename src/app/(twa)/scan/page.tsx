@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import QRCode from "qrcode";
-import { QrCode, ShieldCheck } from "lucide-react";
-import { getTwaQr, type TwaQr } from "@/lib/api/twa-client";
+import { Clock3, Hash, QrCode, RefreshCw, ShieldCheck } from "lucide-react";
+import { createTwaLookupCode, getTwaQr, type TwaLookupCode, type TwaQr } from "@/lib/api/twa-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n/use-i18n";
@@ -12,6 +12,9 @@ import { useI18n } from "@/lib/i18n/use-i18n";
 export default function ScanPage() {
   const { t } = useI18n("ru");
   const [qr, setQr] = useState<TwaQr | null>(null);
+  const [lookupCode, setLookupCode] = useState<TwaLookupCode | null>(null);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState("");
 
   useEffect(() => {
     let ignore = false;
@@ -37,6 +40,18 @@ export default function ScanPage() {
       },
     });
   }, [qr?.payload]);
+
+  async function generateLookupCode() {
+    setCodeLoading(true);
+    setCodeError("");
+    const result = await createTwaLookupCode();
+    if (result.ok) {
+      setLookupCode(result.data);
+    } else {
+      setCodeError(t("client.scan.codeError"));
+    }
+    setCodeLoading(false);
+  }
 
   return (
     <motion.div
@@ -82,6 +97,35 @@ export default function ScanPage() {
           )}
           <Button className="mt-5 w-full" variant="secondary" disabled>
             {t("client.scan.partnerComingSoon")}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="glass mx-auto mt-4 w-full max-w-sm overflow-hidden border-cyan-300/20 bg-cyan-300/[0.04]">
+        <CardContent className="space-y-4 p-5">
+          <div className="flex items-start gap-3">
+            <span className="rounded-xl border border-cyan-200/20 bg-cyan-200/10 p-2 text-cyan-100">
+              <Hash className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="font-semibold">{t("client.scan.quickCodeTitle")}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("client.scan.quickCodeDescription")}</p>
+            </div>
+          </div>
+          {lookupCode && (
+            <div className="rounded-2xl border border-cyan-200/20 bg-black/25 px-4 py-5 text-center">
+              <p className="font-mono text-4xl font-semibold tracking-[0.3em] text-cyan-50">
+                {lookupCode.code.split("").join(" ")}
+              </p>
+              <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-cyan-100/80">
+                <Clock3 className="h-3.5 w-3.5" /> {t("client.scan.codeExpires")}
+              </p>
+            </div>
+          )}
+          {codeError && <p className="rounded-xl border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">{codeError}</p>}
+          <Button type="button" className="w-full rounded-xl" onClick={() => void generateLookupCode()} disabled={codeLoading}>
+            {lookupCode ? <RefreshCw /> : <Hash />}
+            {lookupCode ? t("client.scan.refreshCode") : t("client.scan.generateCode")}
           </Button>
         </CardContent>
       </Card>

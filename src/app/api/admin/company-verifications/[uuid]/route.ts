@@ -8,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 
 const REVIEW_STATUSES = new Set<CompanyVerificationStatus>(["SUBMITTED", "REVIEWING", "APPROVED", "REJECTED"]);
+const TERMINAL_STATUSES = new Set<CompanyVerificationStatus>(["APPROVED", "REJECTED"]);
+const FINAL_DECISION_ERROR = "FINAL_VERIFICATION_DECISION_RECORDED";
 
 function readUuid(params: { uuid?: string } | Promise<{ uuid?: string }>) {
   return Promise.resolve(params).then((resolved) => resolved.uuid ?? "");
@@ -84,65 +86,92 @@ export async function PATCH(
     return NextResponse.json({ message: "Choose a valid review status" }, { status: 400 });
   }
 
-  const existing = await prisma.companyVerificationApplication.findUnique({
-    where: { uuid },
-    select: { id: true, companyId: true, identityVerificationMode: true },
-  });
+  let existing: {
+    id: number;
+    companyId: number | null;
+    identityVerificationMode: string;
+    status: CompanyVerificationStatus;
+  };
 
-  if (!existing) {
-    return NextResponse.json({ message: "Company verification application not found" }, { status: 404 });
+  try {
+    existing = await prisma.$transaction(async (tx) => {
+      const current = await tx.companyVerificationApplication.findUnique({
+        where: { uuid },
+        select: { id: true, companyId: true, identityVerificationMode: true, status: true },
+      });
+      if (!current) {
+        throw new Error("COMPANY_VERIFICATION_NOT_FOUND");
+      }
+      if (TERMINAL_STATUSES.has(current.status)) {
+        throw new Error(FINAL_DECISION_ERROR);
+      }
+
+      await tx.companyVerificationApplication.update({
+        where: { uuid },
+        data: { status },
+      });
+
+      if (current.companyId) {
+        await tx.company.update({
+          where: { id: current.companyId },
+          data: {
+            verificationStatus: status,
+            passportVerificationStatus: status === "APPROVED" ? "APPROVED" : status,
+            identityVerificationCompleted: status === "APPROVED" && current.identityVerificationMode === "FULL",
+            isActive: status === "APPROVED",
+            verificationReviewedAt: status === "APPROVED" || status === "REJECTED" ? new Date() : undefined,
+            passportDataDeletedAt: status === "APPROVED" || status === "REJECTED" ? new Date() : undefined,
+          },
+        });
+      }
+
+      await tx.auditEvent.create({
+        data: {
+          workspace: "MANAGER",
+          level: status === "APPROVED" || status === "REJECTED" ? "WARN" : "INFO",
+          category: "USER",
+          action: "Company verification status changed",
+          actorUserId: session.userId,
+          actorLabel: session.email ?? `admin:${session.userId}`,
+          targetUuid: uuid,
+          targetLabel: `Company verification ${uuid}`,
+          details: `Status changed to ${status}`,
+          tags: ["#USER", "#VERIFICATION"],
+        },
+      });
+      if (status === "APPROVED" || status === "REJECTED") {
+        await tx.adminTask.updateMany({
+          where: {
+            sourceKey: `verification:${uuid}`,
+            status: { in: ["OPEN", "IN_PROGRESS"] },
+          },
+          data: {
+            status: "RESOLVED",
+            resolvedById: session.userId,
+            resolvedAt: new Date(),
+          },
+        });
+      }
+
+      return current;
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (error instanceof Error && error.message === "COMPANY_VERIFICATION_NOT_FOUND") {
+      return NextResponse.json({ message: "Company verification application not found" }, { status: 404 });
+    }
+    if (
+      (error instanceof Error && error.message === FINAL_DECISION_ERROR) ||
+      (typeof error === "object" && error !== null && "code" in error && error.code === "P2034")
+    ) {
+      return NextResponse.json(
+        { message: "A final verification decision has already been recorded and cannot be changed." },
+        { status: 409 },
+      );
+    }
+    throw error;
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.companyVerificationApplication.update({
-      where: { uuid },
-      data: { status },
-    });
-
-    if (existing.companyId) {
-      await tx.company.update({
-        where: { id: existing.companyId },
-        data: {
-          verificationStatus: status,
-          passportVerificationStatus: status === "APPROVED" ? "APPROVED" : status,
-          identityVerificationCompleted: status === "APPROVED" && existing.identityVerificationMode === "FULL",
-          isActive: status === "APPROVED",
-          verificationReviewedAt: status === "APPROVED" || status === "REJECTED" ? new Date() : undefined,
-          passportDataDeletedAt: status === "APPROVED" || status === "REJECTED" ? new Date() : undefined,
-        },
-      });
-    }
-
-    await tx.auditEvent.create({
-      data: {
-        workspace: "MANAGER",
-        level: status === "APPROVED" || status === "REJECTED" ? "WARN" : "INFO",
-        category: "USER",
-        action: "Company verification status changed",
-        actorUserId: session.userId,
-        actorLabel: session.email ?? `admin:${session.userId}`,
-        targetUuid: uuid,
-        targetLabel: `Company verification ${uuid}`,
-        details: `Status changed to ${status}`,
-        tags: ["#USER", "#VERIFICATION"],
-      },
-    });
-    if (status === "APPROVED" || status === "REJECTED") {
-      await tx.adminTask.updateMany({
-        where: {
-          sourceKey: `verification:${uuid}`,
-          status: { in: ["OPEN", "IN_PROGRESS"] },
-        },
-        data: {
-          status: "RESOLVED",
-          resolvedById: session.userId,
-          resolvedAt: new Date(),
-        },
-      });
-    }
-  });
-
-  if (status === "APPROVED" || status === "REJECTED") {
+  if (TERMINAL_STATUSES.has(status)) {
     await deletePassportFilesForApplication(existing.id);
     await prisma.companyVerificationApplication.update({
       where: { uuid },

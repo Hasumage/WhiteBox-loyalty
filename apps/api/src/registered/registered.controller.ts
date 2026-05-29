@@ -121,6 +121,12 @@ export class RegisteredController {
     return this.registeredService.userQr(user.userId);
   }
 
+  @Post("lookup-code")
+  @ApiOperation({ summary: "Generate a short-lived five digit cashier lookup code" })
+  lookupCode(@CurrentUser() user: RequestUser) {
+    return this.registeredService.createCustomerLookupCode(user.userId);
+  }
+
   @Get("history")
   @ApiOperation({ summary: "TWA operation history and archived subscriptions" })
   history(@CurrentUser() user: RequestUser) {

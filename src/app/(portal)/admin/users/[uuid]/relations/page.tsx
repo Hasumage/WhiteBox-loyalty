@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import { categoryName } from "@/lib/i18n/categories";
 import { cn } from "@/lib/utils";
 import { formatDateTime, UserPageHeader, UserPageState, useAdminUserProfile } from "../_components/user-detail";
 
@@ -95,7 +96,7 @@ export default function AdminUserRelationsPage() {
                       <CategoryIcon iconName={fav.category.icon} className="h-5 w-5" />
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate font-semibold">{fav.category.name}</p>
+                      <p className="truncate font-semibold">{categoryName(fav.category, t)}</p>
                       <p className="truncate text-xs text-muted-foreground">/{fav.category.slug}</p>
                     </div>
                   </div>
@@ -117,7 +118,7 @@ export default function AdminUserRelationsPage() {
                 <div key={link.id} className="grid gap-3 p-4 md:grid-cols-[1fr_auto_auto_auto] md:items-center">
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{link.company.name}</p>
-                    <p className="truncate text-sm text-muted-foreground">{link.company.category.name}</p>
+                    <p className="truncate text-sm text-muted-foreground">{categoryName(link.company.category, t)}</p>
                   </div>
                   <Badge variant="secondary">{link.balance} pts</Badge>
                   <p className="text-sm text-muted-foreground">{t("admin.userDetail.nextReward")}: {link.pointsToNextReward ?? "-"}</p>
@@ -139,7 +140,7 @@ export default function AdminUserRelationsPage() {
                 <div key={sub.id} className="grid gap-3 p-4 lg:grid-cols-[1fr_auto_auto_auto] lg:items-center">
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{sub.subscription.name}</p>
-                    <p className="truncate text-sm text-muted-foreground">{sub.subscription.company?.name ?? sub.subscription.category?.name ?? sub.subscription.slug}</p>
+                    <p className="truncate text-sm text-muted-foreground">{sub.subscription.company?.name ?? (sub.subscription.category ? categoryName(sub.subscription.category, t) : sub.subscription.slug)}</p>
                   </div>
                   <Badge variant={sub.status === "ACTIVE" ? "default" : "secondary"}>{sub.status}</Badge>
                   <p className="text-sm text-muted-foreground">{t("admin.userDetail.expires")}: {formatDateTime(sub.expiresAt, locale)}</p>

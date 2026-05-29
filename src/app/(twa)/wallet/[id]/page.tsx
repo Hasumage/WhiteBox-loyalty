@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { formatPlanPrice as formatLocalizedPlanPrice, interpolate } from "@/lib/i18n/format";
+import { categoryName } from "@/lib/i18n/categories";
 import type { TranslateFn } from "@/lib/i18n/format";
 
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
@@ -158,7 +159,7 @@ export default function WalletPage() {
           {categories.slice(0, 3).map((category) => (
             <Badge key={category.slug} variant="secondary" className="inline-flex items-center gap-1 text-[10px] font-normal">
               <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
-              {category.name}
+              {categoryName(category, t)}
             </Badge>
           ))}
         </div>
@@ -377,7 +378,7 @@ export default function WalletPage() {
                           {sub.category && (
                             <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                               <CategoryIcon iconName={sub.category.icon ?? "Circle"} className="h-3 w-3" />
-                              {sub.category.name}
+                              {categoryName(sub.category, t)}
                             </span>
                           )}
                         </div>

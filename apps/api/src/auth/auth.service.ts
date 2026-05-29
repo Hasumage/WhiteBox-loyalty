@@ -209,13 +209,41 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException("Email is already registered");
     }
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const user = await this.prisma.user.create({
-      data: {
-        name: dto.name.trim(),
-        email,
-        passwordHash,
-        role,
-      },
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          name: dto.name.trim(),
+          email,
+          passwordHash,
+          role,
+        },
+      });
+
+      if (role === UserRole.CLIENT) {
+        const topStatus = await tx.profileStatus.findUnique({
+          where: { slug: "top-100" },
+          select: { id: true },
+        });
+        const counter = await tx.platformCounter.upsert({
+          where: { key: "top100_client_registrations" },
+          create: { key: "top100_client_registrations", value: 1 },
+          update: { value: { increment: 1 } },
+        });
+
+        if (topStatus && counter.value <= 100) {
+          await tx.userProfileStatusUnlock.upsert({
+            where: { userId_statusId: { userId: created.id, statusId: topStatus.id } },
+            create: {
+              userId: created.id,
+              statusId: topStatus.id,
+              source: "TOP_100",
+            },
+            update: {},
+          });
+        }
+      }
+
+      return created;
     });
     return this.issueTokens(user);
   }

@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import { categoryName } from "@/lib/i18n/categories";
 import { interpolate } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/format";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
@@ -202,7 +203,7 @@ function formatDistance(km: number | null, t: TranslateFn) {
   return `${km.toFixed(km < 10 ? 1 : 0)} km`;
 }
 
-function pointMatchesQuery(point: PartnerMapPoint, query: string) {
+function pointMatchesQuery(point: PartnerMapPoint, query: string, t: TranslateFn) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
   const categories = uniqueCompanyCategories(point.company);
@@ -212,7 +213,7 @@ function pointMatchesQuery(point: PartnerMapPoint, query: string) {
     point.location.title ?? "",
     point.location.address,
     point.location.city ?? "",
-    ...categories.flatMap((category) => [category.name, category.slug]),
+    ...categories.flatMap((category) => [category.name, categoryName(category, t), category.slug]),
   ]
     .join(" ")
     .toLowerCase();
@@ -786,8 +787,8 @@ function MapPageContent() {
   );
 
   const searchMatches = useMemo(
-    () => filteredLocationPoints.filter((point) => pointMatchesQuery(point, searchQuery)),
-    [filteredLocationPoints, searchQuery],
+    () => filteredLocationPoints.filter((point) => pointMatchesQuery(point, searchQuery, t)),
+    [filteredLocationPoints, searchQuery, t],
   );
 
   const locationPoints = useMemo(
@@ -973,7 +974,7 @@ function MapPageContent() {
                   >
                     <span className="inline-flex items-center gap-2">
                       <CategoryIcon iconName={category.icon ?? "Circle"} className="h-4 w-4" />
-                      {category.name}
+                      {categoryName(category, t)}
                     </span>
                   </button>
                 ))}
@@ -1189,7 +1190,7 @@ function MapPageContent() {
                     {uniqueCompanyCategories(selectedPartner).slice(0, 2).map((category) => (
                       <Badge key={category.slug} variant="secondary" className="inline-flex items-center gap-1 text-[10px] font-normal">
                         <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
-                        {category.name}
+                        {categoryName(category, t)}
                       </Badge>
                     ))}
                     </div>

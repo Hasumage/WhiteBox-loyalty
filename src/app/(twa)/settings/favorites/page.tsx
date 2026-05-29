@@ -16,6 +16,7 @@ import {
 } from "@/lib/api/categories-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { interpolate } from "@/lib/i18n/format";
+import { categoryName } from "@/lib/i18n/categories";
 
 const MAX_FAVORITE_CATEGORIES = 10;
 
@@ -117,7 +118,7 @@ function FavoriteCategoriesContent() {
                 }`}
               >
                 <CategoryIcon iconName={category.icon} className="mb-2 h-4 w-4 text-primary" />
-                <p className="text-sm font-medium">{category.name}</p>
+                <p className="text-sm font-medium">{categoryName(category, t)}</p>
               </button>
             );
           })}

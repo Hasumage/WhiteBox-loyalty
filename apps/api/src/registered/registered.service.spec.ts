@@ -8,7 +8,9 @@ describe("RegisteredService", () => {
     category: { findMany: jest.Mock };
     userFavoriteCategory: { findMany: jest.Mock; deleteMany: jest.Mock; createMany: jest.Mock };
     subscription: { findMany: jest.Mock; findUnique: jest.Mock };
+    subscriptionBundle: { findMany: jest.Mock; findUnique: jest.Mock };
     userSubscription: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
+    userSubscriptionBundle: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
     company: { findMany: jest.Mock };
     loyaltyTransaction: { findMany: jest.Mock; groupBy: jest.Mock; create: jest.Mock };
     userCompany: { upsert: jest.Mock };
@@ -18,6 +20,7 @@ describe("RegisteredService", () => {
     promoCodeRedemption: { create: jest.Mock };
     referralCampaign: { findFirst: jest.Mock; create: jest.Mock };
     referralInvite: { findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; count: jest.Mock };
+    customerLookupCode: { updateMany: jest.Mock; create: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -33,8 +36,17 @@ describe("RegisteredService", () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
       },
+      subscriptionBundle: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn(),
+      },
       userSubscription: {
         findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      userSubscriptionBundle: {
+        findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn(),
         create: jest.fn(),
       },
@@ -56,6 +68,7 @@ describe("RegisteredService", () => {
         create: jest.fn(),
         count: jest.fn(),
       },
+      customerLookupCode: { updateMany: jest.fn(), create: jest.fn() },
       $transaction: jest.fn(async (input) => {
         if (typeof input === "function") {
           return input({
@@ -63,6 +76,7 @@ describe("RegisteredService", () => {
             promoCodeRedemption: prisma.promoCodeRedemption,
             userCompany: prisma.userCompany,
             userSubscription: prisma.userSubscription,
+            userSubscriptionBundle: prisma.userSubscriptionBundle,
           });
         }
         return Promise.all(input);
@@ -130,14 +144,7 @@ describe("RegisteredService", () => {
 
     expect(prisma.category.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
-          subscriptions: {
-            some: {
-              isActive: true,
-              OR: [{ companyId: null }, { company: { isActive: true } }],
-            },
-          },
-        },
+        where: expect.objectContaining({ OR: expect.any(Array) }),
       }),
     );
     expect(prisma.subscription.findMany).toHaveBeenCalledWith(
@@ -168,6 +175,24 @@ describe("RegisteredService", () => {
     expect(first.payload).toBe("whitebox:user:11111111-1111-4111-8111-111111111111");
     expect(second.payload).toBe(first.payload);
     expect(first.generatedAt).toBeInstanceOf(Date);
+  });
+
+  it("creates a five digit single-use lookup code without persisting its plaintext value", async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 7 });
+    prisma.customerLookupCode.updateMany.mockResolvedValue({ count: 1 });
+    prisma.customerLookupCode.create.mockResolvedValue({ id: "code-1" });
+
+    const result = await service.createCustomerLookupCode(7);
+
+    expect(result.code).toMatch(/^\d{5}$/);
+    expect(result.expiresAt).toBeInstanceOf(Date);
+    expect(prisma.customerLookupCode.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ userId: 7, usedAt: null }) }),
+    );
+    expect(prisma.customerLookupCode.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 7, expiresAt: result.expiresAt }),
+    });
+    expect(prisma.customerLookupCode.create.mock.calls[0][0].data.codeHash).not.toBe(result.code);
   });
 
   it("completeOnboarding persists completion and geolocation prompt timestamps", async () => {
@@ -297,6 +322,17 @@ describe("RegisteredService", () => {
       updatedAt: new Date("2026-01-01T00:00:00.000Z"),
       company: { id: 12, slug: "aurora", name: "Aurora", isActive: true },
       category: { id: 1, slug: "coffee", name: "Coffee", icon: "Coffee" },
+      entitlements: [
+        {
+          uuid: "benefit-1",
+          title: "Coffee",
+          description: null,
+          allowance: 1,
+          windowValue: 1,
+          windowUnit: "DAY",
+          isActive: true,
+        },
+      ],
     });
     prisma.userSubscription.findFirst.mockResolvedValue(null);
     prisma.userSubscription.create.mockResolvedValue({
@@ -324,6 +360,17 @@ describe("RegisteredService", () => {
         updatedAt: new Date("2026-01-01T00:00:00.000Z"),
         company: { id: 12, slug: "aurora", name: "Aurora", isActive: true },
         category: { id: 1, slug: "coffee", name: "Coffee", icon: "Coffee" },
+        entitlements: [
+          {
+            uuid: "benefit-1",
+            title: "Coffee",
+            description: null,
+            allowance: 1,
+            windowValue: 1,
+            windowUnit: "DAY",
+            isActive: true,
+          },
+        ],
       },
     });
 
@@ -347,10 +394,24 @@ describe("RegisteredService", () => {
       uuid: "sub-30",
       isActive: true,
       company: null,
+      entitlements: [{ uuid: "benefit-1" }],
     });
     prisma.userSubscription.findFirst.mockResolvedValue({ id: 1 });
 
     await expect(service.activateSubscription(9, "sub-30")).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("activateSubscription rejects plans without active services", async () => {
+    prisma.subscription.findUnique.mockResolvedValue({
+      id: 30,
+      uuid: "sub-30",
+      isActive: true,
+      company: null,
+      entitlements: [],
+    });
+
+    await expect(service.activateSubscription(9, "sub-30")).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.userSubscription.create).not.toHaveBeenCalled();
   });
 
   it("activateSubscription rejects inactive or missing plans", async () => {

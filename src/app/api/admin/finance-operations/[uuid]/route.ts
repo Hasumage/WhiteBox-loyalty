@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { FinanceOperationStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { resolveEffectivePermission } from "@/lib/admin/access-control";
+import { calculateCompanyFinancialSnapshot, evaluatePayoutCoverage } from "@/lib/finance/company-finance";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -43,8 +44,58 @@ export async function PATCH(
   }
 
   const now = new Date();
-  const item = await prisma.$transaction(async (tx) => {
-    const updated = await tx.financeOperation.update({
+  try {
+    const item = await prisma.$transaction(async (tx) => {
+      const current = await tx.financeOperation.findUnique({ where: { uuid } });
+      if (!current) {
+        throw new Error("FINANCE_OPERATION_NOT_FOUND");
+      }
+      if (
+        current.companyId &&
+        current.type === "PAYOUT_REQUEST" &&
+        (body.status === "APPROVED" || body.status === "PAID")
+      ) {
+        const [subscriptions, companyPayouts] = await Promise.all([
+          tx.userSubscription.findMany({
+            where: {
+              status: { in: ["ACTIVE", "EXPIRED"] },
+              subscription: { companyId: current.companyId },
+            },
+            select: {
+              status: true,
+              activatedAt: true,
+              expiresAt: true,
+              subscription: { select: { companyId: true, name: true, price: true } },
+            },
+          }),
+          tx.financeOperation.findMany({
+            where: {
+              companyId: current.companyId,
+              type: "PAYOUT_REQUEST",
+              status: { in: ["PENDING_APPROVAL", "APPROVED", "PAID"] },
+            },
+            select: { companyId: true, type: true, status: true, amount: true },
+          }),
+        ]);
+        const snapshot = calculateCompanyFinancialSnapshot(
+          current.companyId,
+          subscriptions.map((subscription) => ({
+            companyId: subscription.subscription.companyId!,
+            name: subscription.subscription.name,
+            price: subscription.subscription.price,
+            status: subscription.status,
+            activatedAt: subscription.activatedAt,
+            expiresAt: subscription.expiresAt,
+          })),
+          companyPayouts,
+          now,
+        );
+        const coverage = evaluatePayoutCoverage(snapshot, current);
+        if (!coverage.requestCovered) {
+          throw new Error(`INSUFFICIENT_COMPANY_BALANCE:${coverage.availableBeforeThisRequest.toFixed(2)}`);
+        }
+      }
+      const updated = await tx.financeOperation.update({
       where: { uuid },
       data: {
         status: body.status,
@@ -58,7 +109,7 @@ export async function PATCH(
         approvedBy: { select: { id: true, uuid: true, email: true, name: true } },
       },
     });
-    await tx.auditEvent.create({
+      await tx.auditEvent.create({
       data: {
         workspace: "MANAGER",
         level: "CRITICAL",
@@ -72,7 +123,7 @@ export async function PATCH(
         tags: ["#BILLING", "#FINANCE", "#APPROVAL"],
       },
     });
-    await tx.adminTask.updateMany({
+      await tx.adminTask.updateMany({
       where: {
         sourceKey: `finance:${updated.uuid}`,
         status: { in: ["OPEN", "IN_PROGRESS"] },
@@ -83,8 +134,22 @@ export async function PATCH(
         resolvedAt: now,
       },
     });
-    return updated;
-  });
+      return updated;
+    });
 
-  return NextResponse.json(item);
+    return NextResponse.json(item);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "FINANCE_OPERATION_NOT_FOUND") {
+      return NextResponse.json({ message: "Finance operation not found" }, { status: 404 });
+    }
+    if (message.startsWith("INSUFFICIENT_COMPANY_BALANCE:")) {
+      const available = message.split(":")[1];
+      return NextResponse.json(
+        { message: `Company payout is not covered by earned balance. Available before this request: ${available} RUB.` },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
 }

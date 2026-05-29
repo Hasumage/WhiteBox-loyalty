@@ -38,12 +38,16 @@ import {
   getCachedTwaProfile,
   getTwaDashboard,
   getTwaProfile,
+  getUserProfileStatuses,
   redeemTwaPromoCode,
   redeemTwaReferralCode,
+  type UserProfileStatusState,
   type TwaProfile,
 } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { interpolate } from "@/lib/i18n/format";
+import { categoryName } from "@/lib/i18n/categories";
+import { ProfileStatusBadge } from "@/components/profile-status/profile-status-view";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -96,6 +100,7 @@ export default function SettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [profileStatusState, setProfileStatusState] = useState<UserProfileStatusState | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -146,6 +151,17 @@ export default function SettingsPage() {
         },
       });
       setLoading(false);
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      const response = await getUserProfileStatuses();
+      if (!ignore && response.ok) setProfileStatusState(response.data);
     })();
     return () => {
       ignore = true;
@@ -289,6 +305,43 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        <Card className="glass relative overflow-hidden border-cyan-200/20 bg-cyan-300/[0.04]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_8%_0%,rgba(103,232,249,0.18),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(251,146,60,0.12),transparent_26%)]" />
+          <CardHeader className="relative pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="h-4 w-4 text-cyan-100" /> Статус профиля
+            </CardTitle>
+            <CardDescription>
+              Выберите редкий, эпический или легендарный статус под настроение аккаунта.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="relative space-y-3">
+            {profileStatusState?.selectedStatus ? (
+              <ProfileStatusBadge
+                rarity={profileStatusState.selectedStatus.rarity}
+                icon={profileStatusState.selectedStatus.icon}
+                title={profileStatusState.selectedStatus.title}
+                className="max-w-full"
+              />
+            ) : (
+              <p className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-muted-foreground">
+                Статус ещё не выбран. Открытые статусы уже ждут в коллекции.
+              </p>
+            )}
+            <Button asChild variant="secondary" className="w-full rounded-2xl">
+              <Link href="/settings/statuses">
+                <Trophy className="h-4 w-4" />
+                Открыть коллекцию статусов
+                {profileStatusState?.summary.new ? (
+                  <span className="ml-auto rounded-full bg-cyan-200 px-2 py-0.5 text-xs font-bold text-black">
+                    +{profileStatusState.summary.new}
+                  </span>
+                ) : null}
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card className="glass relative overflow-hidden border-white/10 bg-slate-950/70">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(255,255,255,0.12),transparent_30%),radial-gradient(circle_at_88%_0%,rgba(34,211,238,0.11),transparent_34%)]" />
           <CardContent className="relative space-y-4 px-4 pb-4 pt-1.5">
@@ -401,7 +454,7 @@ export default function SettingsPage() {
                     className="inline-flex items-center gap-1.5 rounded-full border border-white/35 bg-white px-3 py-1 text-xs font-semibold text-black shadow-[0_0_16px_rgba(255,255,255,0.08)]"
                   >
                     <CategoryIcon iconName={cat.icon} className="h-3.5 w-3.5 text-black" />
-                    {cat.name}
+                    {categoryName(cat, t)}
                   </span>
                 ))
               )}

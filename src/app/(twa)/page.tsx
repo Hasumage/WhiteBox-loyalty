@@ -2,24 +2,25 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { computeSubscriptionProgress } from "@/services/subscriptions/subscription.progress";
 import { SubscriptionProgressBar } from "@/components/subscriptions/SubscriptionProgressBar";
 import type { ApiCategory } from "@/lib/api/categories-client";
 import { getCachedFavoriteCategorySlugs, getFavoriteCategorySlugs } from "@/lib/api/categories-client";
-import { getCachedTwaDashboard, getTwaDashboard, type TwaCompany, type TwaDashboard, type TwaUserSubscription } from "@/lib/api/twa-client";
+import { getCachedTwaDashboard, refreshTwaDashboard, type TwaCompany, type TwaDashboard, type TwaUserSubscription } from "@/lib/api/twa-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Wallet, ChevronRight, Search, CircleDollarSign, Store } from "lucide-react";
+import { Wallet, ChevronRight, Search, CircleDollarSign, Gift, RefreshCw, Store } from "lucide-react";
 import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { interpolate } from "@/lib/i18n/format";
+import { categoryName } from "@/lib/i18n/categories";
 
 const container = {
   hidden: { opacity: 0 },
@@ -56,7 +57,27 @@ export default function HomePage() {
   const [favoriteSlugs, setFavoriteSlugs] = useState<string[]>([]);
   const [dashboard, setDashboard] = useState<TwaDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshCoolingDown, setRefreshCoolingDown] = useState(false);
+  const [bonusNotice, setBonusNotice] = useState<{ company: string; amount: number } | null>(null);
   const totalBalance = dashboard?.wallet.totalBalance ?? 0;
+
+  function applyDashboard(data: TwaDashboard) {
+    if (dashboard) {
+      const previousBalances = new Map(dashboard.wallet.companies.map((company) => [company.id, company.points.balance]));
+      const raised = data.wallet.companies
+        .map((company) => ({
+          company: company.name,
+          amount: company.points.balance - (previousBalances.get(company.id) ?? company.points.balance),
+        }))
+        .find((entry) => entry.amount > 0);
+      if (raised) {
+        setBonusNotice(raised);
+        window.setTimeout(() => setBonusNotice(null), 4200);
+      }
+    }
+    setDashboard(data);
+  }
 
   useEffect(() => {
     let ignore = false;
@@ -71,7 +92,7 @@ export default function HomePage() {
     void (async () => {
       const [favorites, dashboardData] = await Promise.all([
         getFavoriteCategorySlugs(),
-        getTwaDashboard(),
+        refreshTwaDashboard(),
       ]);
       if (ignore) return;
       setFavoriteSlugs(favorites);
@@ -82,6 +103,16 @@ export default function HomePage() {
       ignore = true;
     };
   }, []);
+
+  async function refreshBalances() {
+    if (refreshing || refreshCoolingDown) return;
+    setRefreshing(true);
+    setRefreshCoolingDown(true);
+    window.setTimeout(() => setRefreshCoolingDown(false), 8000);
+    const fresh = await refreshTwaDashboard();
+    applyDashboard(fresh);
+    setRefreshing(false);
+  }
 
   const displayCategories = useMemo(() => {
     const source = new Map<string, ApiCategory>();
@@ -114,13 +145,15 @@ export default function HomePage() {
         !query ||
         company.name.toLowerCase().includes(query) ||
         (company.description ?? "").toLowerCase().includes(query) ||
-        categories.some((category) => category.name.toLowerCase().includes(query));
+        categories.some((category) =>
+          `${category.name} ${categoryName(category, t)}`.toLowerCase().includes(query),
+        );
 
       if (!matchesSearch) return false;
       if (selectedCategory && !categories.some((category) => category.slug === selectedCategory)) return false;
       return true;
     });
-  }, [dashboard?.wallet.companies, searchQuery, selectedCategory]);
+  }, [dashboard?.wallet.companies, searchQuery, selectedCategory, t]);
 
   const displayedCompanies = useMemo(
     () => filteredCompanies.slice(0, HOME_LOYALTY_CARDS_PREVIEW_LIMIT),
@@ -140,6 +173,24 @@ export default function HomePage() {
       transition={{ duration: 0.25 }}
       className="min-h-full px-4 pt-6 pb-4"
     >
+      <AnimatePresence>
+        {bonusNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -18, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-4 flex items-center gap-3 rounded-2xl border border-emerald-300/25 bg-[linear-gradient(100deg,rgba(16,185,129,0.17),rgba(103,232,249,0.08))] p-3 shadow-[0_0_30px_rgba(16,185,129,0.12)]"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-300/15 text-emerald-200">
+              <Gift className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">+{bonusNotice.amount} бонусов</p>
+              <p className="truncate text-xs text-muted-foreground">Вам начислены бонусы от {bonusNotice.company}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Search bar */}
       <motion.section
         initial={{ y: -8, opacity: 0 }}
@@ -211,17 +262,30 @@ export default function HomePage() {
         </motion.div>
         <motion.div
           variants={item}
-          className="glass flex items-center gap-3 rounded-2xl border border-white/10 p-4"
+          className="glass flex items-center justify-between gap-3 rounded-2xl border border-white/10 p-4"
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
-            <Wallet className="h-6 w-6 text-primary" />
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/20">
+              <Wallet className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold tracking-tight tabular-nums">
+                {totalBalance.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">{t("client.home.pointsAcrossShops")}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-2xl font-bold tracking-tight tabular-nums">
-              {totalBalance.toLocaleString()}
-            </p>
-            <p className="text-xs text-muted-foreground">{t("client.home.pointsAcrossShops")}</p>
-          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Обновить баланс"
+            onClick={() => void refreshBalances()}
+            disabled={refreshing || refreshCoolingDown}
+            className="shrink-0 rounded-xl"
+          >
+            <RefreshCw className={cn("h-5 w-5", refreshing && "animate-spin")} />
+          </Button>
         </motion.div>
       </motion.section>
 
@@ -328,7 +392,7 @@ export default function HomePage() {
                               className="inline-flex items-center gap-1 text-[10px] font-normal"
                             >
                               <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
-                              {category.name}
+                              {categoryName(category, t)}
                             </Badge>
                           ))}
                         </div>

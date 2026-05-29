@@ -37,6 +37,7 @@ import {
   type AdminSubscriptionStats,
 } from "@/lib/api/admin-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import { categoryName } from "@/lib/i18n/categories";
 import { cn } from "@/lib/utils";
 
 type PeriodUnit = "week" | "month" | "year";
@@ -76,7 +77,7 @@ function emptyParticipant(share: number): PairParticipantForm {
 }
 
 export default function AdminSubscriptionsPage() {
-  const { locale } = useI18n("ru");
+  const { locale, t } = useI18n("ru");
   const createRef = useRef<HTMLDivElement | null>(null);
   const [stats, setStats] = useState<AdminSubscriptionStats | null>(null);
   const [categories, setCategories] = useState<AdminCategory[]>([]);
@@ -347,7 +348,7 @@ export default function AdminSubscriptionsPage() {
                         {item.category && (
                           <Badge variant="outline" className="gap-1.5 border-white/15 bg-white/5">
                             <CategoryIcon iconName={item.category.icon} className="h-3.5 w-3.5 text-cyan-100" />
-                            {item.category.name}
+                            {categoryName(item.category, t)}
                           </Badge>
                         )}
                       </div>
@@ -552,7 +553,7 @@ export default function AdminSubscriptionsPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-xl font-semibold">{bundle.name}</h3>
                         <Badge className={bundle.isActive ? "bg-emerald-300 text-black" : "bg-white/10 text-white"}>{bundle.status}</Badge>
-                        {bundle.category && <Badge variant="outline" className="border-white/15 bg-white/5">{bundle.category.icon} {bundle.category.name}</Badge>}
+                        {bundle.category && <Badge variant="outline" className="border-white/15 bg-white/5">{bundle.category.icon} {categoryName(bundle.category, t)}</Badge>}
                       </div>
                       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{bundle.description}</p>
                     </div>

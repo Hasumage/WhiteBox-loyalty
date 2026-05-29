@@ -98,6 +98,11 @@ All `/api/company/*` routes require an active company membership. Platform role 
 | `/api/company/subscriptions` | GET/POST | Read or create company tariff plans |
 | `/api/company/subscriptions/:uuid/entitlements` | POST | Configure controlled service issuance |
 | `/api/company/subscriptions/redemptions` | POST | Consume an entitlement under its allowance |
+| `/api/company/club` | GET | Partner club overview, verified companies and paired subscription proposals |
+| `/api/company/club/bundles` | POST | Create a two-sided paired subscription proposal |
+| `/api/company/club/bundles/:uuid/approve` | POST | Approve own company participation and activate when all sides approved |
+| `/api/company/club/bundles/:uuid/reject` | POST | Reject and archive a paired subscription proposal |
+| `/api/company/club/bundles/redemptions` | POST | Redeem only the current company participant benefit |
 
 ## Registered API surface
 

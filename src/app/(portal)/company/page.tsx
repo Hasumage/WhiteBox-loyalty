@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Banknote, CircleAlert, QrCode, ReceiptText, Sparkles, Users, WalletCards } from "lucide-react";
+import { ArrowRight, Banknote, BookOpen, CircleAlert, Coins, QrCode, ReceiptText, Sparkles, Users, WalletCards, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,12 +17,32 @@ const roleNames = { OWNER: "Владелец", MANAGER: "Руководител�
 export default function CompanyPortalPage() {
   const [dashboard, setDashboard] = useState<CompanyDashboard | null>(null);
   const [error, setError] = useState("");
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
 
   useEffect(() => {
-    companyDashboard().then(setDashboard).catch((reason: Error) => setError(reason.message));
+    companyDashboard()
+      .then((data) => {
+        setDashboard(data);
+        const tutorialKey = `whitebox:company-tutorial:${data.company.name}`;
+        setTutorialOpen(window.localStorage.getItem(tutorialKey) !== "complete");
+      })
+      .catch((reason: Error) => setError(reason.message));
   }, []);
 
   const metrics = dashboard?.metrics;
+  const tutorial = [
+    { title: "Найдите клиента", detail: "Отсканируйте QR или найдите клиента по имени и email на кассе.", icon: QrCode },
+    { title: "Начислите баллы", detail: "Введите сумму покупки: уровень клиента сам определит размер кэшбэка.", icon: Coins },
+    { title: "Погасите услугу", detail: "Для активной подписки выдавайте услугу в один клик, лимиты защищены системой.", icon: WalletCards },
+    { title: "Следите за доходом", detail: "Финансы показывают уже заработанную сумму и будущий остаток подписок.", icon: Banknote },
+  ];
+  const TutorialIcon = tutorial[tutorialStep].icon;
+
+  function closeTutorial() {
+    if (dashboard) window.localStorage.setItem(`whitebox:company-tutorial:${dashboard.company.name}`, "complete");
+    setTutorialOpen(false);
+  }
   return (
     <div className="space-y-6">
       <header className="relative overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_86%_8%,rgba(103,232,249,0.15),transparent_34%),linear-gradient(120deg,rgba(17,24,39,0.98),rgba(8,9,12,0.98))] p-6 sm:p-8">
@@ -54,11 +74,39 @@ export default function CompanyPortalPage() {
         </div>
       )}
 
+      {tutorialOpen && (
+        <Card className="overflow-hidden border-cyan-300/20 bg-[linear-gradient(110deg,rgba(103,232,249,0.1),rgba(255,255,255,0.025))] py-0">
+          <CardContent className="grid gap-5 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="flex gap-4">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/20 bg-cyan-200/10 text-cyan-100">
+                <TutorialIcon className="h-6 w-6" />
+              </span>
+              <div>
+                <p className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100">
+                  <BookOpen className="h-3.5 w-3.5" /> Быстрый старт {tutorialStep + 1} / {tutorial.length}
+                </p>
+                <h2 className="text-lg font-semibold">{tutorial[tutorialStep].title}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{tutorial[tutorialStep].detail}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={closeTutorial}><X /> Пропустить</Button>
+              <Button
+                size="sm"
+                onClick={() => tutorialStep === tutorial.length - 1 ? closeTutorial() : setTutorialStep((step) => step + 1)}
+              >
+                {tutorialStep === tutorial.length - 1 ? "Начать работу" : "Далее"} <ArrowRight />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: "Клиенты", value: metrics?.customers ?? "-", detail: "в программе лояльности", icon: Users },
           { label: "Активные подписки", value: metrics?.activeSubscribers ?? "-", detail: "платящих клиентов", icon: WalletCards },
-          { label: "Прогноз подписок", value: metrics ? money(metrics.monthlyRecurringRevenue) : "-", detail: "в среднем за месяц", icon: Banknote },
+          { label: "Текущий доход", value: metrics ? money(metrics.recognizedSubscriptionRevenue) : "-", detail: metrics ? `+${money(metrics.dailySubscriptionRevenue)} в день` : "по прошедшим дням", icon: Banknote },
           { label: "Начислено баллов", value: metrics?.pointsAwarded ?? "-", detail: "через покупки", icon: ReceiptText },
         ].map(({ label, value, detail, icon: Icon }) => (
           <Card key={label} className="glass overflow-hidden border-white/10 py-0">
@@ -81,29 +129,39 @@ export default function CompanyPortalPage() {
           <CardContent className="p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Последние покупки</h2>
-                <p className="text-sm text-muted-foreground">Начисления по системе уровней</p>
+                <h2 className="text-lg font-semibold">Последние операции</h2>
+                <p className="text-sm text-muted-foreground">Подписки, начисления и списания баллов</p>
               </div>
               <Button asChild variant="ghost" size="sm">
                 <Link href="/company/clients">Открыть кассу <ArrowRight /></Link>
               </Button>
             </div>
             <div className="space-y-2">
-              {dashboard?.recentPurchases.map((purchase) => (
-                <div key={purchase.uuid} className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold">{purchase.customer}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(purchase.createdAt).toLocaleString("ru-RU")}</p>
+              {dashboard?.recentOperations.map((operation) => (
+                <div key={operation.uuid} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="rounded-xl border border-cyan-200/10 bg-cyan-200/[0.05] p-2 text-cyan-100">
+                      {operation.kind === "SUBSCRIPTION" ? <WalletCards className="h-4 w-4" /> : <Coins className="h-4 w-4" />}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{operation.customer} · {operation.title}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(operation.createdAt).toLocaleString("ru-RU")}</p>
+                    </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-semibold">{money(purchase.amount)}</p>
-                    <p className="text-xs text-cyan-100">+{purchase.pointsAwarded} баллов</p>
+                    {operation.kind === "SUBSCRIPTION" ? (
+                      <p className="text-sm font-semibold">{money(operation.amount ?? 0)}</p>
+                    ) : (
+                      <p className={`text-sm font-semibold ${operation.direction === "SPEND" ? "text-amber-200" : "text-cyan-100"}`}>
+                        {operation.direction === "SPEND" ? "-" : "+"}{operation.points ?? 0} баллов
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
-              {dashboard && dashboard.recentPurchases.length === 0 && (
+              {dashboard && dashboard.recentOperations.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-white/12 p-8 text-center text-sm text-muted-foreground">
-                  Первая покупка появится здесь после сканирования QR.
+                  Первая подписка или операция с баллами появится здесь после обслуживания клиента.
                 </div>
               )}
             </div>
@@ -125,6 +183,10 @@ export default function CompanyPortalPage() {
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 Правила погашения не позволят выдать ежедневный бонус дважды в один период.
               </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Будущий доход подписок</p>
+              <p className="mt-2 text-xl font-semibold">{metrics ? money(metrics.potentialSubscriptionRevenue) : "-"}</p>
             </div>
           </CardContent>
         </Card>

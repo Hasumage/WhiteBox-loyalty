@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  Trophy,
   UserCircle2,
   WalletCards,
 } from "lucide-react";
@@ -24,14 +25,19 @@ import { SelectField } from "@/components/ui/select-field";
 import {
   adminDeleteUser,
   adminForceLogoutUser,
+  adminGrantProfileStatus,
+  adminListProfileStatuses,
   adminReactivateUser,
   adminRequestEmailChange,
   adminUpdateUser,
+  type AdminProfileStatus,
   type AdminRole,
   type AdminUserDetail,
 } from "@/lib/api/admin-client";
 import { getStoredUser } from "@/lib/api/auth-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import { ProfileStatusBadge, ProfileStatusIcon, profileStatusRarityClass } from "@/components/profile-status/profile-status-view";
+import { cn } from "@/lib/utils";
 import {
   formatDateTime,
   toDateTimeLocal,
@@ -92,6 +98,9 @@ export default function AdminUserProfilePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [currentRole, setCurrentRole] = useState<string | null>(null);
+  const [profileStatuses, setProfileStatuses] = useState<AdminProfileStatus[]>([]);
+  const [grantStatusId, setGrantStatusId] = useState("");
+  const [grantingStatus, setGrantingStatus] = useState(false);
 
   useEffect(() => {
     setCurrentRole(getStoredUser()?.role ?? null);
@@ -107,6 +116,21 @@ export default function AdminUserProfilePage() {
       createdAt: toDateTimeLocal(user.createdAt),
     });
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.uuid) return;
+    let ignore = false;
+    void (async () => {
+      const response = await adminListProfileStatuses(user.uuid);
+      if (!ignore && response.ok) {
+        setProfileStatuses(response.data.statuses);
+        setGrantStatusId(response.data.statuses.find((status) => !status.unlocked)?.id ?? "");
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.uuid]);
 
   const snapshot = useMemo(() => {
     if (!user) return null;
@@ -195,6 +219,25 @@ export default function AdminUserProfilePage() {
     setError(null);
     setNotice(`${t("admin.userDetail.revokedSessions")}: ${response.data.revokedSessions}.`);
     await loadProfile();
+  }
+
+  async function onGrantProfileStatus() {
+    if (!userUuid || !grantStatusId) return;
+    setGrantingStatus(true);
+    setNotice(null);
+    const response = await adminGrantProfileStatus(userUuid, grantStatusId);
+    setGrantingStatus(false);
+    if (!response.ok) {
+      setError(response.message);
+      return;
+    }
+    setError(null);
+    setNotice(`Статус «${response.data.status.title}» открыт пользователю.`);
+    const fresh = await adminListProfileStatuses(userUuid);
+    if (fresh.ok) {
+      setProfileStatuses(fresh.data.statuses);
+      setGrantStatusId(fresh.data.statuses.find((status) => !status.unlocked)?.id ?? "");
+    }
   }
 
   const state = <UserPageState loading={loading} error={error && !user ? error : null} />;
@@ -298,6 +341,52 @@ export default function AdminUserProfilePage() {
         </Card>
 
         <div className="grid gap-4">
+          <Card className="glass overflow-hidden border-cyan-200/20 bg-cyan-300/[0.04]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Trophy className="h-5 w-5 text-cyan-100" /> Статусы профиля
+              </CardTitle>
+              <CardDescription>Открывайте пользователю коллекционные статусы и смотрите, что уже доступно.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {profileStatuses.some((status) => status.selected) ? (
+                profileStatuses.filter((status) => status.selected).map((status) => (
+                  <ProfileStatusBadge key={status.id} rarity={status.rarity} icon={status.icon} title={status.title} />
+                ))
+              ) : (
+                <p className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-muted-foreground">Пользователь ещё не выбрал активный статус.</p>
+              )}
+
+              <div className="grid gap-2">
+                {profileStatuses.filter((status) => status.unlocked).slice(0, 5).map((status) => {
+                  const meta = profileStatusRarityClass(status.rarity);
+                  return (
+                    <div key={status.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border", meta.ring, meta.surface, meta.text)}>
+                        <ProfileStatusIcon icon={status.icon} className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{status.title}</p>
+                        <p className="text-xs text-muted-foreground">{status.source ?? "открыт"}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <SelectField value={grantStatusId} onChange={(event) => setGrantStatusId(event.target.value)}>
+                  <option value="">Выберите статус для выдачи</option>
+                  {profileStatuses.filter((status) => !status.unlocked).map((status) => (
+                    <option key={status.id} value={status.id}>{status.title} · {status.rarity}</option>
+                  ))}
+                </SelectField>
+                <Button onClick={() => void onGrantProfileStatus()} disabled={!grantStatusId || grantingStatus}>
+                  <Sparkles className="h-4 w-4" /> {grantingStatus ? "Выдаю..." : "Открыть"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
           <SectionLink href={`/admin/users/${user.uuid}/relations`} icon={WalletCards} title={t("admin.userDetail.relations")} description={t("admin.userDetail.relationsHint")} count={snapshot.relations} />
           <SectionLink href={`/admin/users/${user.uuid}/activity`} icon={Sparkles} title={t("admin.userDetail.activity")} description={t("admin.userDetail.activityHint")} count={snapshot.activity} />
           <SectionLink href={`/admin/users/${user.uuid}/security`} icon={ShieldCheck} title={t("admin.userDetail.security")} description={t("admin.userDetail.securityHint")} count={snapshot.security} />

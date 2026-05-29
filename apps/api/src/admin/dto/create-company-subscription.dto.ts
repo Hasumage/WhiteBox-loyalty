@@ -1,5 +1,37 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, Min, MinLength } from "class-validator";
+import { SubscriptionEntitlementWindow } from "@prisma/client";
+import { Type } from "class-transformer";
+import { ArrayMinSize, IsArray, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
+
+export class CreateCompanySubscriptionEntitlementDto {
+  @ApiProperty({ example: "Coffee of the day" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  title!: string;
+
+  @ApiPropertyOptional({ example: "Any hot drink up to 350 ml." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
+  @ApiProperty({ example: 1 })
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  allowance!: number;
+
+  @ApiProperty({ example: 1 })
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  windowValue!: number;
+
+  @ApiProperty({ enum: SubscriptionEntitlementWindow, example: SubscriptionEntitlementWindow.DAY })
+  @IsEnum(SubscriptionEntitlementWindow)
+  windowUnit!: SubscriptionEntitlementWindow;
+}
 
 export class CreateCompanySubscriptionDto {
   @ApiProperty({ example: "Monthly Unlimited" })
@@ -57,4 +89,11 @@ export class CreateCompanySubscriptionDto {
   @IsInt()
   @Min(1)
   categoryId?: number;
+
+  @ApiProperty({ type: [CreateCompanySubscriptionEntitlementDto], description: "At least one service must be created with company-owned subscriptions." })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateCompanySubscriptionEntitlementDto)
+  entitlements!: CreateCompanySubscriptionEntitlementDto[];
 }

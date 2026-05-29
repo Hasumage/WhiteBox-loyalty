@@ -21,6 +21,8 @@ import { Input } from "@/components/ui/input";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Textarea } from "@/components/ui/textarea";
 import { companyProfile, submitCompanyVerification, type CompanyProfile } from "@/lib/api/company-client";
+import { categoryName } from "@/lib/i18n/categories";
+import { useI18n } from "@/lib/i18n/use-i18n";
 
 function shortDate(value: string) {
   return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium" }).format(new Date(value));
@@ -31,6 +33,7 @@ function digitsOnly(event: FormEvent<HTMLInputElement>, limit: number) {
 }
 
 export default function CompanyCompliancePage() {
+  const { t } = useI18n("ru");
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -331,7 +334,7 @@ export default function CompanyCompliancePage() {
               <CardContent className="p-5">
                 <Tags className="mb-3 h-5 w-5 text-cyan-100" />
                 <p className="text-xs uppercase tracking-widest text-muted-foreground">Категории</p>
-                <p className="mt-2 text-lg font-semibold">{profile.company.categories.map((category) => category.name).join(", ") || "Не заданы"}</p>
+                <p className="mt-2 text-lg font-semibold">{profile.company.categories.map((category) => categoryName(category, t)).join(", ") || "Не заданы"}</p>
               </CardContent>
             </Card>
           </section>

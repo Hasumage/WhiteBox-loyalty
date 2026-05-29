@@ -64,6 +64,7 @@ export type TwaCompany = {
 };
 
 export type TwaSubscriptionPlan = {
+  type?: "subscription" | "bundle";
   uuid: string;
   slug: string;
   name: string;
@@ -78,7 +79,31 @@ export type TwaSubscriptionPlan = {
   createdAt: string;
   updatedAt: string;
   company: { id: number; slug: string; name: string; isActive: boolean } | null;
+  partners?: string;
   category: ApiCategory | null;
+  participants?: Array<{
+    uuid: string;
+    company: { id: number; slug: string; name: string; isActive: boolean };
+    benefitTitle: string;
+    benefitDescription: string | null;
+    fulfillmentNote: string | null;
+    revenueSharePercent: number;
+    allowance: number;
+    windowValue: number;
+    windowUnit: "DAY" | "WEEK" | "MONTH" | "TERM" | "UNLIMITED";
+  }>;
+  entitlements: Array<{
+    uuid: string;
+    title: string;
+    description: string | null;
+    allowance: number;
+    windowValue: number;
+    windowUnit: "DAY" | "WEEK" | "MONTH" | "TERM" | "UNLIMITED";
+    isActive: boolean;
+    company?: { id: number; slug: string; name: string; isActive: boolean };
+    fulfillmentNote?: string | null;
+    revenueSharePercent?: number;
+  }>;
   isOwned?: boolean;
 };
 
@@ -108,6 +133,7 @@ export type TwaHistory = {
       category: ApiCategory;
     };
   }>;
+  subscriptions: TwaUserSubscription[];
   archivedSubscriptions: TwaUserSubscription[];
 };
 
@@ -131,6 +157,11 @@ export type TwaDashboard = {
 export type TwaQr = {
   payload: string;
   generatedAt: string;
+};
+
+export type TwaLookupCode = {
+  code: string;
+  expiresAt: string;
 };
 
 export type TwaProfile = {
@@ -162,6 +193,40 @@ export type TwaProfile = {
     inviterBonusPoints: number;
     invitedBonusPoints: number;
     isActive: boolean;
+  };
+};
+
+export type ProfileStatusRarity = "RARE" | "EPIC" | "LEGENDARY";
+
+export type ProfileStatus = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  rarity: ProfileStatusRarity;
+  icon: string;
+  isActive: boolean;
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UserProfileStatus = ProfileStatus & {
+  unlocked: boolean;
+  unlockedAt: string | null;
+  seenAt: string | null;
+  source: string | null;
+};
+
+export type UserProfileStatusState = {
+  selectedStatusId: string | null;
+  selectedStatus: ProfileStatus | null;
+  statuses: UserProfileStatus[];
+  newlyUnlocked: Array<ProfileStatus & { unlockedAt: string; source: string }>;
+  summary: {
+    total: number;
+    unlocked: number;
+    new: number;
   };
 };
 
@@ -208,9 +273,9 @@ function readCachedJson<T>(path: string, fallback: T, staleMs = TWA_CACHE_STALE_
   return readTwaCache<T>(cacheKey(path), fallback, staleMs).data;
 }
 
-async function getJson<T>(path: string, fallback: T, ttlMs = TWA_CACHE_TTL_MS): Promise<T> {
+async function getJson<T>(path: string, fallback: T, ttlMs = TWA_CACHE_TTL_MS, force = false): Promise<T> {
   const cached = readTwaCache<T>(cacheKey(path), fallback, TWA_CACHE_STALE_MS);
-  if (cached.hit && !cached.expired) return cached.data;
+  if (!force && cached.hit && !cached.expired) return cached.data;
 
   try {
     const res = await fetch(`${apiBase()}${path}`, {
@@ -310,6 +375,32 @@ export async function requestTelegramPhone() {
   );
 }
 
+export async function getUserProfileStatuses() {
+  return nextApiJson<UserProfileStatusState>(
+    "/api/user/profile-statuses",
+    { method: "GET" },
+    "Failed to load profile statuses.",
+  );
+}
+
+export async function selectUserProfileStatus(statusId: string | null) {
+  const result = await nextApiJson<UserProfileStatusState>(
+    "/api/user/profile-statuses",
+    { method: "PATCH", body: JSON.stringify({ statusId }) },
+    "Failed to select profile status.",
+  );
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function markUserProfileStatusesSeen() {
+  return nextApiJson<{ ok: true; updated: number }>(
+    "/api/user/profile-statuses/seen",
+    { method: "POST" },
+    "Failed to mark statuses as seen.",
+  );
+}
+
 const dashboardFallback: TwaDashboard = {
   wallet: { totalBalance: 0, companies: [] },
   activeSubscriptions: [],
@@ -323,6 +414,10 @@ export function getCachedTwaDashboard() {
 
 export function getTwaDashboard() {
   return getJson<TwaDashboard>("/registered/dashboard", dashboardFallback);
+}
+
+export function refreshTwaDashboard() {
+  return getJson<TwaDashboard>("/registered/dashboard", dashboardFallback, TWA_CACHE_TTL_MS, true);
 }
 
 const marketplaceFallback: TwaMarketplace = {
@@ -368,6 +463,10 @@ export function getTwaQr() {
   });
 }
 
+export function createTwaLookupCode() {
+  return postJson<TwaLookupCode>("/registered/lookup-code", {}, "Failed to generate cashier code");
+}
+
 const profileFallback: TwaProfile = {
   user: { uuid: "", name: "", email: "", createdAt: "" },
   preferences: {
@@ -405,6 +504,7 @@ export function getTwaProfile() {
 
 const historyFallback: TwaHistory = {
   transactions: [],
+  subscriptions: [],
   archivedSubscriptions: [],
 };
 

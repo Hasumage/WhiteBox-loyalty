@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import { categoryName } from "@/lib/i18n/categories";
 
 const POPULAR_CATEGORY_SLUGS = ["coffee", "books", "auto", "barber", "beauty", "food", "fitness", "retail"];
 
@@ -109,7 +110,10 @@ export default function CompaniesPage() {
     const query = searchQuery.trim().toLowerCase();
 
     return companies.filter((company) => {
-      const categoryNames = uniqueCompanyCategories(company).map((category) => category.name.toLowerCase());
+      const categoryNames = uniqueCompanyCategories(company).flatMap((category) => [
+        category.name.toLowerCase(),
+        categoryName(category, t).toLowerCase(),
+      ]);
       const matchesSearch =
         !query ||
         company.name.toLowerCase().includes(query) ||
@@ -120,7 +124,7 @@ export default function CompaniesPage() {
       if (selectedCategory && !companyMatchesCategory(company, selectedCategory)) return false;
       return true;
     });
-  }, [companies, searchQuery, selectedCategory]);
+  }, [companies, searchQuery, selectedCategory, t]);
 
   if (loading && companies.length === 0) {
     return <TwaLoadingScreen title={t("client.partners.loadingTitle")} subtitle={t("client.partners.loadingSubtitle")} />;
@@ -205,7 +209,7 @@ export default function CompaniesPage() {
                       )}
                     >
                       <CategoryIcon iconName={category.icon ?? "Circle"} className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{category.name}</span>
+                      <span className="truncate">{categoryName(category, t)}</span>
                     </button>
                   ))}
                 </div>
@@ -243,7 +247,7 @@ export default function CompaniesPage() {
             )}
           >
             <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3.5 w-3.5" />
-            {category.name}
+            {categoryName(category, t)}
           </button>
         ))}
       </CategoryChipStrip>
@@ -276,7 +280,7 @@ export default function CompaniesPage() {
                             className="inline-flex items-center gap-1 text-[10px] font-normal"
                           >
                             <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
-                            {category.name}
+                            {categoryName(category, t)}
                           </Badge>
                         ))}
                         {extraCount > 0 && (

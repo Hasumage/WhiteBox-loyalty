@@ -9,6 +9,7 @@ import { getTwaCompanies, getTwaMarketplace, type TwaCompany, type TwaSubscripti
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
+import { categoryName } from "@/lib/i18n/categories";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { formatPlanPrice as formatLocalizedPlanPrice, interpolate } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/format";
@@ -77,7 +78,7 @@ export default function CategoryDetailPage() {
 
       <div className="mb-4 flex items-center gap-2">
         <CategoryIcon iconName={category?.icon ?? "Circle"} className="h-5 w-5 text-primary" />
-        <h1 className="text-xl font-semibold">{category?.name ?? titleFromSlug(slug)}</h1>
+        <h1 className="text-xl font-semibold">{category ? categoryName(category, t) : titleFromSlug(slug)}</h1>
       </div>
       <p className="mb-4 text-sm text-muted-foreground">{t("client.category.partnersPlans")}</p>
 

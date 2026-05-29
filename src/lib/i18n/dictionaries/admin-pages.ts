@@ -159,6 +159,8 @@
     "admin.verifications.detail.approve": "Approve",
     "admin.verifications.detail.reject": "Reject",
     "admin.verifications.detail.statusUpdated": "Status updated",
+    "admin.verifications.detail.finalDecision": "Final decision recorded",
+    "admin.verifications.detail.finalDecisionHint": "Approved or rejected verification cannot be changed.",
     "admin.verifications.detail.companyRequest": "Company request",
     "admin.verifications.detail.employmentType": "Employment type",
     "admin.verifications.detail.identityMode": "Identity mode",
@@ -742,7 +744,18 @@
     "admin.finance.approvalRequired": "approval required",
     "admin.finance.approve": "Approve",
     "admin.finance.reject": "Reject",
-    "admin.finance.markPaid": "Mark paid"
+    "admin.finance.markPaid": "Mark paid",
+    "admin.finance.companyPosition": "Company financial position",
+    "admin.finance.covered": "Covered by earned balance",
+    "admin.finance.notCovered": "Insufficient earned balance",
+    "admin.finance.availableBeforeRequest": "Available before request",
+    "admin.finance.earned": "Recognized earnings",
+    "admin.finance.reservedAfter": "Reserved after request",
+    "admin.finance.activeSubscriptions": "Active subscriptions",
+    "admin.finance.futureRevenue": "Potential future revenue",
+    "admin.finance.revenueSource": "Source: activated subscriptions, recognized day by day. This is a calculated position until payment collection is connected.",
+    "admin.finance.perDay": "/ day",
+    "admin.finance.internalRequest": "Internal operation without a linked company balance."
   },
   ru: {
     "admin.dashboard.badge": "Операционный центр",
@@ -904,6 +917,8 @@
     "admin.verifications.detail.approve": "Одобрить",
     "admin.verifications.detail.reject": "Отклонить",
     "admin.verifications.detail.statusUpdated": "Статус обновлён",
+    "admin.verifications.detail.finalDecision": "Решение зафиксировано",
+    "admin.verifications.detail.finalDecisionHint": "После одобрения или отказа статус верификации изменить нельзя.",
     "admin.verifications.detail.companyRequest": "Заявка компании",
     "admin.verifications.detail.employmentType": "Тип занятости",
     "admin.verifications.detail.identityMode": "Режим проверки",
@@ -1487,6 +1502,17 @@
     "admin.finance.approvalRequired": "нужен апрув",
     "admin.finance.approve": "Одобрить",
     "admin.finance.reject": "Отклонить",
-    "admin.finance.markPaid": "Отметить оплаченной"
+    "admin.finance.markPaid": "Отметить оплаченной",
+    "admin.finance.companyPosition": "Финансовое состояние компании",
+    "admin.finance.covered": "Покрыто заработанным балансом",
+    "admin.finance.notCovered": "Заработанных средств недостаточно",
+    "admin.finance.availableBeforeRequest": "Доступно до этой заявки",
+    "admin.finance.earned": "Признанный доход",
+    "admin.finance.reservedAfter": "В резерве после заявки",
+    "admin.finance.activeSubscriptions": "Активных подписок",
+    "admin.finance.futureRevenue": "Будущий доход",
+    "admin.finance.revenueSource": "Источник: активированные подписки, доход признаётся по дням. До подключения оплаты это расчётная финансовая позиция.",
+    "admin.finance.perDay": "/ день",
+    "admin.finance.internalRequest": "Внутренняя операция без привязки к балансу компании."
   }
 } as const;

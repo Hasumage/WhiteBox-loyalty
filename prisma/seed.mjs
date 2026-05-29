@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, SubscriptionSpendPolicy, UserRole } from "@prisma/client";
 import { Pool } from "pg";
+import { seedProfileStatuses } from "./profile-status-seed-data.mjs";
 
 const DEMO_PASSWORD_HASH = "$2b$12$AYJ2n6Jx6lBWYPNp8RlGhu24yILFqlB2jmP.ylA9d83l8FIfy9dWS"; // DemoPass!123
 
@@ -45,13 +46,21 @@ async function main() {
       prisma.userSubscription.deleteMany(),
       prisma.userCompany.deleteMany(),
       prisma.userFavoriteCategory.deleteMany(),
+      prisma.userProfileStatusUnlock.deleteMany(),
       prisma.companyLevelRule.deleteMany(),
       prisma.companyCategory.deleteMany(),
       prisma.subscription.deleteMany(),
       prisma.company.deleteMany(),
       prisma.category.deleteMany(),
       prisma.user.deleteMany(),
+      prisma.profileStatus.deleteMany(),
+      prisma.platformCounter.deleteMany(),
     ]);
+
+    await seedProfileStatuses(prisma);
+    await prisma.platformCounter.create({
+      data: { key: "top100_client_registrations", value: 0 },
+    });
 
     const categorySeeds = [
       { slug: "coffee", name: "Coffee", icon: "Coffee", description: "Coffee shops and roasteries" },

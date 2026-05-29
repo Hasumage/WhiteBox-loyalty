@@ -27,6 +27,7 @@
 | `/company` | Company operational dashboard | COMPANY member |
 | `/company/clients` | Cashier QR, points and subscription redemption workspace | COMPANY member |
 | `/company/subscriptions` | Plans and entitlement rules | COMPANY member |
+| `/company/club` | Entrepreneur club, partner discovery and paired subscription proposals | COMPANY member |
 | `/company/team` | Local owner/manager/cashier administration | COMPANY owner/manager |
 | `/company/payments` | Forecast and payout requests | COMPANY owner/manager |
 | `/company/compliance` | Partner profile and verification status | COMPANY member |

@@ -96,6 +96,9 @@ Company workspace routes (`/api/company/*`, COMPANY membership):
 - `GET` / `POST /api/company/subscriptions` - company tariff workspace
 - `POST /api/company/subscriptions/:uuid/entitlements` - service usage limits
 - `POST /api/company/subscriptions/redemptions` - controlled service redemption
+- `GET /api/company/club` / `POST /api/company/club/bundles` - partner club and paired subscription proposals
+- `POST /api/company/club/bundles/:uuid/approve|reject` - two-sided proposal workflow
+- `POST /api/company/club/bundles/redemptions` - redeem only the current company benefit in a paired subscription
 
 Registered routes (`/api/registered/*`, CLIENT only):
 
@@ -141,6 +144,7 @@ Set `YANDEX_GEOCODER_API_KEY=<key>` to let admin company locations resolve addre
 - `/company` - company operational dashboard
 - `/company/clients` - cashier workspace for QR, customer points and subscription redemption
 - `/company/subscriptions` - plans and usage rules
+- `/company/club` - entrepreneur club and paired subscription workflow
 - `/company/team` - owner/manager/cashier membership management
 - `/company/payments` - subscription forecast and payout requests
 - `/email-change/confirm?token=...` - public confirmation page for user email change

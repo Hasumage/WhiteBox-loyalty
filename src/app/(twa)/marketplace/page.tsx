@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, CircleDollarSign, Loader2, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, CircleDollarSign, Loader2, SlidersHorizontal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { getCachedTwaMarketplace, getTwaMarketplace, type TwaMarketplace, type TwaSubscriptionPlan } from "@/lib/api/twa-client";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import { categoryName } from "@/lib/i18n/categories";
 import { formatPlanPrice as formatLocalizedPlanPrice } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/format";
 
@@ -180,7 +181,7 @@ export default function MarketplacePage() {
                       )}
                     >
                       <CategoryIcon iconName={category.icon ?? "Circle"} className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{category.name}</span>
+                      <span className="truncate">{categoryName(category, t)}</span>
                     </button>
                   ))}
                 </div>
@@ -248,7 +249,7 @@ export default function MarketplacePage() {
             )}
           >
             <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3.5 w-3.5" />
-            {category.name}
+            {categoryName(category, t)}
           </button>
         ))}
       </CategoryChipStrip>
@@ -263,7 +264,7 @@ export default function MarketplacePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(index * 0.04, 0.24) }}
             >
-              <Link href={`/marketplace/${plan.uuid}`}>
+              <Link href={`/marketplace/${plan.uuid}`} className="group block">
                 <Card className="glass border-white/10 transition-all active:scale-[0.98] hover:border-white/20">
                   <CardContent className="flex items-start gap-3 px-3 py-2.5">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20">
@@ -285,7 +286,7 @@ export default function MarketplacePage() {
                         {category && (
                           <Badge variant="secondary" className="inline-flex items-center gap-1 text-[10px] font-normal">
                             <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
-                            {category.name}
+                            {categoryName(category, t)}
                           </Badge>
                         )}
                         {plan.company && (
@@ -293,12 +294,20 @@ export default function MarketplacePage() {
                             {plan.company.name}
                           </Badge>
                         )}
+                        {plan.type === "bundle" && plan.partners && (
+                          <Badge variant="outline" className="max-w-full text-[10px] font-normal">
+                            <span className="truncate">{plan.partners}</span>
+                          </Badge>
+                        )}
                         {plan.isOwned && <Badge className="text-[10px] font-normal">{t("client.common.active")}</Badge>}
                       </div>
                     </div>
-                    <Button size="sm" variant="secondary" className="shrink-0">
-                      {t("client.common.view")}
-                    </Button>
+                    <span
+                      aria-hidden="true"
+                      className="flex h-10 w-10 shrink-0 self-center items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-muted-foreground transition-colors group-hover:text-foreground"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </span>
                   </CardContent>
                 </Card>
               </Link>

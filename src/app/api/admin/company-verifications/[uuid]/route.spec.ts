@@ -14,7 +14,7 @@ jest.mock("@/lib/prisma", () => ({
     },
     $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
-        companyVerificationApplication: { update: jest.fn() },
+        companyVerificationApplication: { findUnique: jest.fn(), update: jest.fn() },
         company: { update: jest.fn() },
         auditEvent: { create: jest.fn() },
         adminTask: { updateMany: jest.fn() },
@@ -36,7 +36,7 @@ import { PATCH } from "./route";
 const mockedRequireAdminSession = jest.mocked(requireAdminSession);
 const mockedPrisma = jest.mocked(prisma, { shallow: false });
 type MockVerificationTransaction = {
-  companyVerificationApplication: { update: jest.Mock };
+  companyVerificationApplication: { findUnique: jest.Mock; update: jest.Mock };
   company: { update: jest.Mock };
   auditEvent: { create: jest.Mock };
   adminTask: { updateMany: jest.Mock };
@@ -60,11 +60,13 @@ describe("admin company verification detail route", () => {
 
   it("approves an application and activates linked company", async () => {
     mockedPrisma.companyVerificationApplication.findUnique
-      .mockResolvedValueOnce({ id: 1, companyId: 42, identityVerificationMode: "FULL" } as never)
       .mockResolvedValueOnce({ uuid: "application-1", status: "APPROVED", company: { id: 42, isActive: true } } as never);
 
     const tx = {
-      companyVerificationApplication: { update: jest.fn() },
+      companyVerificationApplication: {
+        findUnique: jest.fn().mockResolvedValue({ id: 1, companyId: 42, identityVerificationMode: "FULL", status: "REVIEWING" }),
+        update: jest.fn(),
+      },
       company: { update: jest.fn() },
       auditEvent: { create: jest.fn() },
       adminTask: { updateMany: jest.fn() },
@@ -101,5 +103,34 @@ describe("admin company verification detail route", () => {
         data: expect.objectContaining({ status: "RESOLVED", resolvedById: 1 }),
       }),
     );
+  });
+
+  it("rejects a new action after a final decision has been recorded", async () => {
+    const tx = {
+      companyVerificationApplication: {
+        findUnique: jest.fn().mockResolvedValue({ id: 1, companyId: 42, identityVerificationMode: "FULL", status: "APPROVED" }),
+        update: jest.fn(),
+      },
+      company: { update: jest.fn() },
+      auditEvent: { create: jest.fn() },
+      adminTask: { updateMany: jest.fn() },
+    };
+    (mockedPrisma.$transaction as unknown as jest.Mock).mockImplementationOnce(
+      async (callback: (tx: MockVerificationTransaction) => Promise<unknown>) => callback(tx),
+    );
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/admin/company-verifications/application-1", {
+        method: "PATCH",
+        body: JSON.stringify({ status: "REJECTED" }),
+      }),
+      { params: { uuid: "application-1" } },
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.message).toContain("cannot be changed");
+    expect(tx.companyVerificationApplication.update).not.toHaveBeenCalled();
+    expect(tx.company.update).not.toHaveBeenCalled();
   });
 });

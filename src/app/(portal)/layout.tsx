@@ -12,6 +12,7 @@ import {
   FileCheck,
   FlaskConical,
   Gift,
+  Handshake,
   Headphones,
   Inbox,
   LayoutDashboard,
@@ -19,6 +20,9 @@ import {
   Menu,
   MoreHorizontal,
   QrCode,
+  Rocket,
+  Settings2,
+  Trophy,
   X,
   Send,
   ServerCrash,
@@ -53,6 +57,7 @@ const adminMenu: AdminMenuSection[] = [
     groupKey: "admin.nav.usersPartners",
     items: [
       { href: "/admin/users", labelKey: "admin.nav.users", icon: Users },
+      { href: "/admin/profile-statuses", labelKey: "admin.nav.profileStatuses", icon: Trophy },
       { href: "/admin/companies", labelKey: "admin.nav.companies", icon: Building2 },
       { href: "/admin/categories", labelKey: "admin.nav.categories", icon: Tag },
       { href: "/admin/company-verifications", labelKey: "admin.nav.companyVerification", icon: FileCheck },
@@ -91,10 +96,19 @@ const companyMenu: NavItem[] = [
   { href: "/company", label: "Дашборд", icon: LayoutDashboard },
   { href: "/company/clients", label: "Касса и клиенты", icon: QrCode },
   { href: "/company/subscriptions", label: "Подписки", icon: Gift },
+  { href: "/company/club", label: "Клуб партнёров", icon: Handshake },
+  { href: "/company/loyalty", label: "Уровни и баллы", icon: Trophy },
   { href: "/company/team", label: "Команда", icon: Users },
   { href: "/company/payments", label: "Финансы", icon: CreditCard },
-  { href: "/company/compliance", label: "Профиль компании", icon: FileCheck },
+  { href: "/company/compliance", label: "Верификация", icon: FileCheck },
+  { href: "/company/settings", label: "Настройки компании", icon: Settings2 },
+  { href: "/company/getting-started", label: "Первый запуск", icon: Rocket },
 ];
+
+const COMPANY_WORKSPACE_LABEL = "Кабинет компании";
+const COMPANY_PARTNER_LABEL = "Кабинет партнёра";
+const COMPANY_DESK_GROUP_LABEL = "Рабочий стол";
+const COMPANY_MANAGEMENT_GROUP_LABEL = "Управление";
 
 type MenuNotifications = {
   items: Record<string, number>;
@@ -140,7 +154,7 @@ export default function PortalLayout({
         .filter((item) => currentRole !== "SUPPORT" || item.href === "/admin/support")
         .map((item) => ({ ...item, label: t(item.labelKey) }))
     : companyMenu;
-  const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : "Кабинет компании");
+  const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : COMPANY_WORKSPACE_LABEL);
 
   const adminSections = useMemo(
     () =>
@@ -204,7 +218,7 @@ export default function PortalLayout({
             <WhiteBoxLogo />
             <div>
               <p className="text-xl font-semibold tracking-tight">WhiteBox</p>
-              <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.workspace") : "Кабинет партнёра"}</p>
+              <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.workspace") : COMPANY_PARTNER_LABEL}</p>
             </div>
           </Link>
           {isAdmin && <LanguageSwitcher locale={locale} onChange={setLocale} className="mb-5" />}
@@ -248,7 +262,7 @@ export default function PortalLayout({
           ) : (
             <div className="space-y-5">
               <div>
-                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Рабочий стол</p>
+                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{COMPANY_DESK_GROUP_LABEL}</p>
                 {menu.slice(0, 3).map(({ href, label, icon: Icon }) => {
                   const active = isItemActive(href);
                   return (
@@ -267,7 +281,7 @@ export default function PortalLayout({
                 })}
               </div>
               <div>
-                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Управление</p>
+                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{COMPANY_MANAGEMENT_GROUP_LABEL}</p>
                 {menu.slice(3).map(({ href, label, icon: Icon }) => {
                 const active = isItemActive(href);
                 return (
@@ -369,7 +383,7 @@ export default function PortalLayout({
                 <WhiteBoxLogo className="h-10 w-10" />
                 <div>
                   <p className="font-semibold">WhiteBox</p>
-                  <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.navigation") : "Кабинет партнёра"}</p>
+                  <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.navigation") : COMPANY_PARTNER_LABEL}</p>
                 </div>
               </div>
               {isAdmin && <LanguageSwitcher locale={locale} onChange={setLocale} />}
