@@ -85,6 +85,15 @@ npm run telegram:poll:local
 
 Never commit bot tokens. Keep them in `.env` or hosting secrets only.
 
+Local polling runs in safe mode by default:
+
+```env
+TELEGRAM_LOCAL_POLL_PRIVATE_ONLY=true
+TELEGRAM_LOCAL_POLL_COMMANDS_ONLY=true
+```
+
+That means the dev bot forwards only private `/start`, Telegram contact shares and callbacks to the local webhook. Group chats, discussion comments and random text are skipped locally, so the bot does not answer them or run unnecessary handlers while you develop.
+
 ## Private local storage
 
 Company verification passport files are encrypted and stored in private local storage. These files are local runtime data and must not be committed.

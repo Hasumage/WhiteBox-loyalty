@@ -10,6 +10,8 @@ const secretToken = process.env.TELEGRAM_WEBHOOK_SECRET;
 const once = process.argv.includes("--once");
 const fromNow = process.argv.includes("--from-now");
 const retryDelayMs = Number(process.env.TELEGRAM_LOCAL_POLL_RETRY_MS ?? 3000);
+const privateOnly = process.env.TELEGRAM_LOCAL_POLL_PRIVATE_ONLY !== "false";
+const commandsOnly = process.env.TELEGRAM_LOCAL_POLL_COMMANDS_ONLY !== "false";
 
 if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not set.");
 
@@ -89,9 +91,35 @@ async function forwardUpdate(update) {
   return data;
 }
 
+function updateChatType(update) {
+  return update.message?.chat?.type || update.callback_query?.message?.chat?.type || null;
+}
+
+function updateLabel(update) {
+  return update.message?.text || update.callback_query?.data || update.message?.contact?.phone_number || "update";
+}
+
+function shouldForwardUpdate(update) {
+  const chatType = updateChatType(update);
+  if (privateOnly && chatType && chatType !== "private") {
+    return { forward: false, reason: `non-private chat (${chatType})` };
+  }
+
+  const message = update.message;
+  if (commandsOnly && message) {
+    if (message.contact) return { forward: true };
+    if (/^\/start(?:\s|$)/.test(message.text?.trim() || "")) return { forward: true };
+    return { forward: false, reason: "non-command message" };
+  }
+
+  return { forward: true };
+}
+
 async function main() {
   console.log(`Telegram local polling -> ${localWebhookUrl}`);
   if (proxyUrl) console.log("Telegram proxy enabled.");
+  if (privateOnly) console.log("Local safe mode: non-private chats/comments are skipped.");
+  if (commandsOnly) console.log("Local safe mode: only /start, contact shares and callbacks are forwarded.");
   console.log(`Worker mode: transient errors retry every ${retryDelayMs}ms.`);
 
   let offset;
@@ -123,9 +151,16 @@ async function main() {
 
     for (const update of updates) {
       try {
+        const decision = shouldForwardUpdate(update);
+        if (!decision.forward) {
+          offset = update.update_id + 1;
+          console.log(`Skipped ${update.update_id}: ${updateLabel(update)} (${decision.reason})`);
+          continue;
+        }
+
         const result = await forwardUpdate(update);
         offset = update.update_id + 1;
-        const text = update.message?.text || update.callback_query?.data || "update";
+        const text = updateLabel(update);
         console.log(`Processed ${update.update_id}: ${text} -> ${JSON.stringify(result)}`);
       } catch (error) {
         console.error(`[poll] Local webhook failed for update ${update.update_id}: ${errorMessage(error)}`);
