@@ -46,9 +46,17 @@ async function main() {
     console.log("Telegram proxy disabled. Using direct connection.");
   }
 
-  const response = await undiciFetch(`https://api.telegram.org/bot${token}/getMe`, {
-    dispatcher: proxyUrl ? new ProxyAgent(proxyUrl) : undefined,
-  });
+  let response;
+  try {
+    response = await undiciFetch(`https://api.telegram.org/bot${token}/getMe`, {
+      dispatcher: proxyUrl ? new ProxyAgent(proxyUrl) : undefined,
+    });
+  } catch (error) {
+    if (!proxyUrl) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Telegram proxy failed: ${message}. Retrying direct connection.`);
+    response = await undiciFetch(`https://api.telegram.org/bot${token}/getMe`);
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");

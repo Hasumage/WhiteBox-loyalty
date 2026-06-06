@@ -164,6 +164,7 @@ export default function CompanyRegisterPage() {
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [employmentType, setEmploymentType] = useState("SELF_EMPLOYED");
   const [passportFileName, setPassportFileName] = useState("");
+  const [companyReferralCode, setCompanyReferralCode] = useState("");
   const t = copy[locale];
   const cards = t.cards as Array<[typeof Building2, string, string]>;
   const steps = t.steps as string[];
@@ -176,6 +177,7 @@ export default function CompanyRegisterPage() {
 
   useEffect(() => {
     setLocale(readClientLocale("en"));
+    setCompanyReferralCode(new URLSearchParams(window.location.search).get("ref")?.trim() ?? "");
     const raw = window.localStorage.getItem("whitebox.company-register-draft");
     if (!raw || !formRef.current) return;
     try {
@@ -293,7 +295,7 @@ export default function CompanyRegisterPage() {
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_30%_0%,rgba(255,255,255,0.14),transparent_32%),linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:auto,72px_72px,72px_72px]" />
       <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
-          <Link href="/landing" className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <WhiteBoxLogo className="h-10 w-10" />
             <div>
               <p className="text-xl font-semibold">WhiteBox</p>
@@ -303,7 +305,7 @@ export default function CompanyRegisterPage() {
           <div className="flex flex-wrap items-center gap-3">
             <LanguageSwitcher locale={locale} onChange={setLocale} />
             <Button asChild variant="outline" className="border-white/12 bg-white/6 text-white hover:bg-white/12">
-              <Link href="/landing"><ArrowLeft className="h-4 w-4" /> {String(t.back)}</Link>
+              <Link href="/"><ArrowLeft className="h-4 w-4" /> {String(t.back)}</Link>
             </Button>
           </div>
         </header>
@@ -328,6 +330,7 @@ export default function CompanyRegisterPage() {
           </div>
 
           <form ref={formRef} onSubmit={submit} onChange={(event) => saveDraft(event.currentTarget)} className="rounded-[2rem] border border-white/10 bg-white/[0.055] p-5 shadow-[0_0_46px_rgba(255,255,255,0.06)] sm:p-6">
+            <input type="hidden" name="companyReferralCode" value={companyReferralCode} />
             <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <span className="font-semibold">{String(t.progressTitle)}</span>
@@ -445,3 +448,4 @@ export default function CompanyRegisterPage() {
     </main>
   );
 }
+

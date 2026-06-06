@@ -27,6 +27,45 @@ export type AdminUsersResponse = {
   sortDir: "asc" | "desc";
 };
 
+export type AdminPaymentStatus = "PENDING" | "WAITING_FOR_CAPTURE" | "SUCCEEDED" | "CANCELED" | "FAILED" | "REFUNDED";
+
+export type AdminPaymentRow = {
+  uuid: string;
+  provider: "YOOKASSA";
+  purpose: "USER_SUBSCRIPTION" | "USER_SUBSCRIPTION_BUNDLE";
+  status: AdminPaymentStatus;
+  amount: string;
+  currency: string;
+  description: string;
+  providerPaymentId: string | null;
+  providerStatus: string | null;
+  confirmationUrl: string | null;
+  paidAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user: { uuid: string; name: string; email: string };
+  company: { slug: string; name: string } | null;
+  plan: { type: "subscription" | "bundle"; uuid: string; name: string } | null;
+};
+
+export type AdminPaymentsResponse = {
+  items: AdminPaymentRow[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  summary: {
+    succeededAmount: string;
+    pending: number;
+    waitingForCapture: number;
+    succeeded: number;
+    canceled: number;
+    failed: number;
+    refunded: number;
+  };
+};
+
 export type AdminAuditRow = {
   id: string;
   workspace: "MANAGER" | "DEVELOPER";
@@ -211,8 +250,47 @@ export type AdminDashboardResponse = {
     pendingFinance: number;
     openTasks: number;
     criticalTasks: number;
+    subscriptionGross: number;
+    subscriptionRecognizedGross: number;
+    subscriptionFutureGross: number;
+    whiteBoxCommission: number;
+    referralCommission: number;
+    supportManagerCommission: number;
+    companyRecognizedRevenue: number;
+    companiesWithReferral: number;
+    companiesWithSupportManager: number;
   };
   permittedSources: AdminTaskSource[];
+  pr: null | {
+    scope: "OWN" | "ALL";
+    totals: {
+      companies: number;
+      activeCompanies: number;
+      recognizedGross: number;
+      futureGross: number;
+      whiteBoxNetCommission: number;
+      referralCommission: number;
+      supportManagerCommission: number;
+    };
+    pipeline: Record<AdminCompanyReferralPipelineStatus, number>;
+    companies: Array<{
+      uuid: string;
+      companyId: number;
+      companyName: string;
+      companySlug: string;
+      companyActive: boolean;
+      status: AdminCompanyReferralStatus;
+      pipelineStatus: AdminCompanyReferralPipelineStatus;
+      referralPercent: number;
+      source: string;
+      referrer: AdminCompanyReferralUser;
+      recognizedGross: number;
+      futureGross: number;
+      whiteBoxNetCommission: number;
+      referralCommission: number;
+      activeSubscriptions: number;
+    }>;
+  };
   trend: Array<{ date: string; events: number }>;
   tasks: AdminTaskRow[];
 };
@@ -293,6 +371,7 @@ export type AdminPermissionScope =
   | "USERS"
   | "COMPANIES"
   | "COMPANY_VERIFICATIONS"
+  | "PR"
   | "FINANCE"
   | "SUPPORT"
   | "AUDIT"
@@ -498,6 +577,56 @@ export type AdminCompanyLocation = {
   updatedAt: string;
 };
 
+export type AdminCompanyReferralStatus = "ACTIVE" | "PAUSED" | "ENDED";
+export type AdminCompanyReferralPipelineStatus = "LEAD" | "NEGOTIATION" | "TRIAL" | "CONNECTED" | "REVENUE_ACTIVE" | "LOST";
+
+export type AdminCompanyReferralUser = {
+  id: number;
+  uuid: string;
+  name: string;
+  email: string;
+  role: AdminRole;
+};
+
+export type AdminCompanyReferral = {
+  id: number;
+  uuid: string;
+  status: AdminCompanyReferralStatus;
+  pipelineStatus: AdminCompanyReferralPipelineStatus;
+  referralPercent: string;
+  source: string;
+  notes: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  company: {
+    id: number;
+    uuid: string;
+    name: string;
+    slug: string;
+  };
+  referrer: AdminCompanyReferralUser;
+};
+
+export type AdminCompanyReferralResponse = {
+  company: {
+    id: number;
+    uuid: string;
+    name: string;
+    slug: string;
+  };
+  referral: AdminCompanyReferral | null;
+  candidates: AdminCompanyReferralUser[];
+  revenue: {
+    recognizedGross: number;
+    futureGross: number;
+    platformCommissionGross: number;
+    referralCommission: number;
+    whiteBoxNetCommission: number;
+  };
+};
+
 export type AdminCompanyUser = {
   id: number;
   uuid: string;
@@ -534,6 +663,7 @@ export type AdminCompanyUser = {
       sortOrder: number;
     }>;
     locations?: AdminCompanyLocation[];
+    currentReferral?: AdminCompanyReferral | null;
     isActive: boolean;
     operatesOnline: boolean;
   } | null;
@@ -1102,6 +1232,63 @@ export async function adminGetCompanyUser(uuid: string) {
   }
 }
 
+export async function adminGetCompanyReferral(uuid: string, query?: string) {
+  const params = new URLSearchParams();
+  if (query) params.set("query", query);
+  const suffix = params.toString() ? `?${params}` : "";
+  try {
+    const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/referral${suffix}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+      return { ok: false as const, status: res.status, message: message ?? "Failed to load company referral" };
+    }
+    return { ok: true as const, data: (await res.json()) as AdminCompanyReferralResponse };
+  } catch (error) {
+    return {
+      ok: false as const,
+      status: 0,
+      message: error instanceof Error ? error.message : "Network error",
+    };
+  }
+}
+
+export async function adminUpsertCompanyReferral(uuid: string, input: {
+  referrerUserId: number;
+  referralPercent: number;
+  status?: AdminCompanyReferralStatus;
+  pipelineStatus?: AdminCompanyReferralPipelineStatus;
+  source?: string;
+  notes?: string;
+}) {
+  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/referral`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+    return { ok: false as const, message: message ?? "Failed to update company referral" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminCompanyReferralResponse };
+}
+
+export async function adminEndCompanyReferral(uuid: string) {
+  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/referral`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+    return { ok: false as const, message: message ?? "Failed to end company referral" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminCompanyReferralResponse };
+}
+
 export async function adminUpdateCompanyUser(uuid: string, input: {
   name?: string;
   accountStatus?: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
@@ -1355,6 +1542,26 @@ export async function adminSubscriptionStats() {
   } catch {
     return null;
   }
+}
+
+export async function adminListPayments(options?: {
+  query?: string;
+  status?: AdminPaymentStatus | "";
+  page?: number;
+  limit?: number;
+}): Promise<AdminPaymentsResponse | null> {
+  const params = new URLSearchParams();
+  if (options?.query) params.set("query", options.query);
+  if (options?.status) params.set("status", options.status);
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.limit) params.set("limit", String(options.limit));
+  const suffix = params.toString() ? `?${params}` : "";
+  const res = await fetch(`${apiBase()}/admin/payments${suffix}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as AdminPaymentsResponse;
 }
 
 export async function adminFindSubscriptionByUuid(uuid: string) {

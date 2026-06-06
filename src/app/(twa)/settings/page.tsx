@@ -11,15 +11,14 @@ import {
   Copy,
   Flame,
   Gift,
+  Handshake,
   Heart,
-  Languages,
   LockKeyhole,
   MessageSquareText,
   PanelTop,
   Settings,
   ShieldCheck,
   Sparkles,
-  Star,
   Store,
   Target,
   Ticket,
@@ -318,6 +317,7 @@ export default function SettingsPage() {
     ["/settings/reviews", MessageSquareText, t("client.profile.myReviews"), t("client.profile.myReviewsSubtitle")],
     ["/settings/partnership", ShieldCheck, t("client.profile.partnership"), t("client.profile.partnershipSubtitle")],
     ["/settings/business", BriefcaseBusiness, t("client.profile.forBusiness"), t("client.profile.forBusinessSubtitle")],
+    ["/settings/company-referrals", Handshake, t("client.profile.companyReferrals"), t("client.profile.companyReferralsSubtitle")],
     ["/marketplace", Ticket, t("client.profile.trySubscriptions"), t("client.profile.unlockPerks")],
   ] as const;
 
@@ -507,8 +507,8 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold">{t("client.profile.personalization")}</h2>
           <p className="text-xs text-muted-foreground">{t("client.profile.personalizationSubtitle")}</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Card className="glass border-cyan-200/20 bg-cyan-300/[0.04]">
+        <div className="grid gap-3 md:grid-cols-2">
+          <Card className="glass flex min-w-0 flex-col border-cyan-200/20 bg-cyan-300/[0.04]">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Sparkles className="h-4 w-4 text-cyan-100" />
@@ -516,7 +516,7 @@ export default function SettingsPage() {
               </CardTitle>
               <CardDescription>{t("client.profile.profileStatusDescription")}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 pb-4">
+            <CardContent className="flex flex-1 flex-col gap-3 pb-4">
               {selectedStatus ? (
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("client.profile.currentStatus")}</p>
@@ -527,16 +527,16 @@ export default function SettingsPage() {
                   {t("client.profile.noStatusSelected")}
                 </p>
               )}
-              <Button asChild variant="secondary" className="w-full rounded-2xl">
-                <Link href="/settings/statuses">
-                  <Trophy className="h-4 w-4" />
-                  {t("client.profile.openStatusCollection")}
+              <Button asChild variant="secondary" className="mt-auto h-auto w-full min-w-0 overflow-hidden rounded-2xl px-3 py-3 !whitespace-normal">
+                <Link href="/settings/statuses" className="min-w-0 text-center text-sm leading-snug">
+                  <Trophy className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 max-w-full break-words">{t("client.profile.openStatusCollection")}</span>
                 </Link>
               </Button>
             </CardContent>
           </Card>
 
-          <Card className="glass border-white/10">
+          <Card className="glass flex min-w-0 flex-col border-white/10">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Heart className="h-4 w-4 text-primary" />
@@ -544,10 +544,10 @@ export default function SettingsPage() {
               </CardTitle>
               <CardDescription>{favoriteSummary}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 pb-4">
+            <CardContent className="flex flex-1 flex-col gap-3 pb-4">
               <div className="flex flex-wrap gap-2">
                 {favoriteCategories.length === 0 ? (
-                  <span className="rounded-full border border-dashed border-white/20 px-3 py-1 text-xs text-muted-foreground">
+                  <span className="max-w-full rounded-2xl border border-dashed border-white/20 px-3 py-2 text-xs leading-5 text-muted-foreground">
                     {t("client.profile.chooseCategories")}
                   </span>
                 ) : (
@@ -562,10 +562,10 @@ export default function SettingsPage() {
                   ))
                 )}
               </div>
-              <Button asChild variant="secondary" className="w-full rounded-2xl">
-                <Link href="/settings/favorites">
-                  <Heart className="h-4 w-4" />
-                  {t("client.profile.selectFavoriteCategories")}
+              <Button asChild variant="secondary" className="mt-auto h-auto w-full min-w-0 overflow-hidden rounded-2xl px-3 py-3 !whitespace-normal">
+                <Link href="/settings/favorites" className="min-w-0 text-center text-sm leading-snug">
+                  <Heart className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 max-w-full break-words">{t("client.profile.selectFavoriteCategories")}</span>
                 </Link>
               </Button>
             </CardContent>
@@ -578,7 +578,7 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold">{t("client.profile.rewardsCenter")}</h2>
           <p className="text-xs text-muted-foreground">{t("client.profile.rewardsCenterSubtitle")}</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           <Card className="glass border-white/10">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -587,9 +587,9 @@ export default function SettingsPage() {
               </CardTitle>
               <CardDescription>{t("client.profile.promoCodesSubtitle")}</CardDescription>
             </CardHeader>
-            <CardContent className="flex gap-2 pb-4">
+            <CardContent className="grid gap-2 pb-4 min-[460px]:grid-cols-[1fr_auto]">
               <Input className="glass border-white/10 uppercase" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder={t("client.profile.promoPlaceholder")} />
-              <Button type="button" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>
+              <Button type="button" className="min-[460px]:px-5" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>
                 {t("client.profile.apply")}
               </Button>
             </CardContent>
@@ -611,16 +611,16 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 pb-4">
-              <button type="button" onClick={copyReferralCode} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-muted/10 px-3 py-3 text-left">
+              <button type="button" onClick={copyReferralCode} className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-muted/10 px-3 py-3 text-left">
                 <div>
                   <p className="text-xs text-muted-foreground">{t("client.profile.yourReferralCode")}</p>
-                  <p className="font-semibold tracking-[0.18em]">{profile.referral.code || "..."}</p>
+                  <p className="break-all font-semibold tracking-[0.18em]">{profile.referral.code || "..."}</p>
                 </div>
-                <Copy className="h-4 w-4 text-primary" />
+                <Copy className="h-4 w-4 shrink-0 text-primary" />
               </button>
-              <div className="flex gap-2">
+              <div className="grid gap-2 min-[460px]:grid-cols-[1fr_auto]">
                 <Input className="glass border-white/10 uppercase" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder={t("client.profile.referralPlaceholder")} />
-                <Button type="button" variant="secondary" className="glass border-white/10" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>
+                <Button type="button" variant="secondary" className="glass border-white/10 min-[460px]:px-5" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>
                   {t("client.profile.redeem")}
                 </Button>
               </div>
@@ -635,17 +635,6 @@ export default function SettingsPage() {
           <p className="text-xs text-muted-foreground">{t("client.profile.accountAndMoreSubtitle")}</p>
         </div>
         <div className="grid gap-2">
-          <div className="rounded-[1.5rem] border border-white/10 bg-card p-3">
-            <div className="mb-3 flex items-center gap-2">
-              <Languages className="h-4 w-4 text-primary" />
-              <div>
-                <p className="text-sm font-semibold">{t("client.profile.languageTitle")}</p>
-                <p className="text-xs text-muted-foreground">{t("client.profile.languageDescription")}</p>
-              </div>
-            </div>
-            <LanguageSwitcher locale={locale} onChange={(nextLocale) => void setLocale(nextLocale)} />
-          </div>
-
           <Link href="/settings/account" className="flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-card px-4 py-3 transition-colors hover:bg-muted/10">
             <div className="flex min-w-0 items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-primary">

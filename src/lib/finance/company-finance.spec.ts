@@ -52,10 +52,52 @@ describe("company finance snapshot", () => {
       now,
     );
 
-    expect(snapshot.availableForPayout).toBe(20);
+    expect(snapshot.availableForPayout).toBe(8);
     expect(evaluatePayoutCoverage(snapshot, operation)).toMatchObject({
-      availableBeforeThisRequest: 80,
+      availableBeforeThisRequest: 68,
       requestCovered: true,
+    });
+  });
+
+  it("uses company net recognized revenue after platform and referral commissions for payouts", () => {
+    const operation = {
+      companyId: 7,
+      type: "PAYOUT_REQUEST",
+      status: "PENDING_APPROVAL",
+      amount: 86000,
+    };
+    const snapshot = calculateCompanyFinancialSnapshot(
+      7,
+      [
+        {
+          companyId: 7,
+          name: "Annual club",
+          price: 300000,
+          status: "ACTIVE",
+          activatedAt: new Date("2026-05-17T00:00:00.000Z"),
+          expiresAt: new Date("2026-06-16T00:00:00.000Z"),
+          platformCommissionPercent: 12,
+          commissionFreeMonthlyTurnover: 50000,
+          referralPercent: 1,
+          referralStatus: "ACTIVE",
+          referrerUserId: 99,
+          supportManagerUserId: 15,
+          supportManagerPercent: 1,
+        },
+      ],
+      [operation],
+      now,
+    );
+
+    expect(snapshot.recognizedRevenue).toBe(90000);
+    expect(snapshot.whiteBoxCommission).toBe(9000);
+    expect(snapshot.referralCommission).toBe(900);
+    expect(snapshot.supportManagerCommission).toBe(900);
+    expect(snapshot.companyRecognizedRevenue).toBe(79200);
+    expect(snapshot.availableForPayout).toBe(0);
+    expect(evaluatePayoutCoverage(snapshot, operation)).toMatchObject({
+      availableBeforeThisRequest: 79200,
+      requestCovered: false,
     });
   });
 });

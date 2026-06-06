@@ -2,6 +2,7 @@ jest.mock("@/lib/prisma", () => ({
   prisma: {
     user: { findUnique: jest.fn(), count: jest.fn() },
     company: { count: jest.fn() },
+    companyReferral: { findMany: jest.fn() },
     userSubscription: { count: jest.fn() },
     companyVerificationApplication: { count: jest.fn() },
     financeOperation: { count: jest.fn() },
@@ -37,6 +38,7 @@ describe("admin dashboard route", () => {
     mockedPrisma.user.findUnique.mockResolvedValue({ role: "ADMIN", permissions: [] } as never);
     mockedPrisma.user.count.mockResolvedValueOnce(40).mockResolvedValueOnce(38);
     mockedPrisma.company.count.mockResolvedValue(6);
+    mockedPrisma.companyReferral.findMany.mockResolvedValue([]);
     mockedPrisma.userSubscription.count.mockResolvedValue(17);
     mockedPrisma.companyVerificationApplication.count.mockResolvedValue(2);
     mockedPrisma.adminTask.count.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
@@ -77,6 +79,18 @@ describe("admin dashboard route", () => {
     });
     expect(body.permittedSources).toEqual(["AUDIT", "COMPANY_VERIFICATION"]);
     expect(body.tasks[0]).toMatchObject({ uuid: "task-1", source: "COMPANY_VERIFICATION" });
+    expect(body.pr).toMatchObject({
+      scope: "ALL",
+      totals: {
+        companies: 0,
+        activeCompanies: 0,
+        recognizedGross: 0,
+        futureGross: 0,
+        whiteBoxNetCommission: 0,
+        referralCommission: 0,
+        supportManagerCommission: 0,
+      },
+    });
     expect(mockedPrisma.financeOperation.count).not.toHaveBeenCalled();
   });
 });

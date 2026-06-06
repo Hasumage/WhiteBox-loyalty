@@ -1,0 +1,186 @@
+﻿import { PaymentPurpose, PaymentProvider, PaymentStatus, SubscriptionStatus } from "@prisma/client";
+import { fetch as undiciFetch } from "undici";
+import { PaymentsService } from "./payments.service";
+
+jest.mock("undici", () => ({
+  fetch: jest.fn(),
+  ProxyAgent: jest.fn(),
+}));
+
+const mockedTelegramFetch = jest.mocked(undiciFetch);
+
+function paymentRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 10,
+    uuid: "pay-local-1",
+    provider: PaymentProvider.YOOKASSA,
+    purpose: PaymentPurpose.USER_SUBSCRIPTION,
+    status: PaymentStatus.PENDING,
+    amount: "1000.00",
+    currency: "RUB",
+    description: "WhiteBox subscription: Coffee",
+    userId: 7,
+    companyId: 3,
+    subscriptionId: 5,
+    subscriptionBundleId: null,
+    userSubscriptionId: null,
+    userSubscriptionBundleId: null,
+    providerPaymentId: "yk_1",
+    providerStatus: "pending",
+    idempotenceKey: "idem-1",
+    confirmationUrl: "https://yookassa.test/pay",
+    returnUrl: "https://whitebox.test/payment/success?payment=pay-local-1",
+    paidAt: null,
+    canceledAt: null,
+    cancelReason: null,
+    metadata: null,
+    providerPayload: null,
+    createdAt: new Date("2026-06-05T10:00:00.000Z"),
+    updatedAt: new Date("2026-06-05T10:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function paidPaymentFixture() {
+  const activatedAt = new Date("2026-06-05T10:05:00.000Z");
+  const expiresAt = new Date("2026-07-05T10:05:00.000Z");
+  const pending = paymentRecord();
+  const succeeded = paymentRecord({
+    status: PaymentStatus.SUCCEEDED,
+    providerStatus: "succeeded",
+    paidAt: activatedAt,
+  });
+  const succeededWithRelations = {
+    ...succeeded,
+    userSubscriptionId: 44,
+    subscription: { uuid: "sub-coffee", name: "Coffee", renewalValue: 1, renewalUnit: "MONTH" },
+    subscriptionBundle: null,
+    userSubscription: { id: 44, status: SubscriptionStatus.ACTIVE, activatedAt, expiresAt },
+    userSubscriptionBundle: null,
+  };
+  return { activatedAt, expiresAt, pending, succeeded, succeededWithRelations };
+}
+
+describe("PaymentsService", () => {
+  const originalTelegramToken = process.env.TELEGRAM_BOT_TOKEN;
+  const originalTelegramProxy = process.env.TELEGRAM_PROXY_URL;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    delete process.env.TELEGRAM_BOT_TOKEN;
+    delete process.env.TELEGRAM_PROXY_URL;
+  });
+
+  afterAll(() => {
+    if (originalTelegramToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = originalTelegramToken;
+
+    if (originalTelegramProxy === undefined) delete process.env.TELEGRAM_PROXY_URL;
+    else process.env.TELEGRAM_PROXY_URL = originalTelegramProxy;
+  });
+
+  it("syncs a successful YooKassa payment and activates the subscription from the return page", async () => {
+    const { expiresAt, pending, succeeded, succeededWithRelations } = paidPaymentFixture();
+    const prisma = {
+      payment: {
+        findFirst: jest.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(succeededWithRelations),
+        findUnique: jest.fn((args: { where: { id?: number; providerPaymentId?: string }; include?: { user?: unknown } }) => {
+          if (args.where.providerPaymentId) return Promise.resolve(pending);
+          if (args.include?.user) {
+            return Promise.resolve({
+              ...succeeded,
+              user: { telegramId: null, name: "Emma Clark" },
+              subscription: { name: "Coffee" },
+              subscriptionBundle: null,
+              userSubscription: { expiresAt },
+              userSubscriptionBundle: null,
+            });
+          }
+          return Promise.resolve({
+            ...succeeded,
+            subscription: { uuid: "sub-coffee" },
+            subscriptionBundle: null,
+          });
+        }),
+        update: jest.fn().mockResolvedValue(succeeded),
+      },
+      telegramMessageQueue: { create: jest.fn() },
+    };
+    const yookassa = {
+      getPayment: jest.fn().mockResolvedValue({
+        id: "yk_1",
+        status: "succeeded",
+        amount: { value: "1000.00", currency: "RUB" },
+      }),
+    };
+    const registeredService = { activateSubscription: jest.fn().mockResolvedValue({ id: 44 }) };
+    const service = new PaymentsService(prisma as never, yookassa as never, registeredService as never);
+
+    const result = await service.getUserPayment(7, "pay-local-1");
+
+    expect(yookassa.getPayment).toHaveBeenCalledWith("yk_1");
+    expect(registeredService.activateSubscription).toHaveBeenCalledWith(7, "sub-coffee");
+    expect(prisma.payment.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ userSubscriptionId: 44 }) }));
+    expect(result.status).toBe(PaymentStatus.SUCCEEDED);
+    expect(result.plan).toEqual(expect.objectContaining({ type: "subscription", uuid: "sub-coffee", name: "Coffee" }));
+    expect(result.activatedSubscription).toEqual(expect.objectContaining({ id: 44, status: SubscriptionStatus.ACTIVE }));
+    expect(mockedTelegramFetch).not.toHaveBeenCalled();
+  });
+
+  it("thanks the user in Telegram when a paid subscription is activated", async () => {
+    process.env.TELEGRAM_BOT_TOKEN = "test-token";
+    mockedTelegramFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 99 } }),
+      text: async () => "",
+    } as never);
+
+    const { expiresAt, pending, succeeded, succeededWithRelations } = paidPaymentFixture();
+    const prisma = {
+      payment: {
+        findFirst: jest.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(succeededWithRelations),
+        findUnique: jest.fn((args: { where: { id?: number; providerPaymentId?: string }; include?: { user?: unknown } }) => {
+          if (args.where.providerPaymentId) return Promise.resolve(pending);
+          if (args.include?.user) {
+            return Promise.resolve({
+              ...succeeded,
+              uuid: "pay-local-1",
+              user: { telegramId: BigInt(1348887499), name: "Emma Clark" },
+              subscription: { name: "Coffee" },
+              subscriptionBundle: null,
+              userSubscription: { expiresAt },
+              userSubscriptionBundle: null,
+            });
+          }
+          return Promise.resolve({
+            ...succeeded,
+            subscription: { uuid: "sub-coffee" },
+            subscriptionBundle: null,
+          });
+        }),
+        update: jest.fn().mockResolvedValue(succeeded),
+      },
+      telegramMessageQueue: { create: jest.fn() },
+    };
+    const yookassa = {
+      getPayment: jest.fn().mockResolvedValue({
+        id: "yk_1",
+        status: "succeeded",
+        amount: { value: "1000.00", currency: "RUB" },
+      }),
+    };
+    const registeredService = { activateSubscription: jest.fn().mockResolvedValue({ id: 44 }) };
+    const service = new PaymentsService(prisma as never, yookassa as never, registeredService as never);
+
+    await service.getUserPayment(7, "pay-local-1");
+
+    expect(mockedTelegramFetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Подписка «Coffee» успешно подключена."),
+      }),
+    );
+    expect(prisma.telegramMessageQueue.create).not.toHaveBeenCalled();
+  });
+});

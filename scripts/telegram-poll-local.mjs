@@ -66,7 +66,14 @@ async function telegram(method, params = {}) {
   }
   const suffix = query.toString() ? `?${query}` : "";
   const url = `https://api.telegram.org/bot${token}/${method}${suffix}`;
-  const response = proxyUrl ? await fetchViaHttpsProxy(url) : await fetch(url);
+  let response;
+  try {
+    response = proxyUrl ? await fetchViaHttpsProxy(url) : await fetch(url);
+  } catch (error) {
+    if (!proxyUrl) throw error;
+    console.warn(`[poll] Telegram proxy failed for ${method}: ${errorMessage(error)}. Retrying direct connection.`);
+    response = await fetch(url);
+  }
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
   if (!response.ok || !data?.ok) {

@@ -588,10 +588,30 @@ export function companyFinance() {
     dailySubscriptionRevenue: number;
     reservedPayouts: number;
     paidPayouts: number;
+    paidBillingFees: number;
     availableForPayout: number;
     activeSubscribers: number;
     operations: Array<{ uuid: string; amount: number; status: string; title: string; createdAt: string }>;
   }>("/company/finance");
+}
+
+export type CompanyBillingData = {
+  account: { status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED"; trialEndsAt: string | null; currentPeriodStartsAt: string; currentPeriodEndsAt: string };
+  invoice: null | { uuid: string; status: "OPEN" | "PAID" | "WAIVED" | "CANCELED"; periodStartsAt: string; periodEndsAt: string; baseFee: string | number; promoDiscountAmount: string | number; commissionCreditAmount: string | number; amountDue: string | number };
+  availableBalance: number;
+  history: Array<{ uuid: string; status: string; periodStartsAt: string; periodEndsAt: string; amountDue: number }>;
+};
+
+export function companyBilling() {
+  return request<CompanyBillingData>("/company/billing");
+}
+
+export function applyCompanyBillingPromo(code: string) {
+  return request<CompanyBillingData>("/company/billing/promo", { method: "POST", body: JSON.stringify({ code }) });
+}
+
+export function payCompanyBillingInvoice() {
+  return request<CompanyBillingData>("/company/billing/pay", { method: "POST" });
 }
 
 export async function requestCompanyPayout(body: { amount: number; details?: string }) {

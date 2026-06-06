@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -68,13 +68,13 @@ export default function OnboardingPage() {
   async function finish() {
     setBusy(true);
     await completeTwaOnboarding();
-    router.replace("/");
+    router.replace("/app");
   }
 
   async function skip() {
     setBusy(true);
     await skipTwaOnboarding();
-    router.replace("/");
+    router.replace("/app");
   }
 
   function requestGeo() {

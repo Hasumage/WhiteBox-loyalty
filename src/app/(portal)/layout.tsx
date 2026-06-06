@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Megaphone,
   MoreHorizontal,
   QrCode,
   Rocket,
@@ -67,6 +68,7 @@ const adminMenu: AdminMenuSection[] = [
     groupKey: "admin.nav.subscriptions",
     items: [
       { href: "/admin/subscriptions", labelKey: "admin.nav.statistics", icon: LayoutDashboard },
+      { href: "/admin/pr", labelKey: "admin.nav.prDesk", icon: Megaphone },
       { href: "/admin/growth", labelKey: "admin.nav.growth", icon: Gift },
       { href: "/admin/test-screens", labelKey: "admin.nav.testScreens", icon: FlaskConical },
     ],
@@ -100,6 +102,7 @@ const companyMenu: NavItem[] = [
   { href: "/company/loyalty", label: "Уровни и баллы", icon: Trophy },
   { href: "/company/team", label: "Команда", icon: Users },
   { href: "/company/payments", label: "Финансы", icon: CreditCard },
+  { href: "/company/billing", label: "Абонентская плата", icon: Gift },
   { href: "/company/compliance", label: "Верификация", icon: FileCheck },
   { href: "/company/settings", label: "Настройки компании", icon: Settings2 },
   { href: "/company/getting-started", label: "Первый запуск", icon: Rocket },

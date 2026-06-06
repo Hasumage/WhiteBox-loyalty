@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { CompanyEmploymentType, IdentityVerificationMode, Prisma } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
+import { attachCompanyReferral, findCompanyReferralReferrer, normalizeCompanyReferralCode } from "@/lib/company-referrals/company-referrals";
+import { supportManagerConnectData } from "@/lib/company-referrals/support-manager";
 import { sendTelegramMessageQueued } from "@/lib/telegram/telegram-queue";
 import { escapeTelegramHtml } from "@/lib/telegram/telegram-service";
 import { encryptPassportData, type EncryptedPassportData, type ManualPassportData } from "./passport-data";
@@ -34,6 +36,7 @@ type ApplicationPayload = {
   payoutCardLast4?: string;
   passportData?: ManualPassportData;
   encryptedPassportData?: EncryptedPassportData;
+  companyReferralCode?: string;
   verificationDeferralReason?: string;
   passportPhotoProvided: boolean;
   consentAccepted: boolean;
@@ -99,6 +102,9 @@ export function parseCompanyApplicationPayload(
   const birthDate = parseBirthDate(input.birthDate);
   const age = ageFromBirthDate(birthDate);
   const passportPhotoProvided = input.passportPhotoProvided === true;
+  const companyReferralCode = normalizeCompanyReferralCode(
+    input.companyReferralCode ?? input.referralCode ?? input.ref,
+  );
 
   if (!contactName || !contactEmail || !companyName || !businessCategory || !legalFirstName || !legalLastName) {
     throw new Error("Fill in required fields.");
@@ -159,6 +165,7 @@ export function parseCompanyApplicationPayload(
     payoutCardLast4: undefined,
     passportData,
     encryptedPassportData,
+    companyReferralCode: companyReferralCode || undefined,
     verificationDeferralReason: undefined,
     passportPhotoProvided,
     consentAccepted: true,
@@ -258,6 +265,10 @@ export async function createCompanyVerificationApplication(params: {
 
   const slug = await uniqueCompanySlug(params.payload.companyName);
   const passwordHash = await bcrypt.hash(params.payload.password, 12);
+  const referrer = params.payload.companyReferralCode
+    ? await findCompanyReferralReferrer(params.payload.companyReferralCode)
+    : null;
+  const supportManager = await supportManagerConnectData();
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
@@ -274,6 +285,7 @@ export async function createCompanyVerificationApplication(params: {
         name: params.payload.companyName,
         description: `Pending verification: ${params.payload.businessCategory}`,
         categoryId: category.id,
+        ...supportManager,
         isActive: false,
         ownerUserId: user.id,
         employmentType: params.payload.employmentType,
@@ -320,6 +332,16 @@ export async function createCompanyVerificationApplication(params: {
     });
 
     await createPassportRecord((data) => tx.passportVerificationFile.create({ data }), application.id, params.passportUpload);
+
+    if (referrer) {
+      await attachCompanyReferral({
+        tx,
+        companyId: company.id,
+        referrerUserId: referrer.id,
+        source: "PUBLIC_REFERRAL",
+        notes: `Registered with public referral code ${params.payload.companyReferralCode}`,
+      }).catch(() => undefined);
+    }
 
     return { user, company, application };
   });

@@ -25,8 +25,10 @@ import { createHash } from "node:crypto";
 import { UpsertCompanyLocationDto } from "../admin/dto/upsert-company-location.dto";
 import { CreateCompanySubscriptionDto } from "../admin/dto/create-company-subscription.dto";
 import { PrismaService } from "../prisma/prisma.service";
+import { MAX_SUBSCRIPTION_PRICE_RUB } from "../subscriptions/subscription-limits";
 import {
   AwardCompanyPointsDto,
+  ApplyCompanyBillingPromoDto,
   CreateCompanyClubBundleDto,
   CreateCompanyMemberDto,
   CreateSubscriptionEntitlementDto,
@@ -49,9 +51,20 @@ const MANAGEMENT_ROLES = new Set<CompanyMemberRole>([
 ]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINIMUM_PAYOUT_RUB = 5_000;
+const COMPANY_TRIAL_DAYS = 30;
 
 @Injectable()
 export class CompanyService {
+  private assertSubscriptionPrice(price: number | string) {
+    const amount = Number(price);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new BadRequestException("Subscription price must be a non-negative number.");
+    }
+    if (amount > MAX_SUBSCRIPTION_PRICE_RUB) {
+      throw new BadRequestException(`Subscription price cannot exceed ${MAX_SUBSCRIPTION_PRICE_RUB} RUB.`);
+    }
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config?: ConfigService,
@@ -227,12 +240,62 @@ export class CompanyService {
     ) as typeof values;
   }
 
+  private billingAmount(input: {
+    baseFee: number;
+    discountPercent: number;
+    recognizedRevenue: number;
+    commissionPercent: number;
+  }) {
+    const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
+    const promoDiscountAmount = money(input.baseFee * (Math.min(100, Math.max(0, input.discountPercent)) / 100));
+    const discountedFee = money(input.baseFee - promoDiscountAmount);
+    const generatedCommission = money(input.recognizedRevenue * (Math.min(100, Math.max(0, input.commissionPercent)) / 100));
+    const commissionCreditAmount = money(Math.min(discountedFee, generatedCommission));
+    return {
+      baseFee: money(input.baseFee),
+      promoDiscountAmount,
+      discountedFee,
+      generatedCommission,
+      commissionCreditAmount,
+      amountDue: money(discountedFee - commissionCreditAmount),
+    };
+  }
+
+  private addDays(date: Date, days: number) {
+    return new Date(date.getTime() + days * DAY_MS);
+  }
+
+  private addMonths(date: Date, months = 1) {
+    const next = new Date(date);
+    next.setUTCMonth(next.getUTCMonth() + months);
+    return next;
+  }
+
+  private recognizedRevenueWithinPeriod(
+    rows: Array<{ activatedAt: Date; expiresAt: Date | null; subscription: { price: Prisma.Decimal } }>,
+    periodStartsAt: Date,
+    periodEndsAt: Date,
+    now = new Date(),
+  ) {
+    return Math.round(
+      rows.reduce((sum, row) => {
+        const start = row.activatedAt;
+        const end = row.expiresAt ?? this.addDays(start, 1);
+        const durationMs = Math.max(DAY_MS, end.getTime() - start.getTime());
+        const overlapStart = Math.max(start.getTime(), periodStartsAt.getTime());
+        const overlapEnd = Math.min(end.getTime(), periodEndsAt.getTime(), now.getTime());
+        if (overlapEnd <= overlapStart) return sum;
+        return sum + Number(row.subscription.price) * ((overlapEnd - overlapStart) / durationMs);
+      }, 0) * 100,
+    ) / 100;
+  }
+
   private async financialSnapshot(
-    db: Pick<PrismaService, "userSubscription" | "financeOperation"> | Pick<Prisma.TransactionClient, "userSubscription" | "financeOperation">,
+    db: Pick<PrismaService, "userSubscription" | "financeOperation" | "companyBillingInvoice"> | Pick<Prisma.TransactionClient, "userSubscription" | "financeOperation" | "companyBillingInvoice">,
     companyId: number,
     now = new Date(),
   ) {
-    const [subscriptionPurchases, reservedResult, paidResult] = await Promise.all([
+    const [subscriptionPurchases, reservedResult, paidBillingResult, paidResult] = await Promise.all([
       db.userSubscription.findMany({
         where: {
           status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED] },
@@ -248,6 +311,10 @@ export class CompanyService {
         },
         _sum: { amount: true },
       }),
+      db.companyBillingInvoice.aggregate({
+        where: { companyId, status: "PAID" },
+        _sum: { paidAmount: true },
+      }),
       db.financeOperation.aggregate({
         where: {
           companyId,
@@ -261,14 +328,16 @@ export class CompanyService {
     const revenue = this.subscriptionRevenue(subscriptionPurchases, now);
     const reservedPayouts = Number(reservedResult._sum.amount ?? 0);
     const paidPayouts = Number(paidResult._sum.amount ?? 0);
+    const paidBillingFees = Number(paidBillingResult._sum.paidAmount ?? 0);
     const availableForPayout = Math.max(
       0,
-      Math.round((revenue.recognized - reservedPayouts - paidPayouts) * 100) / 100,
+      Math.round((revenue.recognized - reservedPayouts - paidPayouts - paidBillingFees) * 100) / 100,
     );
     return {
       ...revenue,
       reservedPayouts,
       paidPayouts,
+      paidBillingFees,
       availableForPayout,
       activeSubscribers: subscriptionPurchases.filter(
         (row) => row.status === SubscriptionStatus.ACTIVE && (!row.expiresAt || row.expiresAt > now),
@@ -1164,10 +1233,221 @@ export class CompanyService {
       dailySubscriptionRevenue: snapshot.daily,
       reservedPayouts: snapshot.reservedPayouts,
       paidPayouts: snapshot.paidPayouts,
+      paidBillingFees: snapshot.paidBillingFees,
       availableForPayout: snapshot.availableForPayout,
       activeSubscribers: snapshot.activeSubscribers,
       operations: operations.map((operation) => ({ ...operation, amount: Number(operation.amount) })),
     };
+  }
+
+  private async ensureBillingAccount(companyId: number, now = new Date()) {
+    let account = await this.prisma.companyBillingAccount.findUnique({
+      where: { companyId },
+      include: { appliedPromoCode: true },
+    });
+    if (!account) {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { verificationReviewedAt: true },
+      });
+      const trialStartedAt = company?.verificationReviewedAt ?? now;
+      const trialEndsAt = this.addDays(trialStartedAt, COMPANY_TRIAL_DAYS);
+      account = await this.prisma.companyBillingAccount.create({
+        data: {
+          companyId,
+          status: trialEndsAt > now ? "TRIAL" : "ACTIVE",
+          trialStartedAt,
+          trialEndsAt,
+          currentPeriodStartsAt: trialEndsAt > now ? trialStartedAt : now,
+          currentPeriodEndsAt: trialEndsAt > now ? trialEndsAt : this.addMonths(now),
+        },
+        include: { appliedPromoCode: true },
+      });
+    }
+
+    if (account.currentPeriodEndsAt <= now) {
+      let start = account.currentPeriodEndsAt;
+      let end = this.addMonths(start);
+      while (end <= now) {
+        start = end;
+        end = this.addMonths(start);
+      }
+      account = await this.prisma.companyBillingAccount.update({
+        where: { companyId },
+        data: { status: "ACTIVE", currentPeriodStartsAt: start, currentPeriodEndsAt: end },
+        include: { appliedPromoCode: true },
+      });
+    }
+    return account;
+  }
+
+  private async currentBillingInvoice(companyId: number, now = new Date()) {
+    let account = await this.ensureBillingAccount(companyId, now);
+    if (account.status === "TRIAL" && account.trialEndsAt && account.trialEndsAt > now) {
+      return { account, invoice: null };
+    }
+    const overdueInvoice = await this.prisma.companyBillingInvoice.findFirst({
+      where: { companyId, status: "OPEN", periodEndsAt: { lte: now } },
+      orderBy: { periodStartsAt: "asc" },
+    });
+    if (overdueInvoice) {
+      if (account.status !== "PAST_DUE") {
+        account = await this.prisma.companyBillingAccount.update({
+          where: { companyId },
+          data: { status: "PAST_DUE" },
+          include: { appliedPromoCode: true },
+        });
+      }
+      return { account, invoice: overdueInvoice };
+    }
+    if (account.status === "PAST_DUE") {
+      account = await this.prisma.companyBillingAccount.update({
+        where: { companyId },
+        data: { status: "ACTIVE" },
+        include: { appliedPromoCode: true },
+      });
+    }
+    const company = await this.prisma.company.findUniqueOrThrow({
+      where: { id: companyId },
+      select: { platformMonthlyFee: true, monthlyFeeOverride: true, monthlyFeeOverrideEndsAt: true, platformCommissionPercent: true },
+    });
+    const purchases = await this.prisma.userSubscription.findMany({
+      where: {
+        status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED] },
+        subscription: { companyId },
+      },
+      select: { activatedAt: true, expiresAt: true, subscription: { select: { price: true } } },
+    });
+    const promo = account.appliedPromoCode;
+    const promoActive = Boolean(
+      promo?.isActive &&
+      (!promo.startsAt || promo.startsAt <= now) &&
+      (!promo.expiresAt || promo.expiresAt > now),
+    );
+    const baseFee =
+      company.monthlyFeeOverride && (!company.monthlyFeeOverrideEndsAt || company.monthlyFeeOverrideEndsAt > now)
+        ? Number(company.monthlyFeeOverride)
+        : Number(company.platformMonthlyFee);
+    const recognizedRevenue = this.recognizedRevenueWithinPeriod(
+      purchases,
+      account.currentPeriodStartsAt,
+      account.currentPeriodEndsAt,
+      now,
+    );
+    const calculation = this.billingAmount({
+      baseFee,
+      discountPercent: promoActive ? Number(promo?.discountPercent ?? 0) : 0,
+      recognizedRevenue,
+      commissionPercent: Number(company.platformCommissionPercent),
+    });
+    const invoiceStatus = calculation.amountDue === 0 ? "WAIVED" : "OPEN";
+    const existingInvoice = await this.prisma.companyBillingInvoice.findUnique({
+      where: { companyId_periodStartsAt: { companyId, periodStartsAt: account.currentPeriodStartsAt } },
+    });
+    if (existingInvoice?.status === "PAID") {
+      return { account, invoice: existingInvoice, calculation };
+    }
+    const invoice = await this.prisma.companyBillingInvoice.upsert({
+      where: { companyId_periodStartsAt: { companyId, periodStartsAt: account.currentPeriodStartsAt } },
+      create: {
+        companyId,
+        status: invoiceStatus,
+        periodStartsAt: account.currentPeriodStartsAt,
+        periodEndsAt: account.currentPeriodEndsAt,
+        baseFee: new Prisma.Decimal(calculation.baseFee),
+        promoDiscountPercent: new Prisma.Decimal(promoActive ? Number(promo?.discountPercent ?? 0) : 0),
+        promoDiscountAmount: new Prisma.Decimal(calculation.promoDiscountAmount),
+        commissionCreditAmount: new Prisma.Decimal(calculation.commissionCreditAmount),
+        amountDue: new Prisma.Decimal(calculation.amountDue),
+      },
+      update: {
+        status: invoiceStatus,
+        promoDiscountPercent: new Prisma.Decimal(promoActive ? Number(promo?.discountPercent ?? 0) : 0),
+        promoDiscountAmount: new Prisma.Decimal(calculation.promoDiscountAmount),
+        commissionCreditAmount: new Prisma.Decimal(calculation.commissionCreditAmount),
+        amountDue: new Prisma.Decimal(calculation.amountDue),
+      },
+    });
+    return { account, invoice, calculation };
+  }
+
+  async billing(userId: number) {
+    const member = await this.membership(userId);
+    this.requireManager(member);
+    const current = await this.currentBillingInvoice(member.companyId);
+    const snapshot = await this.financialSnapshot(this.prisma, member.companyId);
+    const history = await this.prisma.companyBillingInvoice.findMany({
+      where: { companyId: member.companyId },
+      orderBy: { periodStartsAt: "desc" },
+      take: 12,
+    });
+    return {
+      account: current.account,
+      invoice: current.invoice,
+      availableBalance: snapshot.availableForPayout,
+      history: history.map((row) => ({
+        ...row,
+        baseFee: Number(row.baseFee),
+        promoDiscountPercent: Number(row.promoDiscountPercent),
+        promoDiscountAmount: Number(row.promoDiscountAmount),
+        commissionCreditAmount: Number(row.commissionCreditAmount),
+        amountDue: Number(row.amountDue),
+        paidAmount: Number(row.paidAmount),
+      })),
+    };
+  }
+
+  async applyBillingPromo(userId: number, dto: ApplyCompanyBillingPromoDto) {
+    const member = await this.membership(userId);
+    this.requireManager(member);
+    const now = new Date();
+    const promo = await this.prisma.companyBillingPromoCode.findUnique({
+      where: { code: dto.code.trim().toUpperCase() },
+    });
+    if (
+      !promo ||
+      !promo.isActive ||
+      (promo.startsAt && promo.startsAt > now) ||
+      (promo.expiresAt && promo.expiresAt <= now) ||
+      (promo.maxRedemptions !== null && promo.redemptionCount >= promo.maxRedemptions)
+    ) {
+      throw new BadRequestException("Промокод не найден, недоступен или истёк.");
+    }
+    await this.ensureBillingAccount(member.companyId, now);
+    await this.prisma.$transaction(async (tx) => {
+      const redemption = await tx.companyBillingPromoRedemption.findUnique({
+        where: { promoCodeId_companyId: { promoCodeId: promo.id, companyId: member.companyId } },
+      });
+      if (!redemption) {
+        await tx.companyBillingPromoRedemption.create({ data: { promoCodeId: promo.id, companyId: member.companyId } });
+        await tx.companyBillingPromoCode.update({ where: { id: promo.id }, data: { redemptionCount: { increment: 1 } } });
+      }
+      await tx.companyBillingAccount.update({
+        where: { companyId: member.companyId },
+        data: { appliedPromoCodeId: promo.id },
+      });
+    });
+    return this.billing(userId);
+  }
+
+  async payBillingInvoice(userId: number) {
+    const member = await this.membership(userId);
+    this.requireManager(member);
+    const current = await this.currentBillingInvoice(member.companyId);
+    if (!current.invoice) throw new BadRequestException("Во время тестового периода оплачивать абонентскую плату не нужно.");
+    if (current.invoice.status === "PAID" || current.invoice.status === "WAIVED") return this.billing(userId);
+    const amountDue = Number(current.invoice.amountDue);
+    await this.prisma.$transaction(async (tx) => {
+      const snapshot = await this.financialSnapshot(tx, member.companyId);
+      if (snapshot.availableForPayout < amountDue) {
+        throw new BadRequestException(`Недостаточно средств на балансе WhiteBox. Нужно ${amountDue.toFixed(2)} RUB.`);
+      }
+      await tx.companyBillingInvoice.update({
+        where: { id: current.invoice!.id },
+        data: { status: "PAID", paidAmount: current.invoice!.amountDue, paidAt: new Date() },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return this.billing(userId);
   }
 
   async requestPayout(userId: number, dto: RequestCompanyPayoutDto) {
@@ -1337,6 +1617,7 @@ export class CompanyService {
   }
 
   async createClubBundleProposal(userId: number, dto: CreateCompanyClubBundleDto) {
+    this.assertSubscriptionPrice(dto.price);
     const member = await this.membership(userId);
     this.requireManager(member);
     this.requireTradingEnabled(member);
@@ -1607,6 +1888,7 @@ export class CompanyService {
   }
 
   async createSubscription(userId: number, dto: CreateCompanySubscriptionDto) {
+    this.assertSubscriptionPrice(dto.price);
     const member = await this.membership(userId);
     this.requireManager(member);
     this.requireTradingEnabled(member);
@@ -1653,6 +1935,7 @@ export class CompanyService {
   }
 
   async updateSubscription(userId: number, subscriptionUuid: string, dto: UpdateCompanyOwnedSubscriptionDto) {
+    if (dto.price !== undefined) this.assertSubscriptionPrice(dto.price);
     const member = await this.membership(userId);
     this.requireManager(member);
     this.requireTradingEnabled(member);

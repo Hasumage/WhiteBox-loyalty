@@ -13,6 +13,9 @@ import { companyProfile, createCompanySubscription, type EntitlementWindow } fro
 
 type RenewalUnit = "week" | "month" | "year";
 
+const MAX_SUBSCRIPTION_PRICE_RUB = 349999;
+const MAX_SUBSCRIPTION_PRICE_MESSAGE = "Максимальная стоимость подписки — 349 999 ₽.";
+
 const renewalOptions = [
   { value: "week", label: "Неделя", description: "Короткий тестовый тариф", icon: CalendarDays },
   { value: "month", label: "Месяц", description: "Самый понятный формат", icon: CalendarRange },
@@ -80,16 +83,23 @@ export default function NewCompanySubscriptionPage() {
   }, []);
 
   const serviceHasLimit = form.serviceWindowUnit !== "UNLIMITED";
+  const priceAmount = Number(form.price);
   const canCreate = Boolean(
     form.name.trim() &&
       form.description.trim().length >= 5 &&
-      Number(form.price) >= 0 &&
+      Number.isFinite(priceAmount) &&
+      priceAmount >= 0 &&
+      priceAmount <= MAX_SUBSCRIPTION_PRICE_RUB &&
       form.serviceTitle.trim().length >= 2 &&
       (!serviceHasLimit || (Number(form.serviceAllowance) >= 1 && Number(form.serviceWindowValue) >= 1)),
   );
 
   async function submit() {
     if (!canCreate || saving) return;
+    if (Number(form.price) > MAX_SUBSCRIPTION_PRICE_RUB) {
+      setError(MAX_SUBSCRIPTION_PRICE_MESSAGE);
+      return;
+    }
     try {
       setSaving(true);
       setError("");
@@ -164,6 +174,7 @@ export default function NewCompanySubscriptionPage() {
                   <Input
                     type="number"
                     min={0}
+                    max={MAX_SUBSCRIPTION_PRICE_RUB}
                     value={form.price}
                     onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
                     placeholder="999"

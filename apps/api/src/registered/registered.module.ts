@@ -8,5 +8,6 @@ import { RegisteredService } from "./registered.service";
   imports: [PrismaModule],
   controllers: [RegisteredController],
   providers: [RolesGuard, RegisteredService],
+  exports: [RegisteredService],
 })
 export class RegisteredModule {}

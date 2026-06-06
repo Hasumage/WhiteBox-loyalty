@@ -8,6 +8,9 @@ import {
   AuditLevel,
   AuditResult,
   AuditWorkspace,
+  CompanyReferralPipelineStatus,
+  CompanyReferralStatus,
+  PaymentStatus,
   PermissionScope,
   PromoCodeRewardType,
   Prisma,
@@ -21,6 +24,7 @@ import * as bcrypt from "bcrypt";
 import { createHash, randomBytes, randomUUID } from "crypto";
 import { MaintenanceStateService } from "../maintenance/maintenance-state.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { MAX_SUBSCRIPTION_PRICE_RUB } from "../subscriptions/subscription-limits";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { CreateCompanySubscriptionDto } from "./dto/create-company-subscription.dto";
 import { CreatePairedSubscriptionDto } from "./dto/create-paired-subscription.dto";
@@ -31,6 +35,7 @@ import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { UpdateCompanySubscriptionDto } from "./dto/update-company-subscription.dto";
 import { UpdateCompanyUserDto } from "./dto/update-company-user.dto";
 import { UpdateReferralCampaignDto } from "./dto/update-referral-campaign.dto";
+import { UpsertCompanyReferralDto } from "./dto/upsert-company-referral.dto";
 import { UpsertCompanyLocationDto } from "./dto/upsert-company-location.dto";
 import { UpsertCompanyProfileDto } from "./dto/upsert-company-profile.dto";
 import { CreateSubscriptionEntitlementDto } from "../company/dto/company-workspace.dto";
@@ -40,10 +45,21 @@ export class AdminService {
   private static readonly MAX_SLUG_LENGTH = 60;
   private static readonly RENEWAL_UNITS = ["week", "month", "year"] as const;
 
+  private assertSubscriptionPrice(price: number | string) {
+    const amount = Number(price);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new BadRequestException("Subscription price must be a non-negative number.");
+    }
+    if (amount > MAX_SUBSCRIPTION_PRICE_RUB) {
+      throw new BadRequestException(`Subscription price cannot exceed ${MAX_SUBSCRIPTION_PRICE_RUB} RUB.`);
+    }
+  }
+
   private readonly backupTableOrder = [
     "User",
     "Category",
     "Company",
+    "CompanyReferral",
     "CompanyLocation",
     "Subscription",
     "SubscriptionBundle",
@@ -59,6 +75,7 @@ export class AdminService {
     "UserCompany",
     "UserSubscription",
     "SubscriptionEntitlement",
+    "Payment",
     "SubscriptionRedemption",
     "PromoCode",
     "PromoCodeRedemption",
@@ -79,6 +96,10 @@ export class AdminService {
     private readonly config: ConfigService,
     private readonly maintenance: MaintenanceStateService,
   ) {}
+
+  private paymentMoney(value: Prisma.Decimal | number | string | null | undefined) {
+    return Number(value ?? 0).toFixed(2);
+  }
 
   private slugify(value: string) {
     return value
@@ -169,6 +190,94 @@ export class AdminService {
     return {
       ...promoCode,
       redemptionCount: redemptions.length,
+    };
+  }
+
+  private moneyNumber(value: Prisma.Decimal | number | string | null | undefined) {
+    if (value === null || value === undefined) return 0;
+    const next = Number(value);
+    return Number.isFinite(next) ? next : 0;
+  }
+
+  private serializeCompanyReferral(row: Prisma.CompanyReferralGetPayload<{
+    include: {
+      referrer: { select: { id: true; uuid: true; name: true; email: true; role: true } };
+      company: { select: { id: true; name: true; slug: true } };
+    };
+  }> | null) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      uuid: row.uuid,
+      status: row.status,
+      pipelineStatus: row.pipelineStatus,
+      referralPercent: row.referralPercent.toString(),
+      source: row.source,
+      notes: row.notes,
+      startedAt: row.startedAt,
+      endedAt: row.endedAt,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      company: row.company,
+      referrer: row.referrer,
+    };
+  }
+
+  private async companyReferralRevenue(companyId: number) {
+    const rows = await this.prisma.userSubscription.findMany({
+      where: {
+        status: { in: ["ACTIVE", "EXPIRED"] },
+        subscription: { companyId },
+      },
+      select: {
+        status: true,
+        activatedAt: true,
+        expiresAt: true,
+        subscription: {
+          select: {
+            price: true,
+            company: {
+              select: {
+                platformCommissionPercent: true,
+                commissionFreeMonthlyTurnover: true,
+                commissionGraceEndsAt: true,
+                supportManagerId: true,
+                currentReferral: { select: { referralPercent: true, status: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    const now = new Date();
+    let recognizedGross = 0;
+    let futureGross = 0;
+    for (const row of rows) {
+      const price = this.moneyNumber(row.subscription.price);
+      const activatedAt = row.activatedAt ? new Date(row.activatedAt).getTime() : now.getTime();
+      const expiresAt = row.expiresAt ? new Date(row.expiresAt).getTime() : now.getTime();
+      const duration = Math.max(1, expiresAt - activatedAt);
+      const elapsed = row.status === "EXPIRED" ? duration : Math.min(Math.max(now.getTime() - activatedAt, 0), duration);
+      const recognized = price * (elapsed / duration);
+      recognizedGross += recognized;
+      futureGross += Math.max(0, price - recognized);
+    }
+    const company = rows[0]?.subscription.company;
+    const graceActive = company?.commissionGraceEndsAt ? new Date(company.commissionGraceEndsAt).getTime() > now.getTime() : false;
+    const platformPercent = this.moneyNumber(company?.platformCommissionPercent ?? 12);
+    const referralPercent = company?.currentReferral?.status === CompanyReferralStatus.ACTIVE
+      ? this.moneyNumber(company.currentReferral.referralPercent)
+      : 0;
+    const platformCommissionGross = graceActive ? 0 : recognizedGross * (platformPercent / 100);
+    const referralCommission = graceActive ? 0 : recognizedGross * (referralPercent / 100);
+    const supportManagerCommission = graceActive || !company?.supportManagerId ? 0 : recognizedGross * 0.01;
+    return {
+      recognizedGross,
+      futureGross,
+      platformCommissionGross,
+      referralCommission,
+      supportManagerCommission,
+      whiteBoxNetCommission: Math.max(0, platformCommissionGross - referralCommission - supportManagerCommission),
     };
   }
 
@@ -455,6 +564,7 @@ export class AdminService {
       users,
       categories,
       companies,
+      companyReferrals,
       companyLocations,
       subscriptions,
       subscriptionBundles,
@@ -470,6 +580,7 @@ export class AdminService {
       userCompanies,
       userSubscriptions,
       subscriptionEntitlements,
+      payments,
       subscriptionRedemptions,
       promoCodes,
       promoCodeRedemptions,
@@ -487,6 +598,7 @@ export class AdminService {
       this.prisma.user.findMany({ orderBy: { id: "asc" } }),
       this.prisma.category.findMany({ orderBy: { id: "asc" } }),
       this.prisma.company.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.companyReferral.findMany({ orderBy: { id: "asc" } }),
       this.prisma.companyLocation.findMany({ orderBy: { id: "asc" } }),
       this.prisma.subscription.findMany({ orderBy: { id: "asc" } }),
       this.prisma.subscriptionBundle.findMany({ orderBy: { id: "asc" } }),
@@ -502,6 +614,7 @@ export class AdminService {
       this.prisma.userCompany.findMany({ orderBy: { id: "asc" } }),
       this.prisma.userSubscription.findMany({ orderBy: { id: "asc" } }),
       this.prisma.subscriptionEntitlement.findMany({ orderBy: { id: "asc" } }),
+      this.prisma.payment.findMany({ orderBy: { id: "asc" } }),
       this.prisma.subscriptionRedemption.findMany({ orderBy: { id: "asc" } }),
       this.prisma.promoCode.findMany({ orderBy: { id: "asc" } }),
       this.prisma.promoCodeRedemption.findMany({ orderBy: { id: "asc" } }),
@@ -521,6 +634,7 @@ export class AdminService {
       User: users,
       Category: categories,
       Company: companies,
+      CompanyReferral: companyReferrals,
       CompanyLocation: companyLocations,
       Subscription: subscriptions,
       SubscriptionBundle: subscriptionBundles,
@@ -536,6 +650,7 @@ export class AdminService {
       UserCompany: userCompanies,
       UserSubscription: userSubscriptions,
       SubscriptionEntitlement: subscriptionEntitlements,
+      Payment: payments,
       SubscriptionRedemption: subscriptionRedemptions,
       PromoCode: promoCodes,
       PromoCodeRedemption: promoCodeRedemptions,
@@ -1997,6 +2112,12 @@ export class AdminService {
               orderBy: { createdAt: "desc" },
               include: { entitlements: { orderBy: { createdAt: "asc" } } },
             },
+            currentReferral: {
+              include: {
+                referrer: { select: { id: true, uuid: true, name: true, email: true, role: true } },
+                company: { select: { id: true, name: true, slug: true } },
+              },
+            },
           },
         },
       },
@@ -2005,6 +2126,158 @@ export class AdminService {
       throw new NotFoundException("Company user not found");
     }
     return user;
+  }
+
+  private async listCompanyReferralCandidates(query?: string) {
+    const q = query?.trim();
+    const where: Prisma.UserWhereInput = {
+      role: { not: UserRole.COMPANY },
+      accountStatus: AccountStatus.ACTIVE,
+      ...(q
+        ? {
+            OR: [
+              { email: { contains: q, mode: "insensitive" } },
+              { name: { contains: q, mode: "insensitive" } },
+              { uuid: { contains: q } },
+            ],
+          }
+        : {}),
+    };
+    return this.prisma.user.findMany({
+      where,
+      select: { id: true, uuid: true, name: true, email: true, role: true },
+      orderBy: [{ role: "asc" }, { name: "asc" }],
+      take: 20,
+    });
+  }
+
+  async getCompanyReferralAdmin(companyUserUuid: string, query?: string) {
+    const user = await this.requireCompanyUser(companyUserUuid);
+    if (!user.managedCompany) {
+      throw new BadRequestException("Company profile must exist before assigning a referral.");
+    }
+    const [referral, candidates, revenue] = await Promise.all([
+      this.prisma.companyReferral.findUnique({
+        where: { companyId: user.managedCompany.id },
+        include: {
+          referrer: { select: { id: true, uuid: true, name: true, email: true, role: true } },
+          company: { select: { id: true, name: true, slug: true } },
+        },
+      }),
+      this.listCompanyReferralCandidates(query),
+      this.companyReferralRevenue(user.managedCompany.id),
+    ]);
+    return {
+      company: {
+        id: user.managedCompany.id,
+        uuid: companyUserUuid,
+        name: user.managedCompany.name,
+        slug: user.managedCompany.slug,
+      },
+      referral: this.serializeCompanyReferral(referral),
+      candidates,
+      revenue,
+    };
+  }
+
+  async upsertCompanyReferral(companyUserUuid: string, dto: UpsertCompanyReferralDto, actorUserId: number) {
+    const user = await this.requireCompanyUser(companyUserUuid);
+    if (!user.managedCompany) {
+      throw new BadRequestException("Company profile must exist before assigning a referral.");
+    }
+    const referrerUserId = Number(dto.referrerUserId);
+    if (!Number.isInteger(referrerUserId) || referrerUserId < 1) {
+      throw new BadRequestException("Referrer user is required.");
+    }
+    const referrer = await this.prisma.user.findUnique({
+      where: { id: referrerUserId },
+      select: { id: true, uuid: true, name: true, email: true, role: true, accountStatus: true },
+    });
+    if (!referrer || referrer.accountStatus !== AccountStatus.ACTIVE || referrer.role === UserRole.COMPANY) {
+      throw new BadRequestException("Referrer must be an active non-company user.");
+    }
+    const percent = dto.referralPercent === undefined ? 1 : Number(dto.referralPercent);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 12) {
+      throw new BadRequestException("Referral percent must be between 0 and 12.");
+    }
+    const status = dto.status ?? CompanyReferralStatus.ACTIVE;
+    const pipelineStatus = dto.pipelineStatus ?? CompanyReferralPipelineStatus.CONNECTED;
+    const referral = await this.prisma.companyReferral.upsert({
+      where: { companyId: user.managedCompany.id },
+      create: {
+        companyId: user.managedCompany.id,
+        referrerUserId,
+        referralPercent: new Prisma.Decimal(percent),
+        status,
+        pipelineStatus,
+        source: dto.source?.trim() || "PR",
+        notes: dto.notes?.trim() || null,
+        endedAt: status === CompanyReferralStatus.ENDED ? new Date() : null,
+      },
+      update: {
+        referrerUserId,
+        referralPercent: new Prisma.Decimal(percent),
+        status,
+        pipelineStatus,
+        source: dto.source?.trim() || "PR",
+        notes: dto.notes?.trim() || null,
+        endedAt: status === CompanyReferralStatus.ENDED ? new Date() : null,
+      },
+      include: {
+        referrer: { select: { id: true, uuid: true, name: true, email: true, role: true } },
+        company: { select: { id: true, name: true, slug: true } },
+      },
+    });
+    await this.createAuditEvent({
+      workspace: AuditWorkspace.MANAGER,
+      category: AuditCategory.BILLING,
+      level: AuditLevel.WARN,
+      action: "Company referral updated",
+      details: `Referral for "${user.managedCompany.name}" assigned to ${referrer.email} with ${percent}% payout from recognized subscription turnover, paid from the WhiteBox share.`,
+      actorUserId,
+      targetUuid: companyUserUuid,
+      targetLabel: user.managedCompany.name,
+      tags: ["PR", "REFERRAL", "COMPANY_REVENUE"],
+    });
+    const revenue = await this.companyReferralRevenue(user.managedCompany.id);
+    return {
+      company: {
+        id: user.managedCompany.id,
+        uuid: companyUserUuid,
+        name: user.managedCompany.name,
+        slug: user.managedCompany.slug,
+      },
+      referral: this.serializeCompanyReferral(referral),
+      candidates: await this.listCompanyReferralCandidates(referrer.email),
+      revenue,
+    };
+  }
+
+  async endCompanyReferral(companyUserUuid: string, actorUserId: number) {
+    const user = await this.requireCompanyUser(companyUserUuid);
+    if (!user.managedCompany) {
+      throw new BadRequestException("Company profile must exist before ending a referral.");
+    }
+    const existing = await this.prisma.companyReferral.findUnique({ where: { companyId: user.managedCompany.id } });
+    if (!existing) {
+      return this.getCompanyReferralAdmin(companyUserUuid);
+    }
+    await this.prisma.companyReferral.update({
+      where: { companyId: user.managedCompany.id },
+      data: { status: CompanyReferralStatus.ENDED, endedAt: new Date() },
+    });
+    await this.createAuditEvent({
+      workspace: AuditWorkspace.MANAGER,
+      category: AuditCategory.BILLING,
+      level: AuditLevel.WARN,
+      action: "Company referral ended",
+      details: `Referral attribution for "${user.managedCompany.name}" was ended.`,
+      actorUserId,
+      targetUuid: companyUserUuid,
+      targetLabel: user.managedCompany.name,
+      tags: ["PR", "REFERRAL", "ENDED"],
+    });
+    return this.getCompanyReferralAdmin(companyUserUuid);
   }
 
   async updateCompanyUserByUuid(uuid: string, dto: UpdateCompanyUserDto, actorUserId?: number) {
@@ -2615,6 +2888,7 @@ export class AdminService {
   }
 
   async createCompanySubscription(companyUserUuid: string, dto: CreateCompanySubscriptionDto, actorUserId?: number) {
+    this.assertSubscriptionPrice(dto.price);
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
       throw new BadRequestException("Company profile must exist before creating subscriptions.");
@@ -2696,6 +2970,7 @@ export class AdminService {
     if (!sub || sub.companyId !== user.managedCompany.id) {
       throw new NotFoundException("Subscription not found for this company user.");
     }
+    if (dto.price !== undefined) this.assertSubscriptionPrice(dto.price);
     if (dto.categoryId) {
       const category = await this.prisma.category.findUnique({ where: { id: dto.categoryId } });
       if (!category) throw new NotFoundException("Category not found");
@@ -2968,6 +3243,7 @@ export class AdminService {
   }
 
   async createPairedSubscription(dto: CreatePairedSubscriptionDto, actorUserId?: number) {
+    this.assertSubscriptionPrice(dto.price);
     const participants = dto.participants.map((participant, index) => ({
       companyId: Number(participant.companyId),
       benefitTitle: participant.benefitTitle.trim(),
@@ -3259,6 +3535,94 @@ export class AdminService {
       },
     });
     return this.getReferralCampaignAdmin().then((result) => ({ ...result, ...campaign }));
+  }
+
+  async listPayments(options: { query?: string; status?: PaymentStatus; page?: number; limit?: number }) {
+    const page = Math.max(1, Number(options.page) || 1);
+    const limit = Math.min(50, Math.max(5, Number(options.limit) || 20));
+    const skip = (page - 1) * limit;
+    const query = options.query?.trim();
+    const where: Prisma.PaymentWhereInput = {
+      ...(options.status ? { status: options.status } : {}),
+      ...(query
+        ? {
+            OR: [
+              { uuid: { contains: query, mode: "insensitive" } },
+              { providerPaymentId: { contains: query, mode: "insensitive" } },
+              { description: { contains: query, mode: "insensitive" } },
+              { user: { email: { contains: query, mode: "insensitive" } } },
+              { user: { name: { contains: query, mode: "insensitive" } } },
+              { company: { name: { contains: query, mode: "insensitive" } } },
+              { subscription: { name: { contains: query, mode: "insensitive" } } },
+              { subscriptionBundle: { name: { contains: query, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    };
+    const [items, total, statusRows] = await Promise.all([
+      this.prisma.payment.findMany({
+        where,
+        include: {
+          user: { select: { uuid: true, name: true, email: true } },
+          company: { select: { slug: true, name: true } },
+          subscription: { select: { uuid: true, name: true } },
+          subscriptionBundle: { select: { uuid: true, name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.payment.count({ where }),
+      this.prisma.payment.groupBy({ by: ["status"], _count: true, _sum: { amount: true } }),
+    ]);
+    const summary = statusRows.reduce(
+      (acc, row) => {
+        acc.byStatus[row.status] = row._count;
+        if (row.status === PaymentStatus.SUCCEEDED) {
+          acc.succeededAmount += Number(row._sum.amount ?? 0);
+        }
+        return acc;
+      },
+      { byStatus: {} as Record<string, number>, succeededAmount: 0 },
+    );
+    return {
+      items: items.map((item) => ({
+        uuid: item.uuid,
+        provider: item.provider,
+        purpose: item.purpose,
+        status: item.status,
+        amount: this.paymentMoney(item.amount),
+        currency: item.currency,
+        description: item.description,
+        providerPaymentId: item.providerPaymentId,
+        providerStatus: item.providerStatus,
+        confirmationUrl: item.confirmationUrl,
+        paidAt: item.paidAt,
+        canceledAt: item.canceledAt,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        user: item.user,
+        company: item.company,
+        plan: item.subscription
+          ? { type: "subscription", uuid: item.subscription.uuid, name: item.subscription.name }
+          : item.subscriptionBundle
+            ? { type: "bundle", uuid: item.subscriptionBundle.uuid, name: item.subscriptionBundle.name }
+            : null,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      summary: {
+        succeededAmount: summary.succeededAmount.toFixed(2),
+        pending: summary.byStatus[PaymentStatus.PENDING] ?? 0,
+        waitingForCapture: summary.byStatus[PaymentStatus.WAITING_FOR_CAPTURE] ?? 0,
+        succeeded: summary.byStatus[PaymentStatus.SUCCEEDED] ?? 0,
+        canceled: summary.byStatus[PaymentStatus.CANCELED] ?? 0,
+        failed: summary.byStatus[PaymentStatus.FAILED] ?? 0,
+        refunded: summary.byStatus[PaymentStatus.REFUNDED] ?? 0,
+      },
+    };
   }
 
   async subscriptionStats() {

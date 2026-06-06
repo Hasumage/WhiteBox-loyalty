@@ -46,10 +46,14 @@ describe("CompanyService", () => {
     userCompany: { upsert: jest.Mock; updateMany: jest.Mock; findUnique: jest.Mock };
     loyaltyTransaction: { create: jest.Mock };
     subscriptionRedemption: { aggregate: jest.Mock; create: jest.Mock };
-    company: { update: jest.Mock };
+    company: { update: jest.Mock; findUnique: jest.Mock; findUniqueOrThrow: jest.Mock };
     companyCategory: { deleteMany: jest.Mock; createMany: jest.Mock };
     companyLevelRule: { deleteMany: jest.Mock; createMany: jest.Mock };
     financeOperation: { aggregate: jest.Mock; create: jest.Mock };
+    companyBillingInvoice: { aggregate: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; upsert: jest.Mock; update: jest.Mock };
+    companyBillingAccount: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+    companyBillingPromoCode: { findUnique: jest.Mock; update: jest.Mock };
+    companyBillingPromoRedemption: { findUnique: jest.Mock; create: jest.Mock };
     userSubscription: { findMany: jest.Mock };
     subscriptionBundle: { findUnique: jest.Mock; findUniqueOrThrow: jest.Mock; update: jest.Mock };
     subscriptionBundleParticipant: { update: jest.Mock };
@@ -58,13 +62,17 @@ describe("CompanyService", () => {
   };
   let prisma: {
     companyMember: { findFirst: jest.Mock; findUnique: jest.Mock; upsert: jest.Mock; create: jest.Mock; findMany: jest.Mock; update: jest.Mock };
-    company: { findFirst: jest.Mock; update: jest.Mock };
+    company: { findFirst: jest.Mock; findUnique: jest.Mock; findUniqueOrThrow: jest.Mock; update: jest.Mock };
     category: { findMany: jest.Mock; findUnique: jest.Mock };
     companyCategory: { deleteMany: jest.Mock; createMany: jest.Mock };
     companyLevelRule: { deleteMany: jest.Mock; createMany: jest.Mock };
     user: { findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; create: jest.Mock };
     companyPurchase: { aggregate: jest.Mock };
     financeOperation: { findMany: jest.Mock; aggregate: jest.Mock; create: jest.Mock };
+    companyBillingInvoice: { aggregate: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; upsert: jest.Mock; update: jest.Mock };
+    companyBillingAccount: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+    companyBillingPromoCode: { findUnique: jest.Mock; update: jest.Mock };
+    companyBillingPromoRedemption: { findUnique: jest.Mock; create: jest.Mock };
     userSubscription: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     subscription: { findMany: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     userSubscriptionBundle: { findFirst: jest.Mock; findMany: jest.Mock; create: jest.Mock };
@@ -94,10 +102,21 @@ describe("CompanyService", () => {
       userCompany: { upsert: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
       loyaltyTransaction: { create: jest.fn() },
       subscriptionRedemption: { aggregate: jest.fn(), create: jest.fn() },
-      company: { update: jest.fn() },
+      company: { update: jest.fn(), findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
       companyCategory: { deleteMany: jest.fn(), createMany: jest.fn() },
       companyLevelRule: { deleteMany: jest.fn(), createMany: jest.fn() },
       financeOperation: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }), create: jest.fn() },
+      companyBillingInvoice: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { paidAmount: null } }),
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        upsert: jest.fn(),
+        update: jest.fn(),
+      },
+      companyBillingAccount: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+      companyBillingPromoCode: { findUnique: jest.fn(), update: jest.fn() },
+      companyBillingPromoRedemption: { findUnique: jest.fn(), create: jest.fn() },
       userSubscription: { findMany: jest.fn().mockResolvedValue([]) },
       subscriptionBundle: {
         findUnique: jest.fn(),
@@ -117,7 +136,12 @@ describe("CompanyService", () => {
         findMany: jest.fn(),
         update: jest.fn(),
       },
-      company: { findFirst: jest.fn(), update: tx.company.update },
+      company: {
+        findFirst: jest.fn(),
+        findUnique: tx.company.findUnique,
+        findUniqueOrThrow: tx.company.findUniqueOrThrow,
+        update: tx.company.update,
+      },
       category: { findMany: jest.fn(), findUnique: jest.fn() },
       companyCategory: tx.companyCategory,
       companyLevelRule: tx.companyLevelRule,
@@ -129,6 +153,10 @@ describe("CompanyService", () => {
       },
       companyPurchase: { aggregate: tx.companyPurchase.aggregate },
       financeOperation: { findMany: jest.fn(), aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }), create: jest.fn() },
+      companyBillingInvoice: tx.companyBillingInvoice,
+      companyBillingAccount: tx.companyBillingAccount,
+      companyBillingPromoCode: tx.companyBillingPromoCode,
+      companyBillingPromoRedemption: tx.companyBillingPromoRedemption,
       userSubscription: { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn().mockResolvedValue(0) },
       subscription: {
         findMany: jest.fn(),
@@ -1067,6 +1095,66 @@ describe("CompanyService", () => {
     expect(result.reservedPayouts).toBe(300);
     expect(result.paidPayouts).toBe(200);
     expect(result.availableForPayout).toBe(500);
+  });
+
+  it("subtracts paid WhiteBox billing fees from the company withdrawable balance", async () => {
+    const day = 24 * 60 * 60 * 1000;
+    const startedAt = new Date(Date.now() - day * 12);
+    prisma.financeOperation.findMany.mockResolvedValue([]);
+    prisma.financeOperation.aggregate
+      .mockResolvedValueOnce({ _sum: { amount: 300 } })
+      .mockResolvedValueOnce({ _sum: { amount: 200 } });
+    prisma.companyBillingInvoice.aggregate.mockResolvedValue({ _sum: { paidAmount: 100 } });
+    prisma.userSubscription.findMany.mockResolvedValue([
+      {
+        status: SubscriptionStatus.EXPIRED,
+        activatedAt: startedAt,
+        expiresAt: new Date(startedAt.getTime() + day * 10),
+        subscription: { price: 1000 },
+      },
+    ]);
+
+    const result = await service.finance(50);
+
+    expect(result.paidPayouts).toBe(200);
+    expect(result.paidBillingFees).toBe(100);
+    expect(result.availableForPayout).toBe(400);
+  });
+
+  it("keeps an overdue monthly invoice payable instead of silently replacing it", async () => {
+    const now = new Date();
+    const account = {
+      companyId: 7,
+      status: "ACTIVE",
+      trialEndsAt: new Date(now.getTime() - DAY_MS),
+      currentPeriodStartsAt: new Date(now.getTime() - DAY_MS * 30),
+      currentPeriodEndsAt: new Date(now.getTime() + DAY_MS * 20),
+      appliedPromoCode: null,
+    };
+    const overdueInvoice = {
+      uuid: "overdue-invoice",
+      status: "OPEN",
+      periodStartsAt: new Date(now.getTime() - DAY_MS * 60),
+      periodEndsAt: new Date(now.getTime() - DAY_MS * 30),
+      baseFee: 4990,
+      promoDiscountPercent: 0,
+      promoDiscountAmount: 0,
+      commissionCreditAmount: 0,
+      amountDue: 4990,
+      paidAmount: 0,
+    };
+    prisma.companyBillingAccount.findUnique.mockResolvedValue(account);
+    prisma.companyBillingAccount.update.mockResolvedValue({ ...account, status: "PAST_DUE" });
+    prisma.companyBillingInvoice.findFirst.mockResolvedValue(overdueInvoice);
+    prisma.companyBillingInvoice.findMany.mockResolvedValue([overdueInvoice]);
+    prisma.userSubscription.findMany.mockResolvedValue([]);
+
+    const result = await service.billing(50);
+
+    expect(result.invoice).toEqual(overdueInvoice);
+    expect(prisma.companyBillingAccount.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { companyId: 7 }, data: { status: "PAST_DUE" } }),
+    );
   });
 
   it("rejects a payout above the earned unreserved balance", async () => {

@@ -5,17 +5,22 @@ import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   Activity,
   ArrowRight,
+  BadgePercent,
   BellRing,
   Building2,
   ClipboardCheck,
   Clock3,
+  Handshake,
+  Landmark,
   ListChecks,
   RefreshCcw,
   ShieldAlert,
+  TrendingUp,
   TriangleAlert,
   Users,
   WalletCards,
 } from "lucide-react";
+import { AdminPrCompactCard } from "@/components/admin/AdminPrDashboardSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,13 +61,21 @@ function dayLabel(value: string, locale: Locale) {
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { weekday: "short" }).format(new Date(`${value}T12:00:00`));
 }
 
+function money(value: number | undefined, locale: Locale) {
+  return new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", {
+    style: "currency",
+    currency: "RUB",
+    maximumFractionDigits: 0,
+  }).format(value ?? 0);
+}
+
 function priorityTone(priority: AdminTaskPriority) {
   if (priority === "CRITICAL") return "border-red-300/25 bg-red-300/10 text-red-100";
   if (priority === "HIGH") return "border-amber-300/25 bg-amber-300/10 text-amber-100";
   return "border-cyan-300/25 bg-cyan-300/10 text-cyan-100";
 }
 
-function MetricCard({ icon: Icon, label, value, hint }: { icon: DashboardIcon; label: string; value: number; hint: string }) {
+function MetricCard({ icon: Icon, label, value, hint }: { icon: DashboardIcon; label: string; value: number | string; hint: string }) {
   return (
     <Card className="overflow-hidden border-white/10 bg-white/[0.045]">
       <CardContent className="relative flex min-h-32 items-start justify-between gap-4 p-5">
@@ -163,6 +176,36 @@ export default function AdminPortalPage() {
         <MetricCard icon={ClipboardCheck} label={t("admin.dashboard.pendingVerifications")} value={metrics?.verificationOpen ?? 0} hint={t("admin.dashboard.pendingVerificationsHint")} />
         <MetricCard icon={ListChecks} label={t("admin.dashboard.openTasks")} value={metrics?.openTasks ?? 0} hint={`${metrics?.criticalTasks ?? 0} ${t("admin.dashboard.criticalTasks")}`} />
       </section>
+
+      {dashboard?.permittedSources.includes("FINANCE") && (
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            icon={Landmark}
+            label={t("admin.dashboard.whiteBoxRevenue")}
+            value={money(metrics?.whiteBoxCommission, locale)}
+            hint={t("admin.dashboard.whiteBoxRevenueHint")}
+          />
+          <MetricCard
+            icon={TrendingUp}
+            label={t("admin.dashboard.subscriptionTurnover")}
+            value={money(metrics?.subscriptionRecognizedGross, locale)}
+            hint={`${money(metrics?.subscriptionFutureGross, locale)} ${t("admin.dashboard.futureTurnoverHint")}`}
+          />
+          <MetricCard
+            icon={Handshake}
+            label={t("admin.dashboard.referralPayouts")}
+            value={money(metrics?.referralCommission, locale)}
+            hint={`${metrics?.companiesWithReferral ?? 0} ${t("admin.dashboard.referralCompaniesHint")}`}
+          />
+          <MetricCard
+            icon={BadgePercent}
+            label={t("admin.dashboard.platformRate")}
+            value="12%"
+            hint={t("admin.dashboard.platformRateHint")}
+          />
+        </section>
+      )}
+      {dashboard?.pr && <AdminPrCompactCard dashboard={dashboard.pr} locale={locale} />}
 
       <section className="grid gap-6 xl:grid-cols-[1.42fr_0.9fr]">
         <Card className="overflow-hidden border-white/10 bg-card/70">

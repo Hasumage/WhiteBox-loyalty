@@ -2,6 +2,7 @@ export const ADMIN_PERMISSION_SCOPES = [
   "USERS",
   "COMPANIES",
   "COMPANY_VERIFICATIONS",
+  "PR",
   "FINANCE",
   "SUPPORT",
   "AUDIT",
@@ -56,6 +57,12 @@ export const ADMIN_PERMISSION_ZONES = [
     scopes: ["FINANCE"],
   },
   {
+    id: "growth",
+    title: "PR и рефералы",
+    description: "Привлечение компаний, закрепление реферала и видимость реферальной комиссии.",
+    scopes: ["PR"],
+  },
+  {
     id: "tech",
     title: "Тех и разработка",
     description: "Карта БД, backup/restore, аудит разработчиков и технические расследования.",
@@ -100,6 +107,12 @@ export const ADMIN_PERMISSION_META: Record<
     shortTitle: "Verification",
     description: "Юридические данные, паспортные фото и решение по доступу Company.",
     risk: "high",
+  },
+  PR: {
+    title: "PR и рефералы",
+    shortTitle: "PR",
+    description: "Привлечение компаний, закрепление одного реферала, просмотр дохода и контроль PR-выплат.",
+    risk: "medium",
   },
   FINANCE: {
     title: "Финансовые операции",
@@ -161,6 +174,7 @@ export function defaultPermissionForRole(role: string, scope: AdminPermissionSco
     if (scope === "USERS") return permission(scope, true, false, false);
     if (scope === "COMPANIES") return permission(scope, true, true, false);
     if (scope === "COMPANY_VERIFICATIONS") return permission(scope, true, true, true);
+    if (scope === "PR") return permission(scope, false, false, false);
     if (scope === "SUPPORT") return permission(scope, true, true, false);
     if (scope === "AUDIT" || scope === "TELEGRAM") return permission(scope, true, false, false);
     return permission(scope);
@@ -203,7 +217,7 @@ export function clampPermissionToRole(role: string, input: AdminPermissionLike):
   }
 
   if (role === "SUPPORT") {
-    if (scope === "FINANCE" || scope === "SETTINGS" || scope === "COMPANY_VERIFICATIONS") {
+    if (scope === "FINANCE" || scope === "SETTINGS" || scope === "COMPANY_VERIFICATIONS" || scope === "PR") {
       return { ...next, canView: false, canEdit: false, canApprove: false };
     }
     if (scope === "DATABASE" || scope === "AUDIT" || scope === "TELEGRAM") {

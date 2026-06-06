@@ -1,10 +1,11 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
+  BadgePercent,
   Building2,
   CalendarClock,
   CheckCircle2,
@@ -14,8 +15,10 @@ import {
   Gift,
   Globe2,
   Hash,
+  Handshake,
   FileText,
   MapPin,
+  Megaphone,
   Plus,
   RotateCcw,
   Save,
@@ -27,6 +30,7 @@ import {
   ShieldCheck,
   TicketCheck,
   Trash2,
+  UserCheck,
   Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -46,14 +50,20 @@ import {
   adminDeleteCompanySubscription,
   adminDeleteCompanyLocation,
   adminDeleteCompanyUser,
+  adminEndCompanyReferral,
+  adminGetCompanyReferral,
   adminGetCompanyUser,
   adminListCategories,
   adminUpdateCompanyLocation,
   adminUpdateCompanySubscription,
   adminUpdateCompanyUser,
+  adminUpsertCompanyReferral,
   adminUpsertCompanyProfile,
   type AdminCategory,
   type AdminCompanyLocation,
+  type AdminCompanyReferralResponse,
+  type AdminCompanyReferralPipelineStatus,
+  type AdminCompanyReferralStatus,
   type AdminCompanySubscription,
 } from "@/lib/api/admin-client";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
@@ -156,6 +166,12 @@ const SECTION_META = [
     icon: Building2,
   },
   {
+    key: "referral",
+    titleKey: "admin.companyDetail.sectionReferral",
+    descriptionKey: "admin.companyDetail.sectionReferralDescription",
+    icon: Megaphone,
+  },
+  {
     key: "locations",
     titleKey: "admin.companyDetail.sectionLocations",
     descriptionKey: "admin.companyDetail.sectionLocationsDescription",
@@ -181,6 +197,15 @@ const WEEKDAY_OPTIONS = [
   { value: 0, labelKey: "admin.companyDetail.weekdaySun" },
 ];
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
+
+const REFERRAL_PIPELINE_LABELS: Record<AdminCompanyReferralPipelineStatus, string> = {
+  LEAD: "\u041b\u0438\u0434",
+  NEGOTIATION: "\u041f\u0435\u0440\u0435\u0433\u043e\u0432\u043e\u0440\u044b",
+  TRIAL: "\u0422\u0435\u0441\u0442\u043e\u0432\u044b\u0439 \u043f\u0435\u0440\u0438\u043e\u0434",
+  CONNECTED: "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0430",
+  REVENUE_ACTIVE: "\u041f\u0440\u0438\u043d\u043e\u0441\u0438\u0442 \u0434\u043e\u0445\u043e\u0434",
+  LOST: "\u041f\u043e\u0442\u0435\u0440\u044f\u043d\u0430",
+};
 
 function toggleWeekday(days: number[], day: number) {
   const next = days.includes(day) ? days.filter((item) => item !== day) : [...days, day];
@@ -257,6 +282,7 @@ export default function AdminCompanyProfilePage() {
   const [sections, setSections] = useState({
     account: false,
     profile: false,
+    referral: false,
     locations: false,
     subscriptions: false,
   });
@@ -270,6 +296,24 @@ export default function AdminCompanyProfilePage() {
   >([]);
   const [locations, setLocations] = useState<AdminCompanyLocation[]>([]);
   const [locationSaving, setLocationSaving] = useState(false);
+  const [referral, setReferral] = useState<AdminCompanyReferralResponse | null>(null);
+  const [referralQuery, setReferralQuery] = useState("");
+  const [referralSaving, setReferralSaving] = useState(false);
+  const [referralDraft, setReferralDraft] = useState<{
+    referrerUserId: string;
+    referralPercent: string;
+    status: AdminCompanyReferralStatus;
+    pipelineStatus: AdminCompanyReferralPipelineStatus;
+    source: string;
+    notes: string;
+  }>({
+    referrerUserId: "",
+    referralPercent: "1",
+    status: "ACTIVE",
+    pipelineStatus: "CONNECTED",
+    source: "PR",
+    notes: "",
+  });
   const [locationDraft, setLocationDraft] = useState<LocationDraft>({
     title: "",
     address: "",
@@ -436,11 +480,42 @@ export default function AdminCompanyProfilePage() {
             })),
         ),
       );
+      const referralRes = await adminGetCompanyReferral(companyUserUuid);
+      if (referralRes.ok) {
+        setReferral(referralRes.data);
+        hydrateReferralDraft(referralRes.data);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : t("admin.companyDetail.loadFailed"));
     } finally {
       setLoading(false);
     }
+  }
+
+  function hydrateReferralDraft(next: AdminCompanyReferralResponse | null) {
+    const current = next?.referral;
+    setReferralDraft({
+      referrerUserId: current?.referrer.id ? String(current.referrer.id) : "",
+      referralPercent: current?.referralPercent ?? "1",
+      status: current?.status ?? "ACTIVE",
+      pipelineStatus: current?.pipelineStatus ?? "CONNECTED",
+      source: current?.source ?? "PR",
+      notes: current?.notes ?? "",
+    });
+  }
+
+  async function loadReferral(query = referralQuery, options?: { silent?: boolean }) {
+    const res = await adminGetCompanyReferral(companyUserUuid, query);
+    if (!res.ok) {
+      if (!options?.silent) {
+        setError(res.status === 403 ? "No access to PR attribution management." : res.message);
+      }
+      return false;
+    }
+    setReferral(res.data);
+    hydrateReferralDraft(res.data);
+    if (!options?.silent) setError(null);
+    return true;
   }
 
   useEffect(() => {
@@ -523,6 +598,11 @@ export default function AdminCompanyProfilePage() {
               })),
           ),
         );
+        const referralRes = await adminGetCompanyReferral(companyUserUuid);
+        if (!ignore && referralRes.ok) {
+          setReferral(referralRes.data);
+          hydrateReferralDraft(referralRes.data);
+        }
         setError(null);
         setLoading(false);
       } catch (loadError) {
@@ -534,7 +614,7 @@ export default function AdminCompanyProfilePage() {
     return () => {
       ignore = true;
     };
-  }, [companyUserUuid]);
+  }, [companyUserUuid, t]);
 
   async function saveAccount(options?: SaveOptions) {
     if (!accountForm) return;
@@ -598,10 +678,54 @@ export default function AdminCompanyProfilePage() {
     return true;
   }
 
+  async function saveReferral() {
+    const referrerUserId = Number(referralDraft.referrerUserId);
+    const referralPercent = Number(referralDraft.referralPercent);
+    if (!Number.isInteger(referrerUserId) || referrerUserId < 1) {
+      setError("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u043f\u0440\u0438\u0432\u0451\u043b \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u044e.");
+      return;
+    }
+    if (!Number.isFinite(referralPercent) || referralPercent < 0 || referralPercent > 12) {
+      setError("\u041f\u0440\u043e\u0446\u0435\u043d\u0442 \u0440\u0435\u0444\u0435\u0440\u0430\u043b\u0430 \u0434\u043e\u043b\u0436\u0435\u043d \u0431\u044b\u0442\u044c \u043e\u0442 0 \u0434\u043e 12% \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 WhiteBox.");
+      return;
+    }
+    setReferralSaving(true);
+    const res = await adminUpsertCompanyReferral(companyUserUuid, {
+      referrerUserId,
+      referralPercent,
+      status: referralDraft.status,
+      pipelineStatus: referralDraft.pipelineStatus,
+      source: referralDraft.source || "PR",
+      notes: referralDraft.notes,
+    });
+    setReferralSaving(false);
+    if (!res.ok) {
+      setError(res.message);
+      return;
+    }
+    setReferral(res.data);
+    hydrateReferralDraft(res.data);
+    setError(null);
+    setNotice("PR-\u0430\u0442\u0440\u0438\u0431\u0443\u0446\u0438\u044f \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0430.");
+  }
+
+  async function endReferral() {
+    setReferralSaving(true);
+    const res = await adminEndCompanyReferral(companyUserUuid);
+    setReferralSaving(false);
+    if (!res.ok) {
+      setError(res.message);
+      return;
+    }
+    setReferral(res.data);
+    hydrateReferralDraft(res.data);
+    setError(null);
+    setNotice("PR-\u0430\u0442\u0440\u0438\u0431\u0443\u0446\u0438\u044f \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0430.");
+  }
   async function createSubscription() {
     const initialServiceTitle = initialEntitlementDraft.title.trim();
     if (!initialServiceTitle) {
-      setError("Добавьте хотя бы одну услугу: подписка без услуг не может быть создана.");
+      setError("\u0414\u043e\u0431\u0430\u0432\u044c\u0442\u0435 \u0445\u043e\u0442\u044f \u0431\u044b \u043e\u0434\u043d\u0443 \u0443\u0441\u043b\u0443\u0433\u0443: \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0430 \u0431\u0435\u0437 \u0443\u0441\u043b\u0443\u0433\u0438 \u043d\u0435 \u043c\u043e\u0436\u0435\u0442 \u0431\u044b\u0442\u044c \u0441\u043e\u0437\u0434\u0430\u043d\u0430.");
       return;
     }
     const initialServiceHasLimit = initialEntitlementDraft.windowUnit !== "UNLIMITED";
@@ -910,6 +1034,15 @@ export default function AdminCompanyProfilePage() {
     return <p className="text-sm text-muted-foreground">{t("admin.companyDetail.loading")}</p>;
   }
 
+  const referralCandidates = [
+    ...(referral?.referral &&
+    !referral.candidates.some((candidate) => candidate.id === referral.referral?.referrer.id)
+      ? [referral.referral.referrer]
+      : []),
+    ...(referral?.candidates ?? []),
+  ];
+  const referralRevenue = referral?.revenue;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1006,6 +1139,276 @@ export default function AdminCompanyProfilePage() {
             );
           })}
         </CardContent>
+      </Card>
+
+      <Card id="company-section-referral" className="scroll-mt-4 glass border-cyan-300/15 gap-3 py-4">
+        <CardHeader
+          className={cn("pb-2 pt-4", !sections.referral && "cursor-pointer")}
+          onClick={() => {
+            if (!sections.referral) openSection("referral");
+          }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="space-y-1">
+              <CardTitle className="inline-flex items-center gap-2 text-base">
+                <Megaphone className="h-4 w-4 text-primary" />
+                {"\u0050\u0052 \u0438 \u0440\u0435\u0444\u0435\u0440\u0430\u043b\u044c\u043d\u0430\u044f \u0430\u0442\u0440\u0438\u0431\u0443\u0446\u0438\u044f"}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {"\u041e\u0434\u0438\u043d \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u0440\u0435\u0444\u0435\u0440\u0430\u043b \u043d\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u044e. \u0412\u044b\u043f\u043b\u0430\u0442\u0430 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f \u043e\u0442 \u043e\u0431\u043e\u0440\u043e\u0442\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u043e\u043a \u0438 \u0443\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0438\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 WhiteBox, \u0430 \u043d\u0435 \u0438\u0437 \u0431\u0430\u043b\u0430\u043d\u0441\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438."}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {referral?.referral ? (
+                <>
+                  <Badge variant={referral.referral.status === "ACTIVE" ? "default" : "secondary"}>
+                    {referral.referral.status === "ACTIVE"
+                      ? "\u0410\u043a\u0442\u0438\u0432\u043d\u0430"
+                      : referral.referral.status === "PAUSED"
+                        ? "\u041f\u0430\u0443\u0437\u0430"
+                        : "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0430"}
+                  </Badge>
+                  <Badge variant="outline">{REFERRAL_PIPELINE_LABELS[referral.referral.pipelineStatus]}</Badge>
+                </>
+              ) : (
+                <Badge variant="outline">{"\u041d\u0435 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d"}</Badge>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleSection("referral");
+                  if (!referral) void loadReferral("", { silent: true });
+                }}
+              >
+                {sections.referral ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        {sections.referral && (
+          <CardContent className="space-y-6 pb-6 pt-2">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {[
+                {
+                  label: "\u041f\u0440\u0438\u0437\u043d\u0430\u043d\u043d\u044b\u0439 \u043e\u0431\u043e\u0440\u043e\u0442",
+                  hint: "\u0443\u0436\u0435 \u0437\u0430\u0440\u0430\u0431\u043e\u0442\u0430\u043d\u043e \u043f\u043e \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0430\u043c",
+                  value: `${formatPrice(referralRevenue?.recognizedGross ?? 0)} \u20bd`,
+                  icon: CircleDollarSign,
+                },
+                {
+                  label: "\u0411\u0443\u0434\u0443\u0449\u0438\u0439 \u043e\u0431\u043e\u0440\u043e\u0442",
+                  hint: "\u043e\u0441\u0442\u0430\u0442\u043e\u043a \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043f\u043e\u0434\u043f\u0438\u0441\u043e\u043a",
+                  value: `${formatPrice(referralRevenue?.futureGross ?? 0)} \u20bd`,
+                  icon: CalendarClock,
+                },
+                {
+                  label: "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f WhiteBox",
+                  hint: "12% \u043e\u0442 \u043e\u0431\u043e\u0440\u043e\u0442\u0430",
+                  value: `${formatPrice(referralRevenue?.platformCommissionGross ?? 0)} \u20bd`,
+                  icon: BadgePercent,
+                },
+                {
+                  label: "\u0412\u044b\u043f\u043b\u0430\u0442\u0430 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u043c\u0443",
+                  hint: "\u0438\u0437 \u0434\u043e\u043b\u0438 WhiteBox",
+                  value: `${formatPrice(referralRevenue?.referralCommission ?? 0)} \u20bd`,
+                  icon: Handshake,
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={item.label}
+                    className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.055] to-cyan-300/[0.025] p-5"
+                  >
+                    <div className="mb-5 flex items-start justify-between gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-[0_0_24px_rgba(103,232,249,0.08)]">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <Badge variant="outline" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
+                        PR
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">{item.label}</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-tight">{item.value}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{item.hint}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
+              <div className="rounded-3xl border border-white/10 bg-muted/10 p-6">
+                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="max-w-2xl space-y-2">
+                    <p className="inline-flex items-center gap-2 text-lg font-semibold">
+                      <UserCheck className="h-5 w-5 text-primary" />
+                      {"\u041d\u0430\u0437\u043d\u0430\u0447\u0438\u0442\u044c \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"}
+                    </p>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      {"\u041d\u0430\u0439\u0434\u0438\u0442\u0435 \u0430\u0434\u043c\u0438\u043d\u0430, \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0430 \u0438\u043b\u0438 \u0441\u0430\u043f\u043f\u043e\u0440\u0442\u0430, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u043f\u0440\u0438\u0432\u0451\u043b \u0438\u043b\u0438 \u0432\u0435\u0434\u0451\u0442 \u044d\u0442\u0443 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u044e. \u0421\u0438\u0441\u0442\u0435\u043c\u0430 \u0441\u0432\u044f\u0436\u0435\u0442 \u0435\u0433\u043e \u0432\u044b\u043f\u043b\u0430\u0442\u0443 \u0441 \u043e\u0431\u043e\u0440\u043e\u0442\u043e\u043c \u043f\u043e\u0434\u043f\u0438\u0441\u043e\u043a."}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-11 min-w-[140px]"
+                    onClick={() => void loadReferral(referralQuery)}
+                  >
+                    <Search className="h-4 w-4" />
+                    {"\u041d\u0430\u0439\u0442\u0438"}
+                  </Button>
+                </div>
+
+                <div className="grid gap-5 xl:grid-cols-12">
+                  <div className="space-y-2 xl:col-span-5">
+                    <Label htmlFor="referral-search">{"\u041f\u043e\u0438\u0441\u043a \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"}</Label>
+                    <Input
+                      id="referral-search"
+                      value={referralQuery}
+                      placeholder="maksim, manager@..."
+                      onChange={(event) => setReferralQuery(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2 xl:col-span-7">
+                    <Label htmlFor="referral-user">{"\u041a\u0442\u043e \u043f\u0440\u0438\u0432\u0451\u043b \u0438\u043b\u0438 \u0432\u0435\u0434\u0451\u0442 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u044e"}</Label>
+                    <SelectField
+                      id="referral-user"
+                      value={referralDraft.referrerUserId}
+                      onChange={(event) =>
+                        setReferralDraft((prev) => ({ ...prev, referrerUserId: event.target.value }))
+                      }
+                    >
+                      <option value="">{"\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f"}</option>
+                      {referralCandidates.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>
+                          {candidate.name} - {candidate.email} - {candidate.role}
+                        </option>
+                      ))}
+                    </SelectField>
+                  </div>
+
+                  <div className="grid gap-5 rounded-2xl border border-white/10 bg-background/35 p-4 xl:col-span-12 xl:grid-cols-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="referral-percent">{"\u0414\u043e\u043b\u044f \u043e\u0442 \u043e\u0431\u043e\u0440\u043e\u0442\u0430, %"}</Label>
+                      <Input
+                        id="referral-percent"
+                        type="number"
+                        min={0}
+                        max={12}
+                        step={0.1}
+                        value={referralDraft.referralPercent}
+                        onChange={(event) =>
+                          setReferralDraft((prev) => ({ ...prev, referralPercent: event.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="referral-status">{"\u0421\u0442\u0430\u0442\u0443\u0441"}</Label>
+                      <SelectField
+                        id="referral-status"
+                        value={referralDraft.status}
+                        onChange={(event) =>
+                          setReferralDraft((prev) => ({
+                            ...prev,
+                            status: event.target.value as AdminCompanyReferralStatus,
+                          }))
+                        }
+                      >
+                        <option value="ACTIVE">{"\u0410\u043a\u0442\u0438\u0432\u043d\u0430"}</option>
+                        <option value="PAUSED">{"\u041f\u0430\u0443\u0437\u0430"}</option>
+                        <option value="ENDED">{"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0430"}</option>
+                      </SelectField>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="referral-pipeline">{"\u0421\u0442\u0430\u0434\u0438\u044f \u0432\u043e\u0440\u043e\u043d\u043a\u0438"}</Label>
+                      <SelectField
+                        id="referral-pipeline"
+                        value={referralDraft.pipelineStatus}
+                        onChange={(event) =>
+                          setReferralDraft((prev) => ({
+                            ...prev,
+                            pipelineStatus: event.target.value as AdminCompanyReferralPipelineStatus,
+                          }))
+                        }
+                      >
+                        {Object.entries(REFERRAL_PIPELINE_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </SelectField>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="referral-source">{"\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a"}</Label>
+                      <Input
+                        id="referral-source"
+                        value={referralDraft.source}
+                        maxLength={80}
+                        onChange={(event) =>
+                          setReferralDraft((prev) => ({ ...prev, source: event.target.value }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 xl:col-span-12">
+                    <Label htmlFor="referral-notes">{"\u0417\u0430\u043c\u0435\u0442\u043a\u0430"}</Label>
+                    <Textarea
+                      id="referral-notes"
+                      rows={4}
+                      className="min-h-[132px]"
+                      value={referralDraft.notes}
+                      placeholder={"\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u043f\u0440\u0438\u0432\u0451\u043b \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u044e \u043d\u0430 \u043c\u0430\u0439\u0441\u043a\u043e\u043c \u043f\u0438\u043b\u043e\u0442\u0435, \u0443\u0441\u043b\u043e\u0432\u0438\u044f \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u044b."}
+                      onChange={(event) =>
+                        setReferralDraft((prev) => ({ ...prev, notes: event.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+                  {referral?.referral && (
+                    <Button type="button" variant="secondary" disabled={referralSaving} onClick={() => void endReferral()}>
+                      {"\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u0430\u0442\u0440\u0438\u0431\u0443\u0446\u0438\u044e"}
+                    </Button>
+                  )}
+                  <Button type="button" className="min-w-[180px]" disabled={referralSaving} onClick={() => void saveReferral()}>
+                    <Save className="h-4 w-4" />
+                    {"\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c PR"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-3xl border border-primary/20 bg-primary/5 p-6">
+                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary">
+                    <Handshake className="h-5 w-5" />
+                  </div>
+                  <p className="text-lg font-semibold">{"\u041a\u0430\u043a \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f"}</p>
+                  <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                    {"\u041a\u043e\u043c\u043f\u0430\u043d\u0438\u044f \u043f\u043b\u0430\u0442\u0438\u0442 12% \u0441 \u043e\u0431\u043e\u0440\u043e\u0442\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u043e\u043a. \u0415\u0441\u043b\u0438 \u0437\u0430 \u043d\u0435\u0439 \u0437\u0430\u043a\u0440\u0435\u043f\u043b\u0451\u043d \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439, \u0435\u0433\u043e \u043f\u0440\u043e\u0446\u0435\u043d\u0442 \u0432\u044b\u043f\u043b\u0430\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0438\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 WhiteBox."}
+                  </p>
+                  <div className="mt-5 grid gap-3 text-sm">
+                    <div className="rounded-2xl border border-white/10 bg-background/50 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{"\u041f\u0440\u0438\u043c\u0435\u0440"}</p>
+                      <p className="mt-2 leading-6 text-muted-foreground">
+                        {"56 000 \u20bd \u043e\u0431\u043e\u0440\u043e\u0442\u0430 \u2192 6 720 \u20bd \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 WhiteBox \u2192 560 \u20bd \u0432\u044b\u043f\u043b\u0430\u0442\u044b \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u043c\u0443 \u2192 6 160 \u20bd \u0447\u0438\u0441\u0442\u043e\u0439 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438."}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.055] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{"\u0427\u0438\u0441\u0442\u0430\u044f \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u0441\u0435\u0439\u0447\u0430\u0441"}</p>
+                      <p className="mt-2 text-2xl font-semibold">
+                        {formatPrice(referralRevenue?.whiteBoxNetCommission ?? 0)} \u20bd
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       <Card id="company-section-account" className="scroll-mt-4 glass border-white/10 gap-3 py-4">
@@ -1921,20 +2324,20 @@ export default function AdminCompanyProfilePage() {
                     <div>
                       <p className="inline-flex items-center gap-2 font-semibold">
                         <Gift className="h-4 w-4 text-primary" />
-                        Первая услуга обязательна
+                        {"\u041f\u0435\u0440\u0432\u0430\u044f \u0443\u0441\u043b\u0443\u0433\u0430 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u0430"}
                       </p>
                       <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        Подписка без услуги не создаётся: кассе нужно понимать, что именно можно погасить клиенту.
+                        {"\u041f\u043e\u0434\u043f\u0438\u0441\u043a\u0430 \u0431\u0435\u0437 \u0443\u0441\u043b\u0443\u0433\u0438 \u043d\u0435 \u0441\u043e\u0437\u0434\u0430\u0451\u0442\u0441\u044f: \u043a\u0430\u0441\u0441\u0430 \u0434\u043e\u043b\u0436\u043d\u0430 \u043f\u043e\u043d\u0438\u043c\u0430\u0442\u044c, \u0447\u0442\u043e \u0438\u043c\u0435\u043d\u043d\u043e \u043c\u043e\u0436\u043d\u043e \u043f\u043e\u0433\u0430\u0441\u0438\u0442\u044c \u043a\u043b\u0438\u0435\u043d\u0442\u0443."}
                       </p>
                     </div>
-                    <Badge variant="outline">минимум 1 услуга</Badge>
+                    <Badge variant="outline">{"\u043c\u0438\u043d\u0438\u043c\u0443\u043c 1 \u0443\u0441\u043b\u0443\u0433\u0430"}</Badge>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
                     <div className="space-y-2 xl:col-span-4">
-                      <Label htmlFor="sub-initial-entitlement-title">Название услуги</Label>
+                      <Label htmlFor="sub-initial-entitlement-title">{"\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0443\u0441\u043b\u0443\u0433\u0438"}</Label>
                       <Input
                         id="sub-initial-entitlement-title"
-                        placeholder="Капучино 350 мл"
+                        placeholder={"\u041a\u0430\u043f\u0443\u0447\u0438\u043d\u043e 350 \u043c\u043b"}
                         value={initialEntitlementDraft.title}
                         onChange={(e) =>
                           setInitialEntitlementDraft((p) => ({ ...p, title: e.target.value }))
@@ -1942,7 +2345,7 @@ export default function AdminCompanyProfilePage() {
                       />
                     </div>
                     <div className="space-y-2 xl:col-span-3">
-                      <Label htmlFor="sub-initial-entitlement-window">Период лимита</Label>
+                      <Label htmlFor="sub-initial-entitlement-window">{"\u041f\u0435\u0440\u0438\u043e\u0434 \u043b\u0438\u043c\u0438\u0442\u0430"}</Label>
                       <SelectField
                         id="sub-initial-entitlement-window"
                         value={initialEntitlementDraft.windowUnit}
@@ -1953,18 +2356,18 @@ export default function AdminCompanyProfilePage() {
                           }))
                         }
                       >
-                        <option value="DAY">Каждый день</option>
-                        <option value="WEEK">Каждую неделю</option>
-                        <option value="MONTH">Каждый месяц</option>
-                        <option value="TERM">Один раз за срок</option>
-                        <option value="UNLIMITED">Без лимита</option>
+                        <option value="DAY">{"\u041a\u0430\u0436\u0434\u044b\u0439 \u0434\u0435\u043d\u044c"}</option>
+                        <option value="WEEK">{"\u041a\u0430\u0436\u0434\u0443\u044e \u043d\u0435\u0434\u0435\u043b\u044e"}</option>
+                        <option value="MONTH">{"\u041a\u0430\u0436\u0434\u044b\u0439 \u043c\u0435\u0441\u044f\u0446"}</option>
+                        <option value="TERM">{"\u041e\u0434\u0438\u043d \u0440\u0430\u0437 \u0437\u0430 \u0441\u0440\u043e\u043a"}</option>
+                        <option value="UNLIMITED">{"\u0411\u0435\u0437 \u043b\u0438\u043c\u0438\u0442\u0430"}</option>
                       </SelectField>
                     </div>
                     <div className="space-y-2 xl:col-span-5">
-                      <Label htmlFor="sub-initial-entitlement-note">Что получает клиент</Label>
+                      <Label htmlFor="sub-initial-entitlement-note">{"\u0427\u0442\u043e \u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442 \u043a\u043b\u0438\u0435\u043d\u0442"}</Label>
                       <Input
                         id="sub-initial-entitlement-note"
-                        placeholder="Короткое описание услуги"
+                        placeholder={"\u041a\u043e\u0440\u043e\u0442\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u0443\u0441\u043b\u0443\u0433\u0438"}
                         value={initialEntitlementDraft.description}
                         onChange={(e) =>
                           setInitialEntitlementDraft((p) => ({ ...p, description: e.target.value }))
@@ -1972,14 +2375,14 @@ export default function AdminCompanyProfilePage() {
                       />
                     </div>
                     <div className="space-y-2 xl:col-span-3">
-                      <Label htmlFor="sub-initial-entitlement-allowance">Сколько раз</Label>
+                      <Label htmlFor="sub-initial-entitlement-allowance">{"\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u0440\u0430\u0437"}</Label>
                       <Input
                         id="sub-initial-entitlement-allowance"
                         type="number"
                         min={1}
                         disabled={initialEntitlementDraft.windowUnit === "UNLIMITED"}
                         value={initialEntitlementDraft.windowUnit === "UNLIMITED" ? "" : initialEntitlementDraft.allowance}
-                        placeholder="∞"
+                        placeholder="1"
                         onChange={(e) =>
                           setInitialEntitlementDraft((p) => ({
                             ...p,
@@ -1989,14 +2392,14 @@ export default function AdminCompanyProfilePage() {
                       />
                     </div>
                     <div className="space-y-2 xl:col-span-3">
-                      <Label htmlFor="sub-initial-entitlement-window-value">За периодов</Label>
+                      <Label htmlFor="sub-initial-entitlement-window-value">{"\u0417\u0430 \u043f\u0435\u0440\u0438\u043e\u0434\u043e\u0432"}</Label>
                       <Input
                         id="sub-initial-entitlement-window-value"
                         type="number"
                         min={1}
                         disabled={initialEntitlementDraft.windowUnit === "UNLIMITED"}
                         value={initialEntitlementDraft.windowUnit === "UNLIMITED" ? "" : initialEntitlementDraft.windowValue}
-                        placeholder="∞"
+                        placeholder="1"
                         onChange={(e) =>
                           setInitialEntitlementDraft((p) => ({
                             ...p,
@@ -2008,7 +2411,7 @@ export default function AdminCompanyProfilePage() {
                     {initialEntitlementDraft.windowUnit === "UNLIMITED" && (
                       <div className="flex items-end xl:col-span-6">
                         <p className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs leading-5 text-muted-foreground">
-                          Безлимит подходит для прохода в клуб, доступа к зоне или другой услуги без счётчика погашений.
+                          {"\u0411\u0435\u0437\u043b\u0438\u043c\u0438\u0442 \u043f\u043e\u0434\u0445\u043e\u0434\u0438\u0442 \u0434\u043b\u044f \u043f\u0440\u043e\u0445\u043e\u0434\u0430 \u0432 \u043a\u043b\u0443\u0431, \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u043a \u0437\u043e\u043d\u0435 \u0438\u043b\u0438 \u0434\u0440\u0443\u0433\u043e\u0439 \u0443\u0441\u043b\u0443\u0433\u0438 \u0431\u0435\u0437 \u0441\u0447\u0451\u0442\u0447\u0438\u043a\u0430 \u043f\u043e\u0433\u0430\u0448\u0435\u043d\u0438\u0439."}
                         </p>
                       </div>
                     )}
@@ -2288,4 +2691,5 @@ export default function AdminCompanyProfilePage() {
     </div>
   );
 }
+
 

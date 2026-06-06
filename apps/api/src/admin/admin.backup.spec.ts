@@ -6,6 +6,7 @@ describe("AdminService company workspace backup coverage", () => {
       "user",
       "category",
       "company",
+      "companyReferral",
       "companyLocation",
       "subscription",
       "subscriptionBundle",
@@ -21,6 +22,7 @@ describe("AdminService company workspace backup coverage", () => {
       "userCompany",
       "userSubscription",
       "subscriptionEntitlement",
+      "payment",
       "subscriptionRedemption",
       "promoCode",
       "promoCodeRedemption",
@@ -49,8 +51,10 @@ describe("AdminService company workspace backup coverage", () => {
     ).collectBackupRows();
 
     expect(tables.CompanyMember).toEqual([{ source: "companyMember" }]);
+    expect(tables.CompanyReferral).toEqual([{ source: "companyReferral" }]);
     expect(tables.CompanyPurchase).toEqual([{ source: "companyPurchase" }]);
     expect(tables.SubscriptionEntitlement).toEqual([{ source: "subscriptionEntitlement" }]);
+    expect(tables.Payment).toEqual([{ source: "payment" }]);
     expect(tables.SubscriptionRedemption).toEqual([{ source: "subscriptionRedemption" }]);
     expect(tables.UserSubscriptionBundle).toEqual([{ source: "userSubscriptionBundle" }]);
     expect(tables.SubscriptionBundleRedemption).toEqual([{ source: "subscriptionBundleRedemption" }]);

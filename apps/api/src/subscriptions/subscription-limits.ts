@@ -1,0 +1,1 @@
+export const MAX_SUBSCRIPTION_PRICE_RUB = 349999;

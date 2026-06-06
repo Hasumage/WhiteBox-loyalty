@@ -3,6 +3,7 @@ import type { CompanyVerificationStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { requireAdminScope } from "@/lib/admin/require-admin-scope";
 import { deletePassportFilesForApplication } from "@/lib/company-onboarding/passport-storage";
+import { addUtcDays } from "@/lib/finance/company-billing";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -112,6 +113,7 @@ export async function PATCH(
       });
 
       if (current.companyId) {
+        const reviewedAt = new Date();
         await tx.company.update({
           where: { id: current.companyId },
           data: {
@@ -119,10 +121,24 @@ export async function PATCH(
             passportVerificationStatus: status === "APPROVED" ? "APPROVED" : status,
             identityVerificationCompleted: status === "APPROVED" && current.identityVerificationMode === "FULL",
             isActive: status === "APPROVED",
-            verificationReviewedAt: status === "APPROVED" || status === "REJECTED" ? new Date() : undefined,
-            passportDataDeletedAt: status === "APPROVED" || status === "REJECTED" ? new Date() : undefined,
+            verificationReviewedAt: status === "APPROVED" || status === "REJECTED" ? reviewedAt : undefined,
+            passportDataDeletedAt: status === "APPROVED" || status === "REJECTED" ? reviewedAt : undefined,
           },
         });
+        if (status === "APPROVED") {
+          await tx.companyBillingAccount.upsert({
+            where: { companyId: current.companyId },
+            create: {
+              companyId: current.companyId,
+              status: "TRIAL",
+              trialStartedAt: reviewedAt,
+              trialEndsAt: addUtcDays(reviewedAt, 30),
+              currentPeriodStartsAt: reviewedAt,
+              currentPeriodEndsAt: addUtcDays(reviewedAt, 30),
+            },
+            update: {},
+          });
+        }
       }
 
       await tx.auditEvent.create({

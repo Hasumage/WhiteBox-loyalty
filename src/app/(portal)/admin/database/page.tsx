@@ -2,207 +2,219 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BadgeDollarSign,
+  Bell,
+  Building2,
+  CheckSquare,
+  ChevronDown,
+  ClipboardList,
+  Database,
   Eye,
   EyeOff,
-  Minus,
-  Plus,
-  RotateCcw,
-  Shield,
-  Building2,
-  Link2,
-  ChevronDown,
-  LayoutGrid,
-  User as UserIcon,
-  Tags,
-  BadgeDollarSign,
+  FileCheck,
+  Gift,
   GitMerge,
   KeyRound,
-  LogIn,
+  LayoutGrid,
+  Link2,
   MailCheck,
-  Wallet,
-  ClipboardList,
   MapPin,
-  Sparkles,
-  Ticket,
   Megaphone,
+  Minus,
+  Plus,
+  Receipt,
+  RotateCcw,
+  Shield,
+  Sparkles,
+  Tags,
+  Ticket,
+  User as UserIcon,
   UsersRound,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
 
-type Node = {
+type GroupId = "core" | "company" | "subscriptions" | "links" | "growth" | "security" | "operations";
+type Icon = React.ComponentType<{ className?: string }>;
+
+type ModelDefinition = {
   id: string;
-  title: string;
   subtitle: string;
   fields: string[];
-  x: number;
-  y: number;
+  group: GroupId;
+  icon: Icon;
   color: string;
 };
 
-type Edge = {
-  from: string;
-  to: string;
-  label: string;
-};
+type Node = ModelDefinition & { x: number; y: number };
+type Edge = { from: string; to: string; label: string };
+type PresetId = "all" | "company-flow" | "security" | "loyalty" | "growth" | "operations" | "map";
+type SchemaPreset = { id: PresetId; icon: Icon; visibleGroups: GroupId[] };
 
-type SchemaPreset = {
-  id: string;
-  label: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  visibleNodes: string[];
-};
-
-const NODE_W = 240;
-const HEADER_H = 34;
+const NODE_W = 250;
+const HEADER_H = 38;
 const ROW_H = 22;
 const PADDING = 8;
-const MIN_ZOOM = 0.45;
+const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 2.5;
 
-const nodes: Node[] = [
-  { id: "User", title: "User", subtitle: "identity", fields: ["id", "uuid", "telegramId?", "email", "role", "accountStatus"], x: 120, y: 100, color: "rgba(34,211,238,0.24)" },
-  { id: "Category", title: "Category", subtitle: "dictionary", fields: ["id", "slug", "name", "icon"], x: 500, y: 90, color: "rgba(16,185,129,0.24)" },
-  { id: "Company", title: "Company", subtitle: "partner", fields: ["id", "slug", "categoryId", "ownerUserId?", "subscriptionSpendPolicy"], x: 880, y: 90, color: "rgba(56,189,248,0.24)" },
-  { id: "Subscription", title: "Subscription", subtitle: "catalog", fields: ["id", "uuid", "slug", "price", "companyId?", "categoryId?"], x: 1260, y: 90, color: "rgba(99,102,241,0.24)" },
-  { id: "CompanyLocation", title: "CompanyLocation", subtitle: "branches/map", fields: ["id", "uuid", "companyId", "address", "latitude", "longitude", "openTime", "workingDays"], x: 1640, y: 80, color: "rgba(45,212,191,0.24)" },
-  { id: "UserProfilePreference", title: "UserProfilePreference", subtitle: "profile", fields: ["id", "userId", "onboardingCompletedAt?", "profileVisibility", "marketingOptIn"], x: 80, y: 390, color: "rgba(125,211,252,0.22)" },
-  { id: "UserFavoriteCategory", title: "UserFavoriteCategory", subtitle: "pivot", fields: ["id", "userId", "categoryId"], x: 420, y: 390, color: "rgba(20,184,166,0.24)" },
-  { id: "CompanyCategory", title: "CompanyCategory", subtitle: "pivot", fields: ["id", "companyId", "categoryId"], x: 760, y: 390, color: "rgba(6,182,212,0.24)" },
-  { id: "CompanyLevelRule", title: "CompanyLevelRule", subtitle: "levels", fields: ["id", "companyId", "levelName", "minTotalSpend", "cashbackPercent"], x: 1100, y: 390, color: "rgba(14,165,233,0.24)" },
-  { id: "UserCompany", title: "UserCompany", subtitle: "points balance", fields: ["id", "userId", "companyId", "balance", "pointsToNextReward?"], x: 1440, y: 390, color: "rgba(217,70,239,0.22)" },
-  { id: "UserSubscription", title: "UserSubscription", subtitle: "active/archive", fields: ["id", "userId", "subscriptionId", "status", "expiresAt?", "willAutoRenew"], x: 1780, y: 390, color: "rgba(139,92,246,0.24)" },
-  { id: "PromoCode", title: "PromoCode", subtitle: "growth", fields: ["id", "code", "rewardType", "points", "companyId?", "subscriptionId?"], x: 120, y: 720, color: "rgba(250,204,21,0.24)" },
-  { id: "PromoCodeRedemption", title: "PromoCodeRedemption", subtitle: "growth ledger", fields: ["id", "promoCodeId", "userId", "redeemedAt"], x: 480, y: 720, color: "rgba(234,179,8,0.22)" },
-  { id: "ReferralCampaign", title: "ReferralCampaign", subtitle: "growth rules", fields: ["id", "title", "inviterBonusPoints", "invitedBonusPoints", "bonusCompanyId?"], x: 840, y: 720, color: "rgba(132,204,22,0.24)" },
-  { id: "ReferralInvite", title: "ReferralInvite", subtitle: "invite ledger", fields: ["id", "code", "inviterUserId", "invitedUserId?", "status"], x: 1200, y: 720, color: "rgba(163,230,53,0.22)" },
-  { id: "LoyaltyTransaction", title: "LoyaltyTransaction", subtitle: "points ledger", fields: ["id", "uuid", "userId", "companyId", "type", "status", "amount"], x: 1560, y: 720, color: "rgba(244,114,182,0.24)" },
-  { id: "RefreshToken", title: "RefreshToken", subtitle: "session", fields: ["id", "tokenHash", "userId", "expiresAt", "revokedAt?"], x: 120, y: 1060, color: "rgba(251,191,36,0.24)" },
-  { id: "OAuthAccount", title: "OAuthAccount", subtitle: "federation", fields: ["id", "provider", "providerAccountId", "userId", "expiresAt?"], x: 480, y: 1060, color: "rgba(251,146,60,0.24)" },
-  { id: "LoginEvent", title: "LoginEvent", subtitle: "security", fields: ["id", "userId", "ipAddress?", "countryCode?", "createdAt"], x: 840, y: 1060, color: "rgba(249,115,22,0.24)" },
-  { id: "EmailChangeRequest", title: "EmailChangeRequest", subtitle: "security", fields: ["id", "userId", "requestedByUserId", "tokenHash", "expiresAt"], x: 1200, y: 1060, color: "rgba(251,113,133,0.24)" },
-  { id: "AuditEvent", title: "AuditEvent", subtitle: "ops/security", fields: ["id", "workspace", "category", "actorUserId?", "targetUserId?", "result"], x: 1560, y: 1060, color: "rgba(148,163,184,0.24)" },
+const COLORS: Record<GroupId, string> = {
+  core: "rgba(34,211,238,0.24)",
+  company: "rgba(45,212,191,0.24)",
+  subscriptions: "rgba(99,102,241,0.24)",
+  links: "rgba(217,70,239,0.22)",
+  growth: "rgba(250,204,21,0.22)",
+  security: "rgba(251,113,133,0.22)",
+  operations: "rgba(148,163,184,0.24)",
+};
+
+const define = (
+  id: string,
+  group: GroupId,
+  subtitle: string,
+  fields: string[],
+  icon: Icon,
+): ModelDefinition => ({ id, group, subtitle, fields, icon, color: COLORS[group] });
+
+// Keep this list aligned with prisma/schema.prisma. Fields are intentionally concise
+// so the full production schema remains readable on one interactive canvas.
+const modelDefinitions: ModelDefinition[] = [
+  define("User", "core", "identity", ["id", "uuid", "email", "role", "accountStatus"], UserIcon),
+  define("ProfileStatus", "core", "profile status catalog", ["id", "slug", "name", "rarity"], Sparkles),
+  define("UserProfileStatusUnlock", "core", "status unlock ledger", ["id", "userId", "profileStatusId", "seenAt?"], Gift),
+  define("PlatformCounter", "core", "platform counters", ["id", "key", "value", "updatedAt"], Database),
+  define("AdminUserPermission", "core", "access control", ["id", "userId", "permissionKey", "canView", "canEdit"], Shield),
+  define("Category", "core", "category dictionary", ["id", "slug", "name", "icon"], Tags),
+
+  define("Company", "company", "partner profile", ["id", "uuid", "slug", "ownerUserId?", "verificationStatus"], Building2),
+  define("CompanyBillingAccount", "company", "monthly billing", ["id", "companyId", "status", "trialEndsAt?", "paidThrough?"], Wallet),
+  define("CompanyBillingInvoice", "company", "billing invoice", ["id", "companyId", "amount", "status", "dueAt"], Receipt),
+  define("CompanyBillingPromoCode", "company", "billing discount", ["id", "code", "discountPercent", "createdByUserId"], Ticket),
+  define("CompanyBillingPromoRedemption", "company", "billing promo ledger", ["id", "promoCodeId", "companyId", "redeemedAt"], Ticket),
+  define("CompanyReferral", "company", "company acquisition", ["id", "companyId", "referrerUserId?", "supportManagerUserId?", "stage"], Megaphone),
+  define("CompanyVerificationApplication", "company", "verification request", ["id", "companyId", "status", "employmentType", "submittedAt"], FileCheck),
+  define("PassportVerificationFile", "company", "encrypted document", ["id", "applicationId", "storageKey", "encryptedAt"], Shield),
+  define("CompanyLocation", "company", "branches and map", ["id", "companyId", "address", "latitude", "longitude"], MapPin),
+  define("CompanyCategory", "company", "company categories", ["id", "companyId", "categoryId"], GitMerge),
+  define("CompanyLevelRule", "company", "loyalty levels", ["id", "companyId", "levelName", "minTotalSpend", "cashbackPercent"], Sparkles),
+  define("CompanyMember", "company", "company team", ["id", "companyId", "userId", "role", "permissions"], UsersRound),
+
+  define("Subscription", "subscriptions", "subscription catalog", ["id", "uuid", "companyId", "price", "periodUnit"], BadgeDollarSign),
+  define("SubscriptionBundle", "subscriptions", "paired subscription", ["id", "uuid", "name", "status", "price"], Link2),
+  define("SubscriptionBundleParticipant", "subscriptions", "bundle partners", ["id", "bundleId", "companyId", "revenuePercent"], GitMerge),
+  define("UserSubscriptionBundle", "subscriptions", "customer bundle", ["id", "userId", "bundleId", "status", "expiresAt"], Ticket),
+  define("CompanyPurchase", "subscriptions", "company revenue", ["id", "companyId", "userId", "subscriptionId?", "grossAmount"], Receipt),
+  define("UserSubscription", "subscriptions", "customer subscription", ["id", "userId", "subscriptionId", "status", "expiresAt"], Ticket),
+  define("SubscriptionEntitlement", "subscriptions", "service and limit", ["id", "subscriptionId", "title", "limitPeriod", "limitCount"], Gift),
+  define("SubscriptionRedemption", "subscriptions", "service redemption", ["id", "userSubscriptionId", "entitlementId", "companyId", "redeemedAt"], CheckSquare),
+  define("SubscriptionBundleRedemption", "subscriptions", "bundle redemption", ["id", "userBundleId", "participantId", "redeemedAt"], CheckSquare),
+
+  define("UserFavoriteCategory", "links", "favorite categories", ["id", "userId", "categoryId"], GitMerge),
+  define("UserCompany", "links", "company customer", ["id", "userId", "companyId", "balance", "totalSpend"], GitMerge),
+  define("UserProfilePreference", "links", "profile preferences", ["id", "userId", "locale", "profileVisibility", "marketingOptIn"], Sparkles),
+
+  define("PromoCode", "growth", "customer promo", ["id", "code", "rewardType", "companyId?", "subscriptionId?"], Ticket),
+  define("PromoCodeRedemption", "growth", "promo redemption", ["id", "promoCodeId", "userId", "redeemedAt"], Ticket),
+  define("ReferralCampaign", "growth", "referral rules", ["id", "title", "inviterBonusPoints", "invitedBonusPoints"], Megaphone),
+  define("ReferralInvite", "growth", "referral ledger", ["id", "code", "inviterUserId", "invitedUserId?", "status"], UsersRound),
+  define("LandingLead", "growth", "landing lead", ["id", "uuid", "contact", "status", "createdAt"], Megaphone),
+
+  define("RefreshToken", "security", "session", ["id", "userId", "tokenHash", "expiresAt", "revokedAt?"], KeyRound),
+  define("OAuthAccount", "security", "federated identity", ["id", "userId", "provider", "providerAccountId"], KeyRound),
+  define("LoginEvent", "security", "login metadata", ["id", "userId", "deviceKey", "ipAddress?", "createdAt"], Shield),
+  define("EmailChangeRequest", "security", "protected email change", ["id", "userId", "requestedByUserId", "expiresAt"], MailCheck),
+  define("TelegramLinkToken", "security", "Telegram binding", ["id", "userId", "tokenHash", "expiresAt", "usedAt?"], Link2),
+  define("CustomerLookupCode", "security", "cashier lookup", ["id", "userId", "codeHash", "expiresAt", "usedAt?"], KeyRound),
+
+  define("FinanceOperation", "operations", "finance request", ["id", "companyId?", "type", "amount", "status"], Wallet),
+  define("LoyaltyTransaction", "operations", "points ledger", ["id", "userId", "companyId", "type", "amount"], Wallet),
+  define("AuditEvent", "operations", "audit stream", ["id", "workspace", "category", "actorUserId?", "result"], ClipboardList),
+  define("AdminTask", "operations", "admin task queue", ["id", "type", "status", "assigneeUserId?", "auditEventId?"], CheckSquare),
+  define("NotificationDelivery", "operations", "notification history", ["id", "channel", "recipient", "status", "sentAt?"], Bell),
+  define("TelegramMessageQueue", "operations", "Telegram queue", ["id", "chatId", "status", "attempts", "nextAttemptAt?"], Bell),
 ];
 
+const nodes: Node[] = modelDefinitions.map((model, index) => ({
+  ...model,
+  x: 70 + (index % 6) * 310,
+  y: 70 + Math.floor(index / 6) * 230,
+}));
+
 const edges: Edge[] = [
-  { from: "Category", to: "Company", label: "1:N" },
-  { from: "Category", to: "Subscription", label: "1:N" },
-  { from: "Company", to: "Subscription", label: "1:N" },
+  { from: "User", to: "AdminUserPermission", label: "1:N" },
+  { from: "User", to: "UserProfileStatusUnlock", label: "1:N" },
+  { from: "ProfileStatus", to: "UserProfileStatusUnlock", label: "1:N" },
+  { from: "User", to: "Company", label: "1:N owner" },
+  { from: "Company", to: "CompanyBillingAccount", label: "1:1" },
+  { from: "Company", to: "CompanyBillingInvoice", label: "1:N" },
+  { from: "CompanyBillingPromoCode", to: "CompanyBillingPromoRedemption", label: "1:N" },
+  { from: "Company", to: "CompanyBillingPromoRedemption", label: "1:N" },
+  { from: "Company", to: "CompanyReferral", label: "1:1" },
+  { from: "Company", to: "CompanyVerificationApplication", label: "1:N" },
+  { from: "CompanyVerificationApplication", to: "PassportVerificationFile", label: "1:N" },
   { from: "Company", to: "CompanyLocation", label: "1:N" },
-  { from: "User", to: "Company", label: "1:1 owner" },
-  { from: "User", to: "UserProfilePreference", label: "1:1" },
-  { from: "User", to: "UserFavoriteCategory", label: "1:N" },
-  { from: "Category", to: "UserFavoriteCategory", label: "1:N" },
   { from: "Company", to: "CompanyCategory", label: "1:N" },
   { from: "Category", to: "CompanyCategory", label: "1:N" },
   { from: "Company", to: "CompanyLevelRule", label: "1:N" },
-  { from: "User", to: "UserCompany", label: "1:N" },
-  { from: "Company", to: "UserCompany", label: "1:N" },
+  { from: "Company", to: "CompanyMember", label: "1:N" },
+  { from: "User", to: "CompanyMember", label: "1:N" },
+  { from: "Company", to: "Subscription", label: "1:N" },
+  { from: "SubscriptionBundle", to: "SubscriptionBundleParticipant", label: "1:N" },
+  { from: "Company", to: "SubscriptionBundleParticipant", label: "1:N" },
+  { from: "User", to: "UserSubscriptionBundle", label: "1:N" },
+  { from: "SubscriptionBundle", to: "UserSubscriptionBundle", label: "1:N" },
+  { from: "Company", to: "CompanyPurchase", label: "1:N" },
+  { from: "User", to: "CompanyPurchase", label: "1:N" },
   { from: "User", to: "UserSubscription", label: "1:N" },
   { from: "Subscription", to: "UserSubscription", label: "1:N" },
-  { from: "Company", to: "PromoCode", label: "1:N points" },
-  { from: "Subscription", to: "PromoCode", label: "1:N promo" },
+  { from: "Subscription", to: "SubscriptionEntitlement", label: "1:N" },
+  { from: "UserSubscription", to: "SubscriptionRedemption", label: "1:N" },
+  { from: "SubscriptionEntitlement", to: "SubscriptionRedemption", label: "1:N" },
+  { from: "UserSubscriptionBundle", to: "SubscriptionBundleRedemption", label: "1:N" },
+  { from: "User", to: "UserFavoriteCategory", label: "1:N" },
+  { from: "Category", to: "UserFavoriteCategory", label: "1:N" },
+  { from: "User", to: "UserCompany", label: "1:N" },
+  { from: "Company", to: "UserCompany", label: "1:N" },
+  { from: "User", to: "UserProfilePreference", label: "1:1" },
   { from: "PromoCode", to: "PromoCodeRedemption", label: "1:N" },
   { from: "User", to: "PromoCodeRedemption", label: "1:N" },
-  { from: "Company", to: "ReferralCampaign", label: "1:N bonus" },
-  { from: "User", to: "ReferralInvite", label: "1:N inviter" },
-  { from: "User", to: "ReferralInvite", label: "1:1 invited" },
+  { from: "ReferralCampaign", to: "ReferralInvite", label: "1:N" },
+  { from: "User", to: "ReferralInvite", label: "1:N" },
   { from: "User", to: "RefreshToken", label: "1:N" },
   { from: "User", to: "OAuthAccount", label: "1:N" },
   { from: "User", to: "LoginEvent", label: "1:N" },
-  { from: "User", to: "EmailChangeRequest", label: "1:N target" },
-  { from: "User", to: "EmailChangeRequest", label: "1:N requester" },
+  { from: "User", to: "EmailChangeRequest", label: "1:N" },
+  { from: "User", to: "TelegramLinkToken", label: "1:N" },
+  { from: "User", to: "CustomerLookupCode", label: "1:N" },
+  { from: "Company", to: "FinanceOperation", label: "1:N" },
   { from: "User", to: "LoyaltyTransaction", label: "1:N" },
   { from: "Company", to: "LoyaltyTransaction", label: "1:N" },
   { from: "User", to: "AuditEvent", label: "1:N actor" },
-  { from: "User", to: "AuditEvent", label: "1:N target" },
+  { from: "AuditEvent", to: "AdminTask", label: "1:N" },
 ];
 
 const presets: SchemaPreset[] = [
-  {
-    id: "all",
-    label: "Full Schema",
-    description: "All models and all relations",
-    icon: LayoutGrid,
-    visibleNodes: nodes.map((n) => n.id),
-  },
-  {
-    id: "company-flow",
-    label: "Company, Locations + Subscriptions",
-    description: "Partners, branches, categories and paid plans",
-    icon: Building2,
-    visibleNodes: ["User", "Category", "Company", "CompanyLocation", "Subscription", "UserCompany", "UserSubscription", "CompanyCategory", "CompanyLevelRule"],
-  },
-  {
-    id: "security",
-    label: "Security & Access",
-    description: "Auth, sessions and security events",
-    icon: Shield,
-    visibleNodes: ["User", "RefreshToken", "OAuthAccount", "LoginEvent", "EmailChangeRequest", "AuditEvent"],
-  },
-  {
-    id: "loyalty",
-    label: "Loyalty Structure",
-    description: "Categories, companies and loyalty transactions",
-    icon: Link2,
-    visibleNodes: ["User", "Category", "Company", "CompanyLocation", "CompanyCategory", "UserCompany", "LoyaltyTransaction", "UserFavoriteCategory", "CompanyLevelRule"],
-  },
-  {
-    id: "growth",
-    label: "Growth: Promo + Referral",
-    description: "Promo code redemption and invite-a-friend rules",
-    icon: Megaphone,
-    visibleNodes: ["User", "Company", "Subscription", "PromoCode", "PromoCodeRedemption", "ReferralCampaign", "ReferralInvite", "LoyaltyTransaction", "UserCompany"],
-  },
-  {
-    id: "map",
-    label: "Map + Branches",
-    description: "Company addresses, map markers and category context",
-    icon: MapPin,
-    visibleNodes: ["Company", "CompanyLocation", "Category", "CompanyCategory", "UserCompany", "LoyaltyTransaction", "Subscription"],
-  },
+  { id: "all", icon: LayoutGrid, visibleGroups: ["core", "company", "subscriptions", "links", "growth", "security", "operations"] },
+  { id: "company-flow", icon: Building2, visibleGroups: ["company", "subscriptions", "links"] },
+  { id: "security", icon: Shield, visibleGroups: ["core", "security", "operations"] },
+  { id: "loyalty", icon: Sparkles, visibleGroups: ["core", "subscriptions", "links", "operations"] },
+  { id: "growth", icon: Megaphone, visibleGroups: ["company", "growth"] },
+  { id: "operations", icon: Wallet, visibleGroups: ["company", "operations"] },
+  { id: "map", icon: MapPin, visibleGroups: ["core", "company", "links"] },
 ];
 
-const nodeMeta: Record<
-  string,
-  {
-    group: "core" | "map" | "links" | "growth" | "security" | "finance";
-    icon: React.ComponentType<{ className?: string }>;
-  }
-> = {
-  User: { group: "core", icon: UserIcon },
-  Category: { group: "core", icon: Tags },
-  Company: { group: "core", icon: Building2 },
-  Subscription: { group: "core", icon: BadgeDollarSign },
-  CompanyLocation: { group: "map", icon: MapPin },
-  UserProfilePreference: { group: "links", icon: Sparkles },
-  UserFavoriteCategory: { group: "links", icon: GitMerge },
-  CompanyCategory: { group: "links", icon: GitMerge },
-  CompanyLevelRule: { group: "links", icon: GitMerge },
-  UserCompany: { group: "links", icon: GitMerge },
-  UserSubscription: { group: "links", icon: GitMerge },
-  PromoCode: { group: "growth", icon: Ticket },
-  PromoCodeRedemption: { group: "growth", icon: Ticket },
-  ReferralCampaign: { group: "growth", icon: Megaphone },
-  ReferralInvite: { group: "growth", icon: UsersRound },
-  RefreshToken: { group: "security", icon: KeyRound },
-  OAuthAccount: { group: "security", icon: KeyRound },
-  LoginEvent: { group: "security", icon: LogIn },
-  EmailChangeRequest: { group: "security", icon: MailCheck },
-  LoyaltyTransaction: { group: "finance", icon: Wallet },
-  AuditEvent: { group: "finance", icon: ClipboardList },
-};
-
-const nodeGroups = [
-  { id: "core", label: "Core Models", icon: LayoutGrid },
-  { id: "map", label: "Location / Map Models", icon: MapPin },
-  { id: "links", label: "Pivot / Link Models", icon: Link2 },
-  { id: "growth", label: "Growth Models", icon: Megaphone },
-  { id: "security", label: "Security Models", icon: Shield },
-  { id: "finance", label: "Finance / Ops Models", icon: Wallet },
-] as const;
+const nodeGroups: { id: GroupId; icon: Icon }[] = [
+  { id: "core", icon: LayoutGrid },
+  { id: "company", icon: Building2 },
+  { id: "subscriptions", icon: Ticket },
+  { id: "links", icon: Link2 },
+  { id: "growth", icon: Megaphone },
+  { id: "security", icon: Shield },
+  { id: "operations", icon: Wallet },
+];
 
 function nodeHeight(node: Node) {
   return HEADER_H + node.fields.length * ROW_H + PADDING * 2;
@@ -213,29 +225,43 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export default function AdminDatabasePage() {
-  const [zoom, setZoom] = useState(0.82);
+  const { t } = useI18n();
+  const [zoom, setZoom] = useState(0.62);
   const [offset, setOffset] = useState({ x: 24, y: 16 });
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const [hiddenNodes, setHiddenNodes] = useState<Set<string>>(new Set());
   const [presetOpen, setPresetOpen] = useState(false);
-  const [activePresetId, setActivePresetId] = useState<string>("all");
+  const [activePresetId, setActivePresetId] = useState<PresetId | "custom">("all");
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(zoom);
   const offsetRef = useRef(offset);
 
-  const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), []);
-  const visibleNodes = useMemo(
-    () => nodes.filter((node) => !hiddenNodes.has(node.id)),
-    [hiddenNodes],
-  );
+  const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), []);
+  const visibleNodes = useMemo(() => nodes.filter((node) => !hiddenNodes.has(node.id)), [hiddenNodes]);
   const visibleEdges = useMemo(
-    () =>
-      edges.filter(
-        (edge) => !hiddenNodes.has(edge.from) && !hiddenNodes.has(edge.to),
-      ),
+    () => edges.filter((edge) => !hiddenNodes.has(edge.from) && !hiddenNodes.has(edge.to)),
     [hiddenNodes],
   );
+
+  const presetText: Record<PresetId, { label: string; description: string }> = {
+    all: { label: t("admin.database.fullSchema"), description: t("admin.database.fullSchemaDescription") },
+    "company-flow": { label: t("admin.database.companyFlow"), description: t("admin.database.companyFlowDescription") },
+    security: { label: t("admin.database.securityAccess"), description: t("admin.database.securityAccessDescription") },
+    loyalty: { label: t("admin.database.loyalty"), description: t("admin.database.loyaltyDescription") },
+    growth: { label: t("admin.database.growth"), description: t("admin.database.growthDescription") },
+    operations: { label: t("admin.database.operations"), description: t("admin.database.operationsDescription") },
+    map: { label: t("admin.database.mapBranches"), description: t("admin.database.mapBranchesDescription") },
+  };
+  const groupLabels: Record<GroupId, string> = {
+    core: t("admin.database.groupCore"),
+    company: t("admin.database.groupCompany"),
+    subscriptions: t("admin.database.groupSubscriptions"),
+    links: t("admin.database.groupLinks"),
+    growth: t("admin.database.groupGrowth"),
+    security: t("admin.database.groupSecurity"),
+    operations: t("admin.database.groupOperations"),
+  };
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -254,42 +280,26 @@ export default function AdminDatabasePage() {
     const rect = viewportRef.current.getBoundingClientRect();
     const localX = clientX - rect.left;
     const localY = clientY - rect.top;
-    const currentOffset = offsetRef.current;
-    const currentZoom = zoomRef.current;
-    const worldX = (localX - currentOffset.x) / currentZoom;
-    const worldY = (localY - currentOffset.y) / currentZoom;
-    setOffset({
-      x: Math.round(localX - worldX * clampedZoom),
-      y: Math.round(localY - worldY * clampedZoom),
-    });
+    const worldX = (localX - offsetRef.current.x) / zoomRef.current;
+    const worldY = (localY - offsetRef.current.y) / zoomRef.current;
+    setOffset({ x: Math.round(localX - worldX * clampedZoom), y: Math.round(localY - worldY * clampedZoom) });
     setZoom(clampedZoom);
   }
 
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-
     function handleWheel(event: WheelEvent) {
       event.preventDefault();
       event.stopPropagation();
-      const delta = event.deltaY < 0 ? 0.09 : -0.09;
-      setZoomAt(zoomRef.current + delta, event.clientX, event.clientY);
+      setZoomAt(zoomRef.current + (event.deltaY < 0 ? 0.09 : -0.09), event.clientX, event.clientY);
     }
-
     viewport.addEventListener("wheel", handleWheel, { passive: false });
     return () => viewport.removeEventListener("wheel", handleWheel);
   }, []);
 
-  function zoomIn() {
-    setZoomAt(zoom + 0.1);
-  }
-
-  function zoomOut() {
-    setZoomAt(zoom - 0.1);
-  }
-
   function resetView() {
-    setZoom(0.82);
+    setZoom(0.62);
     setOffset({ x: 24, y: 16 });
     setFocusedNodeId(null);
   }
@@ -299,97 +309,68 @@ export default function AdminDatabasePage() {
     const viewport = viewportRef.current;
     if (!node || !viewport || hiddenNodes.has(nodeId)) return;
     const rect = viewport.getBoundingClientRect();
-    const nodeH = nodeHeight(node);
-    const centerX = node.x + NODE_W / 2;
-    const centerY = node.y + nodeH / 2;
     setOffset({
-      x: Math.round(rect.width / 2 - centerX * zoom),
-      y: Math.round(rect.height / 2 - centerY * zoom),
+      x: Math.round(rect.width / 2 - (node.x + NODE_W / 2) * zoom),
+      y: Math.round(rect.height / 2 - (node.y + nodeHeight(node) / 2) * zoom),
     });
     setFocusedNodeId(node.id);
   }
 
   function toggleNodeVisibility(nodeId: string) {
-    setHiddenNodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
-      } else {
-        next.add(nodeId);
-      }
+    setHiddenNodes((previous) => {
+      const next = new Set(previous);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
       return next;
     });
-    if (focusedNodeId === nodeId) {
-      setFocusedNodeId(null);
-    }
+    if (focusedNodeId === nodeId) setFocusedNodeId(null);
     setActivePresetId("custom");
   }
 
   function applyPreset(preset: SchemaPreset) {
-    const visibleSet = new Set(preset.visibleNodes);
-    setHiddenNodes(new Set(nodes.filter((n) => !visibleSet.has(n.id)).map((n) => n.id)));
+    const visibleGroups = new Set(preset.visibleGroups);
+    setHiddenNodes(new Set(nodes.filter((node) => !visibleGroups.has(node.group)).map((node) => node.id)));
     setActivePresetId(preset.id);
     setPresetOpen(false);
     setFocusedNodeId(null);
   }
 
-  const activePresetLabel = presets.find((p) => p.id === activePresetId)?.label ?? "Custom";
+  const activePresetLabel = activePresetId === "custom" ? t("admin.database.custom") : presetText[activePresetId].label;
+  const hint = t("admin.database.hint")
+    .replace("{visible}", String(visibleNodes.length))
+    .replace("{total}", String(nodes.length))
+    .replace("{zoom}", (zoom * 100).toFixed(0));
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Database map</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("admin.database.title")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("admin.database.description")}</p>
+        </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={zoomOut}>
-            <Minus className="h-4 w-4" />
-            Zoom out
-          </Button>
-          <Button variant="secondary" size="sm" onClick={zoomIn}>
-            <Plus className="h-4 w-4" />
-            Zoom in
-          </Button>
-          <Button variant="outline" size="sm" onClick={resetView}>
-            <RotateCcw className="h-4 w-4" />
-            Reset
-          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setZoomAt(zoom - 0.1)}><Minus className="h-4 w-4" />{t("admin.database.zoomOut")}</Button>
+          <Button variant="secondary" size="sm" onClick={() => setZoomAt(zoom + 0.1)}><Plus className="h-4 w-4" />{t("admin.database.zoomIn")}</Button>
+          <Button variant="outline" size="sm" onClick={resetView}><RotateCcw className="h-4 w-4" />{t("admin.database.reset")}</Button>
         </div>
       </div>
 
       <Card className="glass border-white/10">
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-base">Prisma schema visualizer (synced with schema.prisma)</CardTitle>
+            <CardTitle className="text-base">{t("admin.database.visualizer")}</CardTitle>
             <div className="relative">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setPresetOpen((v) => !v)}
-                className="gap-2"
-              >
+              <Button type="button" variant="secondary" size="sm" onClick={() => setPresetOpen((value) => !value)} className="gap-2">
                 <LayoutGrid className="h-4 w-4" />
-                View preset: {activePresetLabel}
+                {t("admin.database.viewPreset")}: {activePresetLabel}
                 <ChevronDown className={cn("h-4 w-4 transition-transform", presetOpen && "rotate-180")} />
               </Button>
               {presetOpen && (
                 <div className="absolute right-0 top-10 z-20 w-80 rounded-xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl backdrop-blur">
                   {presets.map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => applyPreset(preset)}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors",
-                        activePresetId === preset.id ? "bg-primary/20" : "hover:bg-white/5",
-                      )}
-                    >
-                      <span className="mt-0.5 rounded-md border border-white/10 bg-white/5 p-1.5">
-                        <preset.icon className="h-4 w-4" />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-medium">{preset.label}</span>
-                        <span className="block text-xs text-muted-foreground">{preset.description}</span>
-                      </span>
+                    <button key={preset.id} type="button" onClick={() => applyPreset(preset)} className={cn("flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors", activePresetId === preset.id ? "bg-primary/20" : "hover:bg-white/5")}>
+                      <span className="mt-0.5 rounded-md border border-white/10 bg-white/5 p-1.5"><preset.icon className="h-4 w-4" /></span>
+                      <span><span className="block text-sm font-medium">{presetText[preset.id].label}</span><span className="block text-xs text-muted-foreground">{presetText[preset.id].description}</span></span>
                     </button>
                   ))}
                 </div>
@@ -400,39 +381,22 @@ export default function AdminDatabasePage() {
         <CardContent className="space-y-3">
           <div className="space-y-2">
             {nodeGroups.map((group) => {
-              const items = nodes.filter((node) => nodeMeta[node.id]?.group === group.id);
-              if (!items.length) return null;
+              const items = nodes.filter((node) => node.group === group.id);
               return (
                 <div key={group.id} className="rounded-xl border border-white/10 bg-muted/10 p-2.5">
                   <div className="mb-2 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <group.icon className="h-3.5 w-3.5" />
-                    {group.label}
-                    <span className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px]">
-                      {items.length}
-                    </span>
+                    <group.icon className="h-3.5 w-3.5" />{groupLabels[group.id]}
+                    <span className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px]">{items.length}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {items.map((node) => {
                       const hidden = hiddenNodes.has(node.id);
-                      const NodeIcon = nodeMeta[node.id]?.icon ?? LayoutGrid;
                       return (
                         <div key={node.id} className="inline-flex items-center rounded-md border border-white/10 bg-muted/20 pr-1">
-                          <Button
-                            variant={focusedNodeId === node.id && !hidden ? "default" : "secondary"}
-                            size="sm"
-                            onClick={() => focusNode(node.id)}
-                            className="h-8 gap-1.5 rounded-r-none border-r border-white/10"
-                            disabled={hidden}
-                          >
-                            <NodeIcon className="h-3.5 w-3.5" />
-                            {node.id}
+                          <Button variant={focusedNodeId === node.id && !hidden ? "default" : "secondary"} size="sm" onClick={() => focusNode(node.id)} className="h-8 gap-1.5 rounded-r-none border-r border-white/10" disabled={hidden}>
+                            <node.icon className="h-3.5 w-3.5" />{node.id}
                           </Button>
-                          <button
-                            type="button"
-                            onClick={() => toggleNodeVisibility(node.id)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-                            title={hidden ? "Show table" : "Hide table"}
-                          >
+                          <button type="button" onClick={() => toggleNodeVisibility(node.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground" title={hidden ? t("admin.database.showTable") : t("admin.database.hideTable")}>
                             {hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
                         </div>
@@ -443,37 +407,29 @@ export default function AdminDatabasePage() {
               );
             })}
           </div>
+
           <div
             ref={viewportRef}
-            className={cn(
-              "relative h-[74vh] min-h-[560px] cursor-grab overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_2px_2px,rgba(255,255,255,0.09)_1px,transparent_0)] [background-size:24px_24px] overscroll-none touch-none select-none",
-              dragStart && "cursor-grabbing",
-            )}
-            onPointerDown={(e) => {
-              if (e.pointerType === "mouse" && e.button !== 0) return;
-              e.preventDefault();
-              e.currentTarget.setPointerCapture(e.pointerId);
-              const currentOffset = offsetRef.current;
-              setDragStart({ x: e.clientX - currentOffset.x, y: e.clientY - currentOffset.y });
+            className={cn("relative h-[74vh] min-h-[560px] cursor-grab overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_2px_2px,rgba(255,255,255,0.09)_1px,transparent_0)] [background-size:24px_24px] overscroll-none touch-none select-none", dragStart && "cursor-grabbing")}
+            onPointerDown={(event) => {
+              if (event.pointerType === "mouse" && event.button !== 0) return;
+              event.preventDefault();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setDragStart({ x: event.clientX - offsetRef.current.x, y: event.clientY - offsetRef.current.y });
             }}
-            onPointerMove={(e) => {
+            onPointerMove={(event) => {
               if (!dragStart) return;
-              e.preventDefault();
-              setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+              event.preventDefault();
+              setOffset({ x: event.clientX - dragStart.x, y: event.clientY - dragStart.y });
             }}
-            onPointerUp={(e) => {
-              if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-                e.currentTarget.releasePointerCapture(e.pointerId);
-              }
+            onPointerUp={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
               setDragStart(null);
             }}
             onPointerCancel={() => setDragStart(null)}
           >
             <svg className="absolute inset-0 h-full w-full">
-              <g
-                style={{ transition: dragStart ? "none" : "transform 260ms ease" }}
-                transform={`translate(${offset.x},${offset.y}) scale(${zoom})`}
-              >
+              <g style={{ transition: dragStart ? "none" : "transform 260ms ease" }} transform={`translate(${offset.x},${offset.y}) scale(${zoom})`}>
                 {visibleEdges.map((edge, index) => {
                   const from = byId.get(edge.from);
                   const to = byId.get(edge.to);
@@ -482,95 +438,33 @@ export default function AdminDatabasePage() {
                   const y1 = from.y + nodeHeight(from);
                   const x2 = to.x + NODE_W / 2;
                   const y2 = to.y;
-                  const cx1 = x1;
-                  const cy1 = y1 + 90;
-                  const cx2 = x2;
-                  const cy2 = y2 - 90;
                   const midX = (x1 + x2) / 2 + (index % 2 === 0 ? 10 : -10);
                   const midY = (y1 + y2) / 2;
                   return (
                     <g key={`${edge.from}-${edge.to}-${index}`}>
-                      <path
-                        d={`M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`}
-                        fill="none"
-                        stroke="rgba(186,230,253,0.45)"
-                        strokeWidth="1.5"
-                      />
-                      <rect
-                        x={midX - 30}
-                        y={midY - 10}
-                        width="60"
-                        height="20"
-                        rx="6"
-                        fill="rgba(15,23,42,0.88)"
-                      />
-                      <text
-                        x={midX}
-                        y={midY + 4}
-                        textAnchor="middle"
-                        fontSize="10"
-                        fill="rgba(224,242,254,0.95)"
-                      >
-                        {edge.label}
-                      </text>
+                      <path d={`M ${x1} ${y1} C ${x1} ${y1 + 80}, ${x2} ${y2 - 80}, ${x2} ${y2}`} fill="none" stroke="rgba(186,230,253,0.42)" strokeWidth="1.5" />
+                      <rect x={midX - 30} y={midY - 10} width="60" height="20" rx="6" fill="rgba(15,23,42,0.88)" />
+                      <text x={midX} y={midY + 4} textAnchor="middle" fontSize="10" fill="rgba(224,242,254,0.95)">{edge.label}</text>
                     </g>
                   );
                 })}
-
                 {visibleNodes.map((node) => (
                   <g key={node.id} transform={`translate(${node.x},${node.y})`}>
-                    <rect
-                      width={NODE_W}
-                      height={nodeHeight(node)}
-                      rx="12"
-                      fill="rgba(2,6,23,0.88)"
-                      stroke={
-                        focusedNodeId === node.id
-                          ? "rgba(56,189,248,0.95)"
-                          : "rgba(255,255,255,0.14)"
-                      }
-                      strokeWidth={focusedNodeId === node.id ? "2" : "1"}
-                    />
+                    <rect width={NODE_W} height={nodeHeight(node)} rx="12" fill="rgba(2,6,23,0.9)" stroke={focusedNodeId === node.id ? "rgba(56,189,248,0.95)" : "rgba(255,255,255,0.14)"} strokeWidth={focusedNodeId === node.id ? "2" : "1"} />
                     <rect width={NODE_W} height={HEADER_H + 2} rx="12" fill={node.color} />
-                    <text x="14" y="21" fill="white" fontSize="13" fontWeight="700">
-                      {node.title}
-                    </text>
-                    <text
-                      x="14"
-                      y="33"
-                      fill="rgba(203,213,225,0.95)"
-                      fontSize="10"
-                    >
-                      {node.subtitle}
-                    </text>
-                    {node.fields.map((field, i) => (
+                    <text x="14" y="21" fill="white" fontSize="13" fontWeight="700">{node.id}</text>
+                    <text x="14" y="34" fill="rgba(203,213,225,0.95)" fontSize="10">{node.subtitle}</text>
+                    {node.fields.map((field, index) => (
                       <g key={field}>
-                        <line
-                          x1={0}
-                          x2={NODE_W}
-                          y1={HEADER_H + PADDING + i * ROW_H}
-                          y2={HEADER_H + PADDING + i * ROW_H}
-                          stroke="rgba(255,255,255,0.07)"
-                        />
-                        <text
-                          x="14"
-                          y={HEADER_H + PADDING + i * ROW_H + 15}
-                          fill="rgba(226,232,240,0.95)"
-                          fontSize="11"
-                        >
-                          {field}
-                        </text>
+                        <line x1={0} x2={NODE_W} y1={HEADER_H + PADDING + index * ROW_H} y2={HEADER_H + PADDING + index * ROW_H} stroke="rgba(255,255,255,0.07)" />
+                        <text x="14" y={HEADER_H + PADDING + index * ROW_H + 15} fill="rgba(226,232,240,0.95)" fontSize="11">{field}</text>
                       </g>
                     ))}
                   </g>
                 ))}
               </g>
             </svg>
-
-            <div className="pointer-events-none absolute bottom-3 right-3 rounded-lg border border-white/10 bg-slate-950/70 px-3 py-1 text-xs text-muted-foreground">
-              Drag to pan | wheel to zoom | visible: {visibleNodes.length}/{nodes.length} |{" "}
-              {(zoom * 100).toFixed(0)}%
-            </div>
+            <div className="pointer-events-none absolute bottom-3 right-3 rounded-lg border border-white/10 bg-slate-950/75 px-3 py-1 text-xs text-muted-foreground">{hint}</div>
           </div>
         </CardContent>
       </Card>

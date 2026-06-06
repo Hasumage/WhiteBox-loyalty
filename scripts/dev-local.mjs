@@ -28,6 +28,7 @@ function npmRun(name, args) {
 const children = [
   npmRun("web", ["run", "dev:web"]),
   npmRun("api", ["run", "api:dev"]),
+  npmRun("telegram", ["run", "telegram:poll:local", "--", "--from-now"]),
 ];
 
 function shutdown() {
