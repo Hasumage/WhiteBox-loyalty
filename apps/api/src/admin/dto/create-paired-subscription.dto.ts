@@ -13,7 +13,7 @@ import {
   MinLength,
   ValidateNested,
 } from "class-validator";
-import { MAX_SUBSCRIPTION_PRICE_RUB } from "../../subscriptions/subscription-limits";
+import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../../subscriptions/subscription-limits";
 
 export class PairedSubscriptionParticipantDto {
   @ApiProperty({ example: 12 })
@@ -54,9 +54,9 @@ export class CreatePairedSubscriptionDto {
   @MinLength(5)
   description!: string;
 
-  @ApiProperty({ example: 1990, maximum: MAX_SUBSCRIPTION_PRICE_RUB })
+  @ApiProperty({ example: 1990, minimum: MIN_SUBSCRIPTION_PRICE_RUB, maximum: MAX_SUBSCRIPTION_PRICE_RUB })
   @IsNumber()
-  @Min(0)
+  @Min(MIN_SUBSCRIPTION_PRICE_RUB)
   @Max(MAX_SUBSCRIPTION_PRICE_RUB)
   price!: number;
 

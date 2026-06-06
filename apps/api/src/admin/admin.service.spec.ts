@@ -597,7 +597,7 @@ describe("AdminService", () => {
       service.createCompanySubscription("c-1", {
         name: "Monthly",
         description: "desc value",
-        price: 10,
+        price: 299,
         renewalPeriod: "month",
         entitlements: [
           {
@@ -629,11 +629,45 @@ describe("AdminService", () => {
       service.createCompanySubscription("c-1", {
         name: "Monthly",
         description: "desc value",
-        price: 10,
+        price: 299,
         renewalPeriod: "month",
         entitlements: [],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.subscription.create).not.toHaveBeenCalled();
+  });
+
+  it("createCompanySubscription rejects prices below the minimum", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 3,
+      uuid: "c-1",
+      role: "COMPANY",
+      managedCompany: {
+        id: 44,
+        categoryId: 2,
+        identityVerificationCompleted: true,
+        categories: [],
+        levelRules: [],
+      },
+    });
+
+    await expect(
+      service.createCompanySubscription("c-1", {
+        name: "Monthly",
+        description: "desc value",
+        price: 298,
+        renewalPeriod: "month",
+        entitlements: [
+          {
+            title: "Coffee",
+            allowance: 1,
+            windowValue: 1,
+            windowUnit: SubscriptionEntitlementWindow.DAY,
+          },
+        ],
+      }),
+    ).rejects.toThrow("Subscription price must be at least 299 RUB.");
 
     expect(prisma.subscription.create).not.toHaveBeenCalled();
   });
@@ -655,14 +689,14 @@ describe("AdminService", () => {
     prisma.subscription.create.mockResolvedValue({
       uuid: "sub-uuid",
       name: "Monthly",
-      price: { toString: () => "10" },
+      price: { toString: () => "299" },
       entitlements: [{ uuid: "benefit-uuid" }],
     });
 
     await service.createCompanySubscription("c-1", {
       name: "Monthly",
       description: "desc value",
-      price: 10,
+      price: 299,
       renewalPeriod: "month",
       entitlements: [
         {

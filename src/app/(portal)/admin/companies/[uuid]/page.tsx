@@ -152,6 +152,8 @@ const SUBSCRIPTION_POLICY_OPTIONS = [
   badgeKey: TranslationKey;
 }>;
 
+const MIN_SUBSCRIPTION_PRICE_RUB = 299;
+
 const SECTION_META = [
   {
     key: "account",
@@ -728,11 +730,16 @@ export default function AdminCompanyProfilePage() {
       setError("\u0414\u043e\u0431\u0430\u0432\u044c\u0442\u0435 \u0445\u043e\u0442\u044f \u0431\u044b \u043e\u0434\u043d\u0443 \u0443\u0441\u043b\u0443\u0433\u0443: \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0430 \u0431\u0435\u0437 \u0443\u0441\u043b\u0443\u0433\u0438 \u043d\u0435 \u043c\u043e\u0436\u0435\u0442 \u0431\u044b\u0442\u044c \u0441\u043e\u0437\u0434\u0430\u043d\u0430.");
       return;
     }
+    const priceAmount = Number(draft.price);
+    if (!Number.isFinite(priceAmount) || priceAmount < MIN_SUBSCRIPTION_PRICE_RUB) {
+      setError(`Минимальная стоимость подписки — ${MIN_SUBSCRIPTION_PRICE_RUB} ₽.`);
+      return;
+    }
     const initialServiceHasLimit = initialEntitlementDraft.windowUnit !== "UNLIMITED";
     const res = await adminCreateCompanySubscription(companyUserUuid, {
       name: draft.name,
       description: draft.description,
-      price: Number(draft.price),
+      price: priceAmount,
       renewalValue: Number(draft.renewalValue),
       renewalUnit: draft.renewalUnit,
       promoBonusDays: Number(draft.promoBonusDays || 0),
@@ -776,10 +783,15 @@ export default function AdminCompanyProfilePage() {
   }
 
   async function saveSubscription(sub: AdminCompanySubscription, options?: SaveOptions) {
+    const priceAmount = Number(sub.price);
+    if (!Number.isFinite(priceAmount) || priceAmount < MIN_SUBSCRIPTION_PRICE_RUB) {
+      setError(`Минимальная стоимость подписки — ${MIN_SUBSCRIPTION_PRICE_RUB} ₽.`);
+      return false;
+    }
     const res = await adminUpdateCompanySubscription(companyUserUuid, sub.uuid, {
       name: sub.name,
       description: sub.description,
-      price: Number(sub.price),
+      price: priceAmount,
       renewalValue: sub.renewalValue,
       renewalUnit: sub.renewalUnit,
       promoBonusDays: sub.promoBonusDays,
@@ -2226,8 +2238,9 @@ export default function AdminCompanyProfilePage() {
                 </Label>
                 <Input
                   id="sub-draft-price"
-                  placeholder="100"
+                  placeholder="299"
                   type="number"
+                  min={MIN_SUBSCRIPTION_PRICE_RUB}
                   value={draft.price}
                   onChange={(e) => setDraft((p) => ({ ...p, price: e.target.value }))}
                 />
@@ -2421,7 +2434,13 @@ export default function AdminCompanyProfilePage() {
               <div className="flex items-end justify-end xl:col-span-12">
                 <Button
                   onClick={() => void createSubscription()}
-                  disabled={!draft.name || !draft.description || !draft.price || !initialEntitlementDraft.title.trim()}
+                  disabled={
+                    !draft.name ||
+                    !draft.description ||
+                    !draft.price ||
+                    Number(draft.price) < MIN_SUBSCRIPTION_PRICE_RUB ||
+                    !initialEntitlementDraft.title.trim()
+                  }
                   className="h-11 w-full xl:w-[220px]"
                 >
                   <Plus className="h-4 w-4" />
@@ -2470,7 +2489,12 @@ export default function AdminCompanyProfilePage() {
                   </div>
                   <div className="space-y-1 xl:col-span-1">
                     <Label className="text-xs xl:hidden">{t("admin.companyDetail.price")}</Label>
-                    <Input type="number" value={sub.price} onChange={(e) => setSubscriptions((prev) => prev.map((p) => p.uuid === sub.uuid ? { ...p, price: e.target.value } : p))} />
+                    <Input
+                      type="number"
+                      min={MIN_SUBSCRIPTION_PRICE_RUB}
+                      value={sub.price}
+                      onChange={(e) => setSubscriptions((prev) => prev.map((p) => p.uuid === sub.uuid ? { ...p, price: e.target.value } : p))}
+                    />
                   </div>
                   <div className="space-y-1 xl:col-span-1">
                     <Label className="text-xs xl:hidden">{t("admin.companyDetail.periodValue")}</Label>

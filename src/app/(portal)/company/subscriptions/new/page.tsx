@@ -13,7 +13,9 @@ import { companyProfile, createCompanySubscription, type EntitlementWindow } fro
 
 type RenewalUnit = "week" | "month" | "year";
 
+const MIN_SUBSCRIPTION_PRICE_RUB = 299;
 const MAX_SUBSCRIPTION_PRICE_RUB = 349999;
+const MIN_SUBSCRIPTION_PRICE_MESSAGE = "Минимальная стоимость подписки — 299 ₽.";
 const MAX_SUBSCRIPTION_PRICE_MESSAGE = "Максимальная стоимость подписки — 349 999 ₽.";
 
 const renewalOptions = [
@@ -88,7 +90,7 @@ export default function NewCompanySubscriptionPage() {
     form.name.trim() &&
       form.description.trim().length >= 5 &&
       Number.isFinite(priceAmount) &&
-      priceAmount >= 0 &&
+      priceAmount >= MIN_SUBSCRIPTION_PRICE_RUB &&
       priceAmount <= MAX_SUBSCRIPTION_PRICE_RUB &&
       form.serviceTitle.trim().length >= 2 &&
       (!serviceHasLimit || (Number(form.serviceAllowance) >= 1 && Number(form.serviceWindowValue) >= 1)),
@@ -96,6 +98,10 @@ export default function NewCompanySubscriptionPage() {
 
   async function submit() {
     if (!canCreate || saving) return;
+    if (Number(form.price) < MIN_SUBSCRIPTION_PRICE_RUB) {
+      setError(MIN_SUBSCRIPTION_PRICE_MESSAGE);
+      return;
+    }
     if (Number(form.price) > MAX_SUBSCRIPTION_PRICE_RUB) {
       setError(MAX_SUBSCRIPTION_PRICE_MESSAGE);
       return;
@@ -173,11 +179,11 @@ export default function NewCompanySubscriptionPage() {
                   <span className="text-sm font-medium">Цена, ₽</span>
                   <Input
                     type="number"
-                    min={0}
+                    min={MIN_SUBSCRIPTION_PRICE_RUB}
                     max={MAX_SUBSCRIPTION_PRICE_RUB}
                     value={form.price}
                     onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
-                    placeholder="999"
+                    placeholder="299"
                     className="h-12 rounded-xl"
                   />
                 </label>

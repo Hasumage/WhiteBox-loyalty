@@ -25,7 +25,7 @@ import { createHash } from "node:crypto";
 import { UpsertCompanyLocationDto } from "../admin/dto/upsert-company-location.dto";
 import { CreateCompanySubscriptionDto } from "../admin/dto/create-company-subscription.dto";
 import { PrismaService } from "../prisma/prisma.service";
-import { MAX_SUBSCRIPTION_PRICE_RUB } from "../subscriptions/subscription-limits";
+import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../subscriptions/subscription-limits";
 import {
   AwardCompanyPointsDto,
   ApplyCompanyBillingPromoDto,
@@ -57,8 +57,11 @@ const COMPANY_TRIAL_DAYS = 30;
 export class CompanyService {
   private assertSubscriptionPrice(price: number | string) {
     const amount = Number(price);
-    if (!Number.isFinite(amount) || amount < 0) {
-      throw new BadRequestException("Subscription price must be a non-negative number.");
+    if (!Number.isFinite(amount)) {
+      throw new BadRequestException("Subscription price must be a valid number.");
+    }
+    if (amount < MIN_SUBSCRIPTION_PRICE_RUB) {
+      throw new BadRequestException(`Subscription price must be at least ${MIN_SUBSCRIPTION_PRICE_RUB} RUB.`);
     }
     if (amount > MAX_SUBSCRIPTION_PRICE_RUB) {
       throw new BadRequestException(`Subscription price cannot exceed ${MAX_SUBSCRIPTION_PRICE_RUB} RUB.`);

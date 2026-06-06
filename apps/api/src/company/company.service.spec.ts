@@ -845,6 +845,26 @@ describe("CompanyService", () => {
     expect(prisma.subscription.create).not.toHaveBeenCalled();
   });
 
+  it("rejects subscription plans below the minimum price", async () => {
+    await expect(
+      service.createSubscription(50, {
+        name: "Coffee every day",
+        description: "One coffee every day",
+        price: 298,
+        entitlements: [
+          {
+            title: "Coffee",
+            allowance: 1,
+            windowValue: 1,
+            windowUnit: SubscriptionEntitlementWindow.DAY,
+          },
+        ],
+      }),
+    ).rejects.toThrow("Subscription price must be at least 299 RUB.");
+
+    expect(prisma.subscription.create).not.toHaveBeenCalled();
+  });
+
   it("creates a subscription together with its first service", async () => {
     prisma.subscription.findMany.mockResolvedValue([]);
     prisma.subscription.create.mockResolvedValue({ uuid: "plan-uuid", entitlements: [{ uuid: "coffee-day" }] });

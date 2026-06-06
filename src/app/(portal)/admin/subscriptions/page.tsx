@@ -53,6 +53,8 @@ type PairParticipantForm = {
 const selectClass =
   "h-11 w-full rounded-xl border border-white/10 bg-black/40 px-3 text-sm outline-none transition focus:border-cyan-200/50 focus:ring-2 focus:ring-cyan-200/10";
 
+const MIN_SUBSCRIPTION_PRICE_RUB = 299;
+
 function formatNumber(value: number, locale: string) {
   return new Intl.NumberFormat(locale).format(value);
 }
@@ -169,8 +171,8 @@ export default function AdminSubscriptionsPage() {
       fulfillmentNote: participant.fulfillmentNote.trim(),
       revenueSharePercent: Number(participant.revenueSharePercent || 0),
     }));
-    if (!pair.name.trim() || !pair.description.trim() || Number(pair.price) < 0) {
-      setMessage("Заполните название, описание и цену парной подписки.");
+    if (!pair.name.trim() || !pair.description.trim() || Number(pair.price) < MIN_SUBSCRIPTION_PRICE_RUB) {
+      setMessage("Заполните название, описание и цену парной подписки не ниже 299 ₽.");
       return;
     }
     if (preparedParticipants.some((participant) => !participant.companyId || !participant.benefitTitle || !participant.benefitDescription)) {

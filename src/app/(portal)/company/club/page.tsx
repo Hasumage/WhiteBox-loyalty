@@ -33,6 +33,8 @@ import {
 } from "@/lib/api/company-client";
 import { cn } from "@/lib/utils";
 
+const MIN_SUBSCRIPTION_PRICE_RUB = 299;
+
 const windowOptions: Array<{ value: EntitlementWindow; label: string; hint: string }> = [
   { value: "DAY", label: "Каждый день", hint: "Новый лимит каждый день" },
   { value: "WEEK", label: "Каждую неделю", hint: "Подходит для регулярных услуг" },
@@ -238,7 +240,7 @@ export default function CompanyClubPage() {
     Boolean(form.partnerCompanyId) &&
     form.name.trim().length >= 2 &&
     form.description.trim().length >= 10 &&
-    Number(form.price) > 0 &&
+    Number(form.price) >= MIN_SUBSCRIPTION_PRICE_RUB &&
     Math.round(shareTotal * 100) === 10000;
 
   async function load() {
@@ -486,7 +488,7 @@ export default function CompanyClubPage() {
               </label>
               <label className="space-y-2">
                 <span className="text-sm font-semibold">Цена, ₽</span>
-                <Input type="number" value={form.price} onChange={(event) => setField("price", event.target.value)} className="h-12 rounded-xl" min={0} />
+                <Input type="number" value={form.price} onChange={(event) => setField("price", event.target.value)} className="h-12 rounded-xl" min={MIN_SUBSCRIPTION_PRICE_RUB} />
               </label>
             </div>
 
