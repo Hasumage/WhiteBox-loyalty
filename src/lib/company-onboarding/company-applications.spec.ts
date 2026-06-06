@@ -1,7 +1,7 @@
 jest.mock("@/lib/prisma", () => ({
   prisma: {
     category: { findFirst: jest.fn() },
-    user: { findUnique: jest.fn() },
+    user: { findUnique: jest.fn(), findMany: jest.fn() },
     company: { findUnique: jest.fn() },
     companyMember: { findFirst: jest.fn() },
     companyVerificationApplication: { findFirst: jest.fn() },
@@ -116,6 +116,9 @@ describe("company application helpers", () => {
     const payload = parseCompanyApplicationPayload(base);
     mockedPrisma.category.findFirst.mockResolvedValue({ id: 9 } as never);
     mockedPrisma.user.findUnique.mockResolvedValue(null);
+    mockedPrisma.user.findMany.mockResolvedValue([
+      { id: 12, role: "MANAGER", _count: { supportedCompanies: 0 } },
+    ] as never);
     mockedPrisma.company.findUnique.mockResolvedValue(null);
 
     const tx = {
@@ -143,6 +146,7 @@ describe("company application helpers", () => {
       data: expect.objectContaining({
         ownerUserId: 41,
         isActive: false,
+        supportManagerId: 12,
         identityVerificationCompleted: false,
         verificationStatus: "SUBMITTED",
       }),

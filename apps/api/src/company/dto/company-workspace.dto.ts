@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { CompanyMemberRole, SubscriptionEntitlementWindow, SubscriptionSpendPolicy } from "@prisma/client";
 import { Type } from "class-transformer";
 import { ArrayMinSize, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
+import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../../subscriptions/subscription-limits";
 
 export class AwardCompanyPointsDto {
   @ApiProperty({ example: "whitebox-user-uuid" })
@@ -175,11 +176,11 @@ export class UpdateCompanyOwnedSubscriptionDto {
   @MaxLength(1000)
   description?: string;
 
-  @ApiPropertyOptional({ example: 999 })
+  @ApiPropertyOptional({ example: 299, minimum: MIN_SUBSCRIPTION_PRICE_RUB, maximum: MAX_SUBSCRIPTION_PRICE_RUB })
   @IsOptional()
   @IsNumber()
-  @Min(0)
-  @Max(10_000_000)
+  @Min(MIN_SUBSCRIPTION_PRICE_RUB)
+  @Max(MAX_SUBSCRIPTION_PRICE_RUB)
   price?: number;
 
   @ApiPropertyOptional({ example: 1 })
@@ -308,10 +309,10 @@ export class CreateCompanyClubBundleDto {
   @MaxLength(1200)
   description!: string;
 
-  @ApiProperty({ example: 3490 })
+  @ApiProperty({ example: 3490, minimum: MIN_SUBSCRIPTION_PRICE_RUB, maximum: MAX_SUBSCRIPTION_PRICE_RUB })
   @IsNumber()
-  @Min(0)
-  @Max(10_000_000)
+  @Min(MIN_SUBSCRIPTION_PRICE_RUB)
+  @Max(MAX_SUBSCRIPTION_PRICE_RUB)
   price!: number;
 
   @ApiProperty({ example: 22 })
@@ -461,4 +462,12 @@ export class UpdateCompanyLoyaltySettingsDto {
   @ValidateNested({ each: true })
   @Type(() => CompanyLevelRuleDto)
   levelRules!: CompanyLevelRuleDto[];
+}
+
+export class ApplyCompanyBillingPromoDto {
+  @ApiProperty({ example: "WELCOME100" })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(64)
+  code!: string;
 }

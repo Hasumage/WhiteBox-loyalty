@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -118,7 +118,7 @@ export default function WalletPage() {
       >
         <p className="mb-4 text-muted-foreground">{t("client.wallet.notFound")}</p>
         <Button asChild variant="secondary">
-          <Link href="/">{t("client.common.backHome")}</Link>
+          <Link href="/app">{t("client.common.backHome")}</Link>
         </Button>
       </motion.div>
     );
@@ -141,7 +141,7 @@ export default function WalletPage() {
       className="min-h-full px-4 pb-6 pt-4"
     >
       <Link
-        href="/"
+        href="/app"
         className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -416,3 +416,4 @@ export default function WalletPage() {
     </motion.div>
   );
 }
+

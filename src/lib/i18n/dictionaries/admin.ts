@@ -1,4 +1,4 @@
-﻿export const adminDictionary = {
+export const adminDictionary = {
   en: {
     "admin.layout.workspace": "Admin workspace",
     "admin.layout.mobileMenu": "Menu",
@@ -19,6 +19,7 @@
     "admin.nav.categories": "Categories",
     "admin.nav.companyVerification": "Company verification",
     "admin.nav.statistics": "Subscription management",
+    "admin.nav.prDesk": "PR desk",
     "admin.nav.growth": "Growth tools",
     "admin.nav.testScreens": "Test screens",
     "admin.nav.payments": "Payments",
@@ -98,6 +99,7 @@
     "admin.nav.categories": "Категории",
     "admin.nav.companyVerification": "Верификация компаний",
     "admin.nav.statistics": "Управление подписками",
+    "admin.nav.prDesk": "PR-кабинет",
     "admin.nav.growth": "Инструменты роста",
     "admin.nav.testScreens": "Тестовые экраны",
     "admin.nav.payments": "Платежи",

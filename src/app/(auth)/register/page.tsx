@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
 import { WhiteBoxLogo } from "@/components/brand/WhiteBoxLogo";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +21,7 @@ import { useI18n } from "@/lib/i18n/use-i18n";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { t } = useI18n("ru");
+  const { locale, setLocale, t } = useI18n("ru");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,7 +45,7 @@ export default function RegisterPage() {
         return;
       }
       setStoredSession(data);
-      router.replace(data.needsCategoryOnboarding ? "/onboarding" : "/");
+      router.replace(data.needsCategoryOnboarding ? "/onboarding" : "/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("client.auth.registrationFailed"));
     } finally {
@@ -56,7 +57,7 @@ export default function RegisterPage() {
     <Card className="glass border-white/10">
       <CardHeader>
         <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-3">
-          <Link href="/landing" className="flex min-w-0 items-center gap-3">
+          <Link href="/" className="flex min-w-0 items-center gap-3">
             <WhiteBoxLogo className="h-9 w-9 shrink-0" />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold text-foreground">WhiteBox</span>
@@ -64,13 +65,16 @@ export default function RegisterPage() {
             </span>
           </Link>
           <Link
-            href="/landing"
+            href="/"
             className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
           >
             {t("client.auth.landing")} <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
-        <CardTitle>{t("client.auth.registerTitle")}</CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle>{t("client.auth.registerTitle")}</CardTitle>
+          <LanguageSwitcher locale={locale} onChange={(nextLocale) => void setLocale(nextLocale)} compact />
+        </div>
         <CardDescription>{t("client.auth.registerSubtitle")}</CardDescription>
       </CardHeader>
       <form onSubmit={onSubmit}>

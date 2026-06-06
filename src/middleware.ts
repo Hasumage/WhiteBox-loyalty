@@ -8,6 +8,13 @@ const LOCALE_MAX_AGE = 60 * 60 * 24 * 365;
 const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN", "MANAGER", "SUPPORT"]);
 const ROLES = new Set(["CLIENT", "ADMIN", "SUPER_ADMIN", "MANAGER", "SUPPORT", "COMPANY"]);
 
+function destinationForRole(role: string) {
+  if (role === "SUPPORT") return "/admin/support";
+  if (ADMIN_ROLES.has(role)) return "/admin";
+  if (role === "COMPANY") return "/company";
+  return "/app";
+}
+
 function responseWithLocale(request: NextRequest, response = NextResponse.next()) {
   if (!request.cookies.get(LOCALE_COOKIE)?.value) {
     const locale = detectPreferredLocale({
@@ -35,7 +42,7 @@ function redirectToLogin(request: NextRequest) {
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  if (path === "/login" || path === "/register" || path === "/company/register") {
+  if (path === "/" || path === "/business" || path === "/landing" || path === "/login" || path === "/register" || path === "/company/register") {
     return responseWithLocale(request);
   }
 
@@ -60,7 +67,7 @@ export async function middleware(request: NextRequest) {
 
     if (path.startsWith("/admin")) {
       if (!ADMIN_ROLES.has(role)) {
-        return responseWithLocale(request, NextResponse.redirect(new URL("/", request.url)));
+        return responseWithLocale(request, NextResponse.redirect(new URL(destinationForRole(role), request.url)));
       }
       if (role === "SUPPORT" && !path.startsWith("/admin/support")) {
         return responseWithLocale(request, NextResponse.redirect(new URL("/admin/support", request.url)));
@@ -70,7 +77,7 @@ export async function middleware(request: NextRequest) {
 
     if (path.startsWith("/company")) {
       if (role !== "COMPANY" && !ADMIN_ROLES.has(role)) {
-        return responseWithLocale(request, NextResponse.redirect(new URL("/", request.url)));
+        return responseWithLocale(request, NextResponse.redirect(new URL(destinationForRole(role), request.url)));
       }
       return responseWithLocale(request);
     }
@@ -94,8 +101,11 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/",
+    "/business",
+    "/landing",
     "/login",
     "/register",
+    "/app",
     "/company/register",
     "/map",
     "/history",

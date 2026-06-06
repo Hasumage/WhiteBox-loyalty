@@ -16,6 +16,7 @@ jest.mock("@/lib/prisma", () => ({
       callback({
         companyVerificationApplication: { findUnique: jest.fn(), update: jest.fn() },
         company: { update: jest.fn() },
+        companyBillingAccount: { upsert: jest.fn() },
         auditEvent: { create: jest.fn() },
         adminTask: { updateMany: jest.fn() },
       }),
@@ -38,6 +39,7 @@ const mockedPrisma = jest.mocked(prisma, { shallow: false });
 type MockVerificationTransaction = {
   companyVerificationApplication: { findUnique: jest.Mock; update: jest.Mock };
   company: { update: jest.Mock };
+  companyBillingAccount: { upsert: jest.Mock };
   auditEvent: { create: jest.Mock };
   adminTask: { updateMany: jest.Mock };
 };
@@ -68,6 +70,7 @@ describe("admin company verification detail route", () => {
         update: jest.fn(),
       },
       company: { update: jest.fn() },
+      companyBillingAccount: { upsert: jest.fn() },
       auditEvent: { create: jest.fn() },
       adminTask: { updateMany: jest.fn() },
     };
@@ -97,6 +100,16 @@ describe("admin company verification detail route", () => {
         identityVerificationCompleted: true,
       }),
     });
+    expect(tx.companyBillingAccount.upsert).toHaveBeenCalledWith({
+      where: { companyId: 42 },
+      create: expect.objectContaining({
+        companyId: 42,
+        status: "TRIAL",
+        trialStartedAt: expect.any(Date),
+        trialEndsAt: expect.any(Date),
+      }),
+      update: {},
+    });
     expect(tx.adminTask.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ sourceKey: "verification:application-1" }),
@@ -112,6 +125,7 @@ describe("admin company verification detail route", () => {
         update: jest.fn(),
       },
       company: { update: jest.fn() },
+      companyBillingAccount: { upsert: jest.fn() },
       auditEvent: { create: jest.fn() },
       adminTask: { updateMany: jest.fn() },
     };

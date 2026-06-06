@@ -14,6 +14,7 @@ import {
   Prisma,
   SubscriptionBundleParticipantStatus,
   SubscriptionBundleStatus,
+  type SubscriptionEntitlement,
   SubscriptionEntitlementWindow,
   SubscriptionSpendPolicy,
   SubscriptionStatus,
@@ -24,8 +25,10 @@ import { createHash } from "node:crypto";
 import { UpsertCompanyLocationDto } from "../admin/dto/upsert-company-location.dto";
 import { CreateCompanySubscriptionDto } from "../admin/dto/create-company-subscription.dto";
 import { PrismaService } from "../prisma/prisma.service";
+import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../subscriptions/subscription-limits";
 import {
   AwardCompanyPointsDto,
+  ApplyCompanyBillingPromoDto,
   CreateCompanyClubBundleDto,
   CreateCompanyMemberDto,
   CreateSubscriptionEntitlementDto,
@@ -48,9 +51,23 @@ const MANAGEMENT_ROLES = new Set<CompanyMemberRole>([
 ]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINIMUM_PAYOUT_RUB = 5_000;
+const COMPANY_TRIAL_DAYS = 30;
 
 @Injectable()
 export class CompanyService {
+  private assertSubscriptionPrice(price: number | string) {
+    const amount = Number(price);
+    if (!Number.isFinite(amount)) {
+      throw new BadRequestException("Subscription price must be a valid number.");
+    }
+    if (amount < MIN_SUBSCRIPTION_PRICE_RUB) {
+      throw new BadRequestException(`Subscription price must be at least ${MIN_SUBSCRIPTION_PRICE_RUB} RUB.`);
+    }
+    if (amount > MAX_SUBSCRIPTION_PRICE_RUB) {
+      throw new BadRequestException(`Subscription price cannot exceed ${MAX_SUBSCRIPTION_PRICE_RUB} RUB.`);
+    }
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config?: ConfigService,
@@ -226,12 +243,62 @@ export class CompanyService {
     ) as typeof values;
   }
 
+  private billingAmount(input: {
+    baseFee: number;
+    discountPercent: number;
+    recognizedRevenue: number;
+    commissionPercent: number;
+  }) {
+    const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
+    const promoDiscountAmount = money(input.baseFee * (Math.min(100, Math.max(0, input.discountPercent)) / 100));
+    const discountedFee = money(input.baseFee - promoDiscountAmount);
+    const generatedCommission = money(input.recognizedRevenue * (Math.min(100, Math.max(0, input.commissionPercent)) / 100));
+    const commissionCreditAmount = money(Math.min(discountedFee, generatedCommission));
+    return {
+      baseFee: money(input.baseFee),
+      promoDiscountAmount,
+      discountedFee,
+      generatedCommission,
+      commissionCreditAmount,
+      amountDue: money(discountedFee - commissionCreditAmount),
+    };
+  }
+
+  private addDays(date: Date, days: number) {
+    return new Date(date.getTime() + days * DAY_MS);
+  }
+
+  private addMonths(date: Date, months = 1) {
+    const next = new Date(date);
+    next.setUTCMonth(next.getUTCMonth() + months);
+    return next;
+  }
+
+  private recognizedRevenueWithinPeriod(
+    rows: Array<{ activatedAt: Date; expiresAt: Date | null; subscription: { price: Prisma.Decimal } }>,
+    periodStartsAt: Date,
+    periodEndsAt: Date,
+    now = new Date(),
+  ) {
+    return Math.round(
+      rows.reduce((sum, row) => {
+        const start = row.activatedAt;
+        const end = row.expiresAt ?? this.addDays(start, 1);
+        const durationMs = Math.max(DAY_MS, end.getTime() - start.getTime());
+        const overlapStart = Math.max(start.getTime(), periodStartsAt.getTime());
+        const overlapEnd = Math.min(end.getTime(), periodEndsAt.getTime(), now.getTime());
+        if (overlapEnd <= overlapStart) return sum;
+        return sum + Number(row.subscription.price) * ((overlapEnd - overlapStart) / durationMs);
+      }, 0) * 100,
+    ) / 100;
+  }
+
   private async financialSnapshot(
-    db: Pick<PrismaService, "userSubscription" | "financeOperation"> | Pick<Prisma.TransactionClient, "userSubscription" | "financeOperation">,
+    db: Pick<PrismaService, "userSubscription" | "financeOperation" | "companyBillingInvoice"> | Pick<Prisma.TransactionClient, "userSubscription" | "financeOperation" | "companyBillingInvoice">,
     companyId: number,
     now = new Date(),
   ) {
-    const [subscriptionPurchases, reservedResult, paidResult] = await Promise.all([
+    const [subscriptionPurchases, reservedResult, paidBillingResult, paidResult] = await Promise.all([
       db.userSubscription.findMany({
         where: {
           status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED] },
@@ -247,6 +314,10 @@ export class CompanyService {
         },
         _sum: { amount: true },
       }),
+      db.companyBillingInvoice.aggregate({
+        where: { companyId, status: "PAID" },
+        _sum: { paidAmount: true },
+      }),
       db.financeOperation.aggregate({
         where: {
           companyId,
@@ -260,14 +331,16 @@ export class CompanyService {
     const revenue = this.subscriptionRevenue(subscriptionPurchases, now);
     const reservedPayouts = Number(reservedResult._sum.amount ?? 0);
     const paidPayouts = Number(paidResult._sum.amount ?? 0);
+    const paidBillingFees = Number(paidBillingResult._sum.paidAmount ?? 0);
     const availableForPayout = Math.max(
       0,
-      Math.round((revenue.recognized - reservedPayouts - paidPayouts) * 100) / 100,
+      Math.round((revenue.recognized - reservedPayouts - paidPayouts - paidBillingFees) * 100) / 100,
     );
     return {
       ...revenue,
       reservedPayouts,
       paidPayouts,
+      paidBillingFees,
       availableForPayout,
       activeSubscribers: subscriptionPurchases.filter(
         (row) => row.status === SubscriptionStatus.ACTIVE && (!row.expiresAt || row.expiresAt > now),
@@ -752,28 +825,54 @@ export class CompanyService {
 
   async client(userId: number, uuid: string) {
     const member = await this.membership(userId);
+    const now = new Date();
+    const companyId = member.companyId;
     const customer = await this.prisma.user.findFirst({
       where: { uuid, role: UserRole.CLIENT },
       include: {
-        companyLinks: { where: { companyId: member.companyId }, take: 1 },
-        companyPurchases: { where: { companyId: member.companyId }, orderBy: { createdAt: "desc" }, take: 10 },
-        loyaltyTransactions: { where: { companyId: member.companyId }, orderBy: { occurredAt: "desc" }, take: 10 },
+        companyLinks: { where: { companyId }, take: 1 },
+        companyPurchases: { where: { companyId }, orderBy: { createdAt: "desc" }, take: 10 },
+        loyaltyTransactions: { where: { companyId }, orderBy: { occurredAt: "desc" }, take: 10 },
         subscriptions: {
-          where: { status: SubscriptionStatus.ACTIVE, subscription: { companyId: member.companyId } },
-          include: { subscription: { include: { entitlements: { where: { isActive: true } } } } },
+          where: {
+            status: SubscriptionStatus.ACTIVE,
+            subscription: { companyId },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+          include: {
+            redemptions: {
+              where: { companyId },
+              orderBy: { redeemedAt: "desc" },
+              take: 50,
+              include: {
+                entitlement: { select: { uuid: true, title: true } },
+                processedBy: { select: { name: true, email: true } },
+              },
+            },
+            subscription: { include: { entitlements: { where: { isActive: true }, orderBy: { createdAt: "asc" } } } },
+          },
         },
         subscriptionBundles: {
           where: {
             status: SubscriptionStatus.ACTIVE,
-            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-            bundle: { participants: { some: { companyId: member.companyId } } },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            bundle: { participants: { some: { companyId } } },
           },
           include: {
+            redemptions: {
+              where: { companyId },
+              orderBy: { redeemedAt: "desc" },
+              take: 50,
+              include: {
+                participant: { select: { uuid: true, benefitTitle: true } },
+                processedBy: { select: { name: true, email: true } },
+              },
+            },
             bundle: {
               include: {
                 category: { select: { id: true, slug: true, name: true, icon: true } },
                 participants: {
-                  where: { companyId: member.companyId, approvalStatus: SubscriptionBundleParticipantStatus.APPROVED },
+                  where: { companyId, approvalStatus: SubscriptionBundleParticipantStatus.APPROVED },
                   include: { company: { select: { id: true, slug: true, name: true } } },
                   orderBy: { sortOrder: "asc" },
                 },
@@ -785,11 +884,88 @@ export class CompanyService {
     });
     if (!customer) throw new NotFoundException("Customer not found.");
     const totalSpend = customer.companyPurchases.reduce((sum, purchase) => sum + Number(purchase.amount), 0);
+    const activeSubscriptions = customer.subscriptions.map((plan) => ({
+      id: plan.id,
+      status: plan.status,
+      activatedAt: plan.activatedAt,
+      expiresAt: plan.expiresAt,
+      willAutoRenew: plan.willAutoRenew,
+      subscription: {
+        ...plan.subscription,
+        entitlements: plan.subscription.entitlements.map((entitlement) => ({
+          ...entitlement,
+          redemption: this.redemptionState(
+            entitlement,
+            plan.redemptions.filter((redemption) => redemption.entitlementId === entitlement.id),
+            plan.activatedAt,
+            plan.expiresAt,
+            now,
+          ),
+        })),
+      },
+      redemptions: plan.redemptions.map((redemption) => ({
+        uuid: redemption.uuid,
+        quantity: redemption.quantity,
+        note: redemption.note,
+        redeemedAt: redemption.redeemedAt,
+        benefit: redemption.entitlement.title,
+        benefitUuid: redemption.entitlement.uuid,
+        processedBy: redemption.processedBy.name,
+      })),
+    }));
+    const activeBundleSubscriptions = customer.subscriptionBundles.map((plan) => ({
+      id: plan.id,
+      uuid: plan.uuid,
+      status: plan.status,
+      activatedAt: plan.activatedAt,
+      expiresAt: plan.expiresAt,
+      willAutoRenew: plan.willAutoRenew,
+      bundle: {
+        ...plan.bundle,
+        participants: plan.bundle.participants.map((participant) => ({
+          ...participant,
+          redemption: this.redemptionState(
+            participant,
+            plan.redemptions.filter((redemption) => redemption.participantId === participant.id),
+            plan.activatedAt,
+            plan.expiresAt,
+            now,
+          ),
+        })),
+      },
+      redemptions: plan.redemptions.map((redemption) => ({
+        uuid: redemption.uuid,
+        quantity: redemption.quantity,
+        note: redemption.note,
+        redeemedAt: redemption.redeemedAt,
+        benefit: redemption.participant.benefitTitle,
+        benefitUuid: redemption.participant.uuid,
+        processedBy: redemption.processedBy.name,
+      })),
+    }));
+    const recentSubscriptionRedemptions = [
+      ...activeSubscriptions.flatMap((plan) =>
+        plan.redemptions.map((redemption) => ({
+          ...redemption,
+          source: "SUBSCRIPTION" as const,
+          planName: plan.subscription.name,
+        })),
+      ),
+      ...activeBundleSubscriptions.flatMap((plan) =>
+        plan.redemptions.map((redemption) => ({
+          ...redemption,
+          source: "BUNDLE" as const,
+          planName: plan.bundle.name,
+        })),
+      ),
+    ]
+      .sort((a, b) => b.redeemedAt.getTime() - a.redeemedAt.getTime())
+      .slice(0, 12);
     const isKnownCustomer =
       customer.companyLinks.length > 0 ||
       customer.companyPurchases.length > 0 ||
-      customer.subscriptions.length > 0 ||
-      customer.subscriptionBundles.length > 0;
+      activeSubscriptions.length > 0 ||
+      activeBundleSubscriptions.length > 0;
     return {
       uuid: customer.uuid,
       name: customer.name,
@@ -810,8 +986,9 @@ export class CompanyService {
         description: operation.description,
         occurredAt: operation.occurredAt,
       })),
-      activeSubscriptions: customer.subscriptions,
-      activeBundleSubscriptions: customer.subscriptionBundles,
+      recentSubscriptionRedemptions,
+      activeSubscriptions,
+      activeBundleSubscriptions,
     };
   }
 
@@ -1059,10 +1236,221 @@ export class CompanyService {
       dailySubscriptionRevenue: snapshot.daily,
       reservedPayouts: snapshot.reservedPayouts,
       paidPayouts: snapshot.paidPayouts,
+      paidBillingFees: snapshot.paidBillingFees,
       availableForPayout: snapshot.availableForPayout,
       activeSubscribers: snapshot.activeSubscribers,
       operations: operations.map((operation) => ({ ...operation, amount: Number(operation.amount) })),
     };
+  }
+
+  private async ensureBillingAccount(companyId: number, now = new Date()) {
+    let account = await this.prisma.companyBillingAccount.findUnique({
+      where: { companyId },
+      include: { appliedPromoCode: true },
+    });
+    if (!account) {
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { verificationReviewedAt: true },
+      });
+      const trialStartedAt = company?.verificationReviewedAt ?? now;
+      const trialEndsAt = this.addDays(trialStartedAt, COMPANY_TRIAL_DAYS);
+      account = await this.prisma.companyBillingAccount.create({
+        data: {
+          companyId,
+          status: trialEndsAt > now ? "TRIAL" : "ACTIVE",
+          trialStartedAt,
+          trialEndsAt,
+          currentPeriodStartsAt: trialEndsAt > now ? trialStartedAt : now,
+          currentPeriodEndsAt: trialEndsAt > now ? trialEndsAt : this.addMonths(now),
+        },
+        include: { appliedPromoCode: true },
+      });
+    }
+
+    if (account.currentPeriodEndsAt <= now) {
+      let start = account.currentPeriodEndsAt;
+      let end = this.addMonths(start);
+      while (end <= now) {
+        start = end;
+        end = this.addMonths(start);
+      }
+      account = await this.prisma.companyBillingAccount.update({
+        where: { companyId },
+        data: { status: "ACTIVE", currentPeriodStartsAt: start, currentPeriodEndsAt: end },
+        include: { appliedPromoCode: true },
+      });
+    }
+    return account;
+  }
+
+  private async currentBillingInvoice(companyId: number, now = new Date()) {
+    let account = await this.ensureBillingAccount(companyId, now);
+    if (account.status === "TRIAL" && account.trialEndsAt && account.trialEndsAt > now) {
+      return { account, invoice: null };
+    }
+    const overdueInvoice = await this.prisma.companyBillingInvoice.findFirst({
+      where: { companyId, status: "OPEN", periodEndsAt: { lte: now } },
+      orderBy: { periodStartsAt: "asc" },
+    });
+    if (overdueInvoice) {
+      if (account.status !== "PAST_DUE") {
+        account = await this.prisma.companyBillingAccount.update({
+          where: { companyId },
+          data: { status: "PAST_DUE" },
+          include: { appliedPromoCode: true },
+        });
+      }
+      return { account, invoice: overdueInvoice };
+    }
+    if (account.status === "PAST_DUE") {
+      account = await this.prisma.companyBillingAccount.update({
+        where: { companyId },
+        data: { status: "ACTIVE" },
+        include: { appliedPromoCode: true },
+      });
+    }
+    const company = await this.prisma.company.findUniqueOrThrow({
+      where: { id: companyId },
+      select: { platformMonthlyFee: true, monthlyFeeOverride: true, monthlyFeeOverrideEndsAt: true, platformCommissionPercent: true },
+    });
+    const purchases = await this.prisma.userSubscription.findMany({
+      where: {
+        status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED] },
+        subscription: { companyId },
+      },
+      select: { activatedAt: true, expiresAt: true, subscription: { select: { price: true } } },
+    });
+    const promo = account.appliedPromoCode;
+    const promoActive = Boolean(
+      promo?.isActive &&
+      (!promo.startsAt || promo.startsAt <= now) &&
+      (!promo.expiresAt || promo.expiresAt > now),
+    );
+    const baseFee =
+      company.monthlyFeeOverride && (!company.monthlyFeeOverrideEndsAt || company.monthlyFeeOverrideEndsAt > now)
+        ? Number(company.monthlyFeeOverride)
+        : Number(company.platformMonthlyFee);
+    const recognizedRevenue = this.recognizedRevenueWithinPeriod(
+      purchases,
+      account.currentPeriodStartsAt,
+      account.currentPeriodEndsAt,
+      now,
+    );
+    const calculation = this.billingAmount({
+      baseFee,
+      discountPercent: promoActive ? Number(promo?.discountPercent ?? 0) : 0,
+      recognizedRevenue,
+      commissionPercent: Number(company.platformCommissionPercent),
+    });
+    const invoiceStatus = calculation.amountDue === 0 ? "WAIVED" : "OPEN";
+    const existingInvoice = await this.prisma.companyBillingInvoice.findUnique({
+      where: { companyId_periodStartsAt: { companyId, periodStartsAt: account.currentPeriodStartsAt } },
+    });
+    if (existingInvoice?.status === "PAID") {
+      return { account, invoice: existingInvoice, calculation };
+    }
+    const invoice = await this.prisma.companyBillingInvoice.upsert({
+      where: { companyId_periodStartsAt: { companyId, periodStartsAt: account.currentPeriodStartsAt } },
+      create: {
+        companyId,
+        status: invoiceStatus,
+        periodStartsAt: account.currentPeriodStartsAt,
+        periodEndsAt: account.currentPeriodEndsAt,
+        baseFee: new Prisma.Decimal(calculation.baseFee),
+        promoDiscountPercent: new Prisma.Decimal(promoActive ? Number(promo?.discountPercent ?? 0) : 0),
+        promoDiscountAmount: new Prisma.Decimal(calculation.promoDiscountAmount),
+        commissionCreditAmount: new Prisma.Decimal(calculation.commissionCreditAmount),
+        amountDue: new Prisma.Decimal(calculation.amountDue),
+      },
+      update: {
+        status: invoiceStatus,
+        promoDiscountPercent: new Prisma.Decimal(promoActive ? Number(promo?.discountPercent ?? 0) : 0),
+        promoDiscountAmount: new Prisma.Decimal(calculation.promoDiscountAmount),
+        commissionCreditAmount: new Prisma.Decimal(calculation.commissionCreditAmount),
+        amountDue: new Prisma.Decimal(calculation.amountDue),
+      },
+    });
+    return { account, invoice, calculation };
+  }
+
+  async billing(userId: number) {
+    const member = await this.membership(userId);
+    this.requireManager(member);
+    const current = await this.currentBillingInvoice(member.companyId);
+    const snapshot = await this.financialSnapshot(this.prisma, member.companyId);
+    const history = await this.prisma.companyBillingInvoice.findMany({
+      where: { companyId: member.companyId },
+      orderBy: { periodStartsAt: "desc" },
+      take: 12,
+    });
+    return {
+      account: current.account,
+      invoice: current.invoice,
+      availableBalance: snapshot.availableForPayout,
+      history: history.map((row) => ({
+        ...row,
+        baseFee: Number(row.baseFee),
+        promoDiscountPercent: Number(row.promoDiscountPercent),
+        promoDiscountAmount: Number(row.promoDiscountAmount),
+        commissionCreditAmount: Number(row.commissionCreditAmount),
+        amountDue: Number(row.amountDue),
+        paidAmount: Number(row.paidAmount),
+      })),
+    };
+  }
+
+  async applyBillingPromo(userId: number, dto: ApplyCompanyBillingPromoDto) {
+    const member = await this.membership(userId);
+    this.requireManager(member);
+    const now = new Date();
+    const promo = await this.prisma.companyBillingPromoCode.findUnique({
+      where: { code: dto.code.trim().toUpperCase() },
+    });
+    if (
+      !promo ||
+      !promo.isActive ||
+      (promo.startsAt && promo.startsAt > now) ||
+      (promo.expiresAt && promo.expiresAt <= now) ||
+      (promo.maxRedemptions !== null && promo.redemptionCount >= promo.maxRedemptions)
+    ) {
+      throw new BadRequestException("Промокод не найден, недоступен или истёк.");
+    }
+    await this.ensureBillingAccount(member.companyId, now);
+    await this.prisma.$transaction(async (tx) => {
+      const redemption = await tx.companyBillingPromoRedemption.findUnique({
+        where: { promoCodeId_companyId: { promoCodeId: promo.id, companyId: member.companyId } },
+      });
+      if (!redemption) {
+        await tx.companyBillingPromoRedemption.create({ data: { promoCodeId: promo.id, companyId: member.companyId } });
+        await tx.companyBillingPromoCode.update({ where: { id: promo.id }, data: { redemptionCount: { increment: 1 } } });
+      }
+      await tx.companyBillingAccount.update({
+        where: { companyId: member.companyId },
+        data: { appliedPromoCodeId: promo.id },
+      });
+    });
+    return this.billing(userId);
+  }
+
+  async payBillingInvoice(userId: number) {
+    const member = await this.membership(userId);
+    this.requireManager(member);
+    const current = await this.currentBillingInvoice(member.companyId);
+    if (!current.invoice) throw new BadRequestException("Во время тестового периода оплачивать абонентскую плату не нужно.");
+    if (current.invoice.status === "PAID" || current.invoice.status === "WAIVED") return this.billing(userId);
+    const amountDue = Number(current.invoice.amountDue);
+    await this.prisma.$transaction(async (tx) => {
+      const snapshot = await this.financialSnapshot(tx, member.companyId);
+      if (snapshot.availableForPayout < amountDue) {
+        throw new BadRequestException(`Недостаточно средств на балансе WhiteBox. Нужно ${amountDue.toFixed(2)} RUB.`);
+      }
+      await tx.companyBillingInvoice.update({
+        where: { id: current.invoice!.id },
+        data: { status: "PAID", paidAmount: current.invoice!.amountDue, paidAt: new Date() },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return this.billing(userId);
   }
 
   async requestPayout(userId: number, dto: RequestCompanyPayoutDto) {
@@ -1232,6 +1620,7 @@ export class CompanyService {
   }
 
   async createClubBundleProposal(userId: number, dto: CreateCompanyClubBundleDto) {
+    this.assertSubscriptionPrice(dto.price);
     const member = await this.membership(userId);
     this.requireManager(member);
     this.requireTradingEnabled(member);
@@ -1502,6 +1891,7 @@ export class CompanyService {
   }
 
   async createSubscription(userId: number, dto: CreateCompanySubscriptionDto) {
+    this.assertSubscriptionPrice(dto.price);
     const member = await this.membership(userId);
     this.requireManager(member);
     this.requireTradingEnabled(member);
@@ -1548,6 +1938,7 @@ export class CompanyService {
   }
 
   async updateSubscription(userId: number, subscriptionUuid: string, dto: UpdateCompanyOwnedSubscriptionDto) {
+    if (dto.price !== undefined) this.assertSubscriptionPrice(dto.price);
     const member = await this.membership(userId);
     this.requireManager(member);
     this.requireTradingEnabled(member);
@@ -1654,21 +2045,79 @@ export class CompanyService {
     });
   }
 
-  private redemptionWindowStart(
-    unit: SubscriptionEntitlementWindow,
-    value: number,
-    subscriptionStartedAt: Date,
+  private redemptionWindowStart(unit: SubscriptionEntitlementWindow, value: number, activatedAt: Date) {
+    const now = new Date();
+    if (unit === SubscriptionEntitlementWindow.TERM || unit === SubscriptionEntitlementWindow.UNLIMITED) return activatedAt;
+    const normalizedValue = Math.max(1, value || 1);
+    const start = new Date(now);
+    if (unit === SubscriptionEntitlementWindow.DAY) {
+      start.setHours(0, 0, 0, 0);
+      const activatedDay = new Date(activatedAt);
+      activatedDay.setHours(0, 0, 0, 0);
+      const diffDays = Math.max(0, Math.floor((start.getTime() - activatedDay.getTime()) / DAY_MS));
+      start.setDate(start.getDate() - (diffDays % normalizedValue));
+    } else if (unit === SubscriptionEntitlementWindow.WEEK) {
+      start.setHours(0, 0, 0, 0);
+      const activatedDay = new Date(activatedAt);
+      activatedDay.setHours(0, 0, 0, 0);
+      const diffDays = Math.max(0, Math.floor((start.getTime() - activatedDay.getTime()) / DAY_MS));
+      start.setDate(now.getDate() - (diffDays % (normalizedValue * 7)));
+    } else if (unit === SubscriptionEntitlementWindow.MONTH) {
+      start.setHours(0, 0, 0, 0);
+      start.setDate(1);
+      const diffMonths = (now.getFullYear() - activatedAt.getFullYear()) * 12 + now.getMonth() - activatedAt.getMonth();
+      start.setMonth(now.getMonth() - (diffMonths % normalizedValue), 1);
+    }
+    return start;
+  }
+
+  private redemptionWindowEnd(unit: SubscriptionEntitlementWindow, value: number, startedAt: Date, expiresAt: Date | null) {
+    if (unit === SubscriptionEntitlementWindow.UNLIMITED) return null;
+    if (unit === SubscriptionEntitlementWindow.TERM) return expiresAt;
+    const normalizedValue = Math.max(1, value || 1);
+    const end = new Date(startedAt);
+    if (unit === SubscriptionEntitlementWindow.DAY) end.setDate(end.getDate() + normalizedValue);
+    if (unit === SubscriptionEntitlementWindow.WEEK) end.setDate(end.getDate() + normalizedValue * 7);
+    if (unit === SubscriptionEntitlementWindow.MONTH) end.setMonth(end.getMonth() + normalizedValue);
+    return expiresAt && end > expiresAt ? expiresAt : end;
+  }
+
+  private redemptionState(
+    rule: Pick<SubscriptionEntitlement, "allowance" | "windowUnit" | "windowValue">,
+    redemptions: Array<{ quantity: number; redeemedAt: Date }>,
+    activatedAt: Date,
+    expiresAt: Date | null,
     now = new Date(),
   ) {
-    if (unit === SubscriptionEntitlementWindow.UNLIMITED) return subscriptionStartedAt;
-    if (unit === SubscriptionEntitlementWindow.TERM) return subscriptionStartedAt;
-    if (unit === SubscriptionEntitlementWindow.MONTH) {
-      const bucket = Math.floor((now.getUTCFullYear() * 12 + now.getUTCMonth()) / value) * value;
-      return new Date(Date.UTC(Math.floor(bucket / 12), bucket % 12, 1));
+    const latest = [...redemptions].sort((a, b) => b.redeemedAt.getTime() - a.redeemedAt.getTime())[0] ?? null;
+    if (rule.windowUnit === SubscriptionEntitlementWindow.UNLIMITED) {
+      return {
+        unlimited: true,
+        used: null,
+        allowance: null,
+        remaining: null,
+        canRedeem: true,
+        windowStartedAt: null,
+        windowEndsAt: null,
+        lastRedeemedAt: latest?.redeemedAt ?? null,
+      };
     }
-    const unitMs = unit === SubscriptionEntitlementWindow.WEEK ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-    const bucketMs = unitMs * value;
-    return new Date(Math.floor(now.getTime() / bucketMs) * bucketMs);
+    const windowStartedAt = this.redemptionWindowStart(rule.windowUnit, rule.windowValue, activatedAt);
+    const windowEndsAt = this.redemptionWindowEnd(rule.windowUnit, rule.windowValue, windowStartedAt, expiresAt);
+    const used = redemptions
+      .filter((redemption) => redemption.redeemedAt >= windowStartedAt && (!windowEndsAt || redemption.redeemedAt < windowEndsAt))
+      .reduce((sum, redemption) => sum + redemption.quantity, 0);
+    const remaining = Math.max(0, rule.allowance - used);
+    return {
+      unlimited: false,
+      used,
+      allowance: rule.allowance,
+      remaining,
+      canRedeem: remaining > 0 && (!expiresAt || expiresAt > now),
+      windowStartedAt,
+      windowEndsAt,
+      lastRedeemedAt: latest?.redeemedAt ?? null,
+    };
   }
 
   async redeemEntitlement(userId: number, dto: RedeemSubscriptionEntitlementDto) {
@@ -1678,11 +2127,11 @@ export class CompanyService {
       where: { uuid: dto.entitlementUuid },
       include: { subscription: true },
     });
-    if (!entitlement || !entitlement.isActive || entitlement.subscription.companyId !== member.companyId) {
-      throw new NotFoundException("Subscription benefit not found.");
+    if (!entitlement || entitlement.subscription.companyId !== member.companyId || !entitlement.isActive) {
+      throw new NotFoundException("\u0423\u0441\u043b\u0443\u0433\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u0430 \u0434\u043b\u044f \u044d\u0442\u043e\u0439 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438.");
     }
     const customer = await this.prisma.user.findFirst({ where: { uuid: dto.userUuid, role: UserRole.CLIENT } });
-    if (!customer) throw new NotFoundException("Customer not found.");
+    if (!customer) throw new NotFoundException("\u041a\u043b\u0438\u0435\u043d\u0442 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d.");
     const plan = await this.prisma.userSubscription.findFirst({
       where: {
         userId: customer.id,
@@ -1691,27 +2140,49 @@ export class CompanyService {
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
-    if (!plan) throw new BadRequestException("Customer does not have an active subscription for this benefit.");
+    if (!plan) throw new BadRequestException("\u0423 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u043d\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0438 \u0441 \u044d\u0442\u043e\u0439 \u0443\u0441\u043b\u0443\u0433\u043e\u0439.");
 
     const quantity = dto.quantity ?? 1;
+    if (quantity < 1) throw new BadRequestException("\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u0441\u043f\u0438\u0441\u0430\u043d\u0438\u0439 \u0434\u043e\u043b\u0436\u043d\u043e \u0431\u044b\u0442\u044c \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0443\u043b\u044f.");
     const unlimited = entitlement.windowUnit === SubscriptionEntitlementWindow.UNLIMITED;
-    const from = unlimited
+    const windowStartedAt = unlimited
       ? null
       : this.redemptionWindowStart(entitlement.windowUnit, entitlement.windowValue, plan.activatedAt);
+    const windowEndsAt = windowStartedAt
+      ? this.redemptionWindowEnd(entitlement.windowUnit, entitlement.windowValue, windowStartedAt, plan.expiresAt)
+      : null;
+
     try {
       return await this.prisma.$transaction(
         async (tx) => {
           let alreadyUsed: number | null = null;
-          if (!unlimited && from) {
+          if (!unlimited && windowStartedAt) {
             const total = await tx.subscriptionRedemption.aggregate({
-              where: { userSubscriptionId: plan.id, entitlementId: entitlement.id, redeemedAt: { gte: from } },
+              where: {
+                userSubscriptionId: plan.id,
+                entitlementId: entitlement.id,
+                redeemedAt: {
+                  gte: windowStartedAt,
+                  ...(windowEndsAt ? { lt: windowEndsAt } : {}),
+                },
+              },
               _sum: { quantity: true },
             });
             alreadyUsed = total._sum.quantity ?? 0;
             if (alreadyUsed + quantity > entitlement.allowance) {
-              throw new ConflictException("Benefit limit has already been reached for this period.");
+              const remaining = Math.max(0, entitlement.allowance - alreadyUsed);
+              throw new ConflictException(
+                remaining > 0
+                  ? `\u041f\u043e \u043b\u0438\u043c\u0438\u0442\u0443 \u043e\u0441\u0442\u0430\u043b\u043e\u0441\u044c ${remaining}. \u0423\u043c\u0435\u043d\u044c\u0448\u0438\u0442\u0435 \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u0438\u043b\u0438 \u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u0443\u044e \u0443\u0441\u043b\u0443\u0433\u0443.`
+                  : "\u041b\u0438\u043c\u0438\u0442 \u044d\u0442\u043e\u0439 \u0443\u0441\u043b\u0443\u0433\u0438 \u0443\u0436\u0435 \u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043d \u0437\u0430 \u0442\u0435\u043a\u0443\u0449\u0438\u0439 \u043f\u0435\u0440\u0438\u043e\u0434.",
+              );
             }
           }
+          await tx.userCompany.upsert({
+            where: { userId_companyId: { userId: customer.id, companyId: member.companyId } },
+            update: {},
+            create: { userId: customer.id, companyId: member.companyId, balance: 0 },
+          });
           const redemption = await tx.subscriptionRedemption.create({
             data: {
               userSubscriptionId: plan.id,
@@ -1722,26 +2193,29 @@ export class CompanyService {
               note: dto.note?.trim() || null,
             },
           });
+          const used = unlimited ? null : (alreadyUsed ?? 0) + quantity;
           return {
             redemption,
             benefit: entitlement.title,
             unlimited,
-            used: unlimited ? null : (alreadyUsed ?? 0) + quantity,
+            used,
             allowance: unlimited ? null : entitlement.allowance,
+            remaining: unlimited || used == null ? null : Math.max(0, entitlement.allowance - used),
             windowUnit: entitlement.windowUnit,
             windowValue: entitlement.windowValue,
+            windowStartedAt,
+            windowEndsAt,
           };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
       if ((error as { code?: string }).code === "P2034") {
-        throw new ConflictException("This benefit is being redeemed at another checkout. Refresh and retry.");
+        throw new ConflictException("\u042d\u0442\u0430 \u0443\u0441\u043b\u0443\u0433\u0430 \u0441\u0435\u0439\u0447\u0430\u0441 \u0441\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u043d\u0430 \u0434\u0440\u0443\u0433\u043e\u0439 \u043a\u0430\u0441\u0441\u0435. \u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044c \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435.");
       }
       throw error;
     }
   }
-
   async redeemBundleBenefit(userId: number, dto: RedeemSubscriptionBundleBenefitDto) {
     const member = await this.membership(userId);
     this.requireTradingEnabled(member);
@@ -1756,10 +2230,10 @@ export class CompanyService {
       !participant.bundle.isActive ||
       participant.bundle.status !== SubscriptionBundleStatus.ACTIVE
     ) {
-      throw new NotFoundException("Преимущество парной подписки не найдено для этой компании.");
+      throw new NotFoundException("\u041f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e \u043f\u0430\u0440\u043d\u043e\u0439 \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e \u0434\u043b\u044f \u044d\u0442\u043e\u0439 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438.");
     }
     const customer = await this.prisma.user.findFirst({ where: { uuid: dto.userUuid, role: UserRole.CLIENT } });
-    if (!customer) throw new NotFoundException("Customer not found.");
+    if (!customer) throw new NotFoundException("\u041a\u043b\u0438\u0435\u043d\u0442 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d.");
     const plan = await this.prisma.userSubscriptionBundle.findFirst({
       where: {
         userId: customer.id,
@@ -1768,28 +2242,49 @@ export class CompanyService {
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
-    if (!plan) throw new BadRequestException("У клиента нет активной парной подписки для этого преимущества.");
+    if (!plan) throw new BadRequestException("\u0423 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u043d\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u043f\u0430\u0440\u043d\u043e\u0439 \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0438 \u0434\u043b\u044f \u044d\u0442\u043e\u0433\u043e \u043f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u0430.");
 
     const quantity = dto.quantity ?? 1;
+    if (quantity < 1) throw new BadRequestException("\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u0441\u043f\u0438\u0441\u0430\u043d\u0438\u0439 \u0434\u043e\u043b\u0436\u043d\u043e \u0431\u044b\u0442\u044c \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0443\u043b\u044f.");
     const unlimited = participant.windowUnit === SubscriptionEntitlementWindow.UNLIMITED;
-    const from = unlimited
+    const windowStartedAt = unlimited
       ? null
       : this.redemptionWindowStart(participant.windowUnit, participant.windowValue, plan.activatedAt);
+    const windowEndsAt = windowStartedAt
+      ? this.redemptionWindowEnd(participant.windowUnit, participant.windowValue, windowStartedAt, plan.expiresAt)
+      : null;
 
     try {
       return await this.prisma.$transaction(
         async (tx) => {
           let alreadyUsed: number | null = null;
-          if (!unlimited && from) {
+          if (!unlimited && windowStartedAt) {
             const total = await tx.subscriptionBundleRedemption.aggregate({
-              where: { userSubscriptionBundleId: plan.id, participantId: participant.id, redeemedAt: { gte: from } },
+              where: {
+                userSubscriptionBundleId: plan.id,
+                participantId: participant.id,
+                redeemedAt: {
+                  gte: windowStartedAt,
+                  ...(windowEndsAt ? { lt: windowEndsAt } : {}),
+                },
+              },
               _sum: { quantity: true },
             });
             alreadyUsed = total._sum.quantity ?? 0;
             if (alreadyUsed + quantity > participant.allowance) {
-              throw new ConflictException("Лимит этого преимущества уже исчерпан за период.");
+              const remaining = Math.max(0, participant.allowance - alreadyUsed);
+              throw new ConflictException(
+                remaining > 0
+                  ? `\u041f\u043e \u043b\u0438\u043c\u0438\u0442\u0443 \u043e\u0441\u0442\u0430\u043b\u043e\u0441\u044c ${remaining}. \u0423\u043c\u0435\u043d\u044c\u0448\u0438\u0442\u0435 \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u0438\u043b\u0438 \u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0435 \u043f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e.`
+                  : "\u041b\u0438\u043c\u0438\u0442 \u044d\u0442\u043e\u0433\u043e \u043f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u0430 \u0443\u0436\u0435 \u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043d \u0437\u0430 \u0442\u0435\u043a\u0443\u0449\u0438\u0439 \u043f\u0435\u0440\u0438\u043e\u0434.",
+              );
             }
           }
+          await tx.userCompany.upsert({
+            where: { userId_companyId: { userId: customer.id, companyId: member.companyId } },
+            update: {},
+            create: { userId: customer.id, companyId: member.companyId, balance: 0 },
+          });
           const redemption = await tx.subscriptionBundleRedemption.create({
             data: {
               userSubscriptionBundleId: plan.id,
@@ -1800,24 +2295,29 @@ export class CompanyService {
               note: dto.note?.trim() || null,
             },
           });
+          const used = unlimited ? null : (alreadyUsed ?? 0) + quantity;
           return {
             redemption,
             benefit: participant.benefitTitle,
             bundle: participant.bundle.name,
             unlimited,
-            used: unlimited ? null : (alreadyUsed ?? 0) + quantity,
+            used,
             allowance: unlimited ? null : participant.allowance,
+            remaining: unlimited || used == null ? null : Math.max(0, participant.allowance - used),
             windowUnit: participant.windowUnit,
             windowValue: participant.windowValue,
+            windowStartedAt,
+            windowEndsAt,
           };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
       if ((error as { code?: string }).code === "P2034") {
-        throw new ConflictException("Это преимущество сейчас гасится на другой кассе. Обновите и повторите.");
+        throw new ConflictException("\u042d\u0442\u043e \u043f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432\u043e \u0441\u0435\u0439\u0447\u0430\u0441 \u0441\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u043d\u0430 \u0434\u0440\u0443\u0433\u043e\u0439 \u043a\u0430\u0441\u0441\u0435. \u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044c \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435.");
       }
       throw error;
     }
   }
+
 }

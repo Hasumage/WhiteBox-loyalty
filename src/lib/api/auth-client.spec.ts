@@ -40,7 +40,8 @@ describe("auth client session restoration", () => {
     expect(authenticatedDestination({ role: "SUPPORT" }, "/admin")).toBe("/admin/support");
     expect(authenticatedDestination({ role: "COMPANY" }, "/map")).toBe("/company");
     expect(authenticatedDestination({ role: "CLIENT" }, "/map")).toBe("/map");
-    expect(authenticatedDestination({ role: "CLIENT" }, "//external.example")).toBe("/");
+    expect(authenticatedDestination({ role: "CLIENT" }, "//external.example")).toBe("/app");
+    expect(authenticatedDestination({ role: "CLIENT" }, "/")).toBe("/app");
   });
 
   it("rotates a stored refresh token and restores the browser session", async () => {

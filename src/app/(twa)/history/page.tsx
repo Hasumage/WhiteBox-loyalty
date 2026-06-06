@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Archive, ArrowDownLeft, ArrowUpRight, History as HistoryIcon } from "lucide-react";
+import { Archive, ArrowDownLeft, ArrowUpRight, History as HistoryIcon, TicketCheck } from "lucide-react";
 import { getCachedTwaHistory, getTwaHistory, type TwaHistory, type TwaUserSubscription } from "@/lib/api/twa-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,19 +48,20 @@ const item = {
 
 export default function HistoryPage() {
   const { locale, t } = useI18n("ru");
-  const [history, setHistory] = useState<TwaHistory>({ transactions: [], subscriptions: [], archivedSubscriptions: [] });
+  const [history, setHistory] = useState<TwaHistory>({ transactions: [], redemptions: [], subscriptions: [], archivedSubscriptions: [] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let ignore = false;
     const cached = getCachedTwaHistory();
-    if (cached.transactions.length || cached.subscriptions.length || cached.archivedSubscriptions.length) {
-      setHistory(cached);
+    const normalizedCached = { ...cached, redemptions: cached.redemptions ?? [] };
+    if (normalizedCached.transactions.length || normalizedCached.redemptions.length || normalizedCached.subscriptions.length || normalizedCached.archivedSubscriptions.length) {
+      setHistory(normalizedCached);
       setLoading(false);
     }
     void getTwaHistory().then((data) => {
       if (ignore) return;
-      setHistory(data);
+      setHistory({ ...data, redemptions: data.redemptions ?? [] });
       setLoading(false);
     });
     return () => {
@@ -68,9 +69,14 @@ export default function HistoryPage() {
     };
   }, []);
 
-  if (loading && history.transactions.length === 0 && history.subscriptions.length === 0 && history.archivedSubscriptions.length === 0) {
+  if (loading && history.transactions.length === 0 && history.redemptions.length === 0 && history.subscriptions.length === 0 && history.archivedSubscriptions.length === 0) {
     return <TwaLoadingScreen title={t("client.history.loadingTitle")} subtitle={t("client.history.loadingSubtitle")} />;
   }
+
+  const activity = [
+    ...history.transactions.map((tx) => ({ kind: "POINTS" as const, date: tx.occurredAt, tx })),
+    ...history.redemptions.map((redemption) => ({ kind: "REDEMPTION" as const, date: redemption.redeemedAt, redemption })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <motion.div
@@ -104,44 +110,63 @@ export default function HistoryPage() {
         <TabsContent value="activity" className="mt-0">
           <ScrollArea className="h-[calc(100dvh-14rem)] pr-2">
             <ul className="space-y-1.5">
-              {history.transactions.map((tx, index) => (
+              {activity.map((entry, index) => (
                 <motion.li
-                  key={tx.uuid}
+                  key={entry.kind === "POINTS" ? entry.tx.uuid : entry.redemption.uuid}
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: Math.min(index * 0.035, 0.24) }}
                 >
-                  <Card className="glass border-white/10">
-                    <CardContent className="flex min-h-[48px] items-center gap-3 px-3 py-1">
-                      <div
-                        className={cn(
-                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                          tx.type === "EARN"
-                            ? "bg-emerald-500/20 text-emerald-400"
-                            : "bg-amber-500/20 text-amber-400",
-                        )}
-                      >
-                        {tx.type === "EARN" ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-base font-semibold">{tx.company.name}</p>
-                        <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">{tx.description ?? formatDate(tx.occurredAt, locale, t)}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className={cn("text-sm tabular-nums font-semibold", tx.type === "EARN" ? "text-emerald-400" : "text-amber-400")}>
-                          {tx.type === "EARN" ? "+" : "-"}
-                          {Math.abs(tx.amount)}
-                        </span>
-                        <Badge variant={tx.status === "ACTIVE" ? "default" : "secondary"} className="px-2.5 py-1 text-xs">
-                          {tx.status === "ACTIVE" ? t("client.common.active") : t("client.common.expired")}
+                  {entry.kind === "POINTS" ? (
+                    <Card className="glass border-white/10">
+                      <CardContent className="flex min-h-[48px] items-center gap-3 px-3 py-1">
+                        <div
+                          className={cn(
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                            entry.tx.type === "EARN"
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : "bg-amber-500/20 text-amber-400",
+                          )}
+                        >
+                          {entry.tx.type === "EARN" ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-semibold">{entry.tx.company.name}</p>
+                          <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">{entry.tx.description ?? formatDate(entry.tx.occurredAt, locale, t)}</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className={cn("text-sm tabular-nums font-semibold", entry.tx.type === "EARN" ? "text-emerald-400" : "text-amber-400")}>
+                            {entry.tx.type === "EARN" ? "+" : "-"}
+                            {Math.abs(entry.tx.amount)}
+                          </span>
+                          <Badge variant={entry.tx.status === "ACTIVE" ? "default" : "secondary"} className="px-2.5 py-1 text-xs">
+                            {entry.tx.status === "ACTIVE" ? t("client.common.active") : t("client.common.expired")}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card className="glass border-cyan-300/15 bg-cyan-300/[0.035]">
+                      <CardContent className="flex min-h-[56px] items-center gap-3 px-3 py-2">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-500/15 text-cyan-200">
+                          <TicketCheck className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-semibold">{entry.redemption.benefit}</p>
+                          <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">
+                            {entry.redemption.company.name} · {entry.redemption.planName} · {formatDate(entry.redemption.redeemedAt, locale, t)}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="shrink-0 px-2.5 py-1 text-xs">
+                          -{entry.redemption.quantity}
                         </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  )}
                 </motion.li>
               ))}
             </ul>
-            {!loading && history.transactions.length === 0 && (
+            {!loading && activity.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">{t("client.history.noActivity")}</p>
             )}
           </ScrollArea>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import {
-  activateTwaSubscription,
+  createTwaSubscriptionCheckout,
   getCachedTwaMarketplace,
   getTwaMarketplace,
   type TwaSubscriptionPlan,
@@ -82,16 +82,18 @@ export default function SubscriptionDetailPage() {
     setActivating(true);
     setError(null);
     setNotice(null);
-    const res = await activateTwaSubscription(subscription.uuid);
+    const res = await createTwaSubscriptionCheckout(subscription.uuid);
     setActivating(false);
     if (!res.ok) {
       setError(res.message);
       return;
     }
-    setNotice(t("client.subscription.activatedNotice"));
-    setPlans((current) =>
-      current.map((plan) => (plan.uuid === subscription.uuid ? { ...plan, isOwned: true } : plan)),
-    );
+    if (!res.data.confirmationUrl) {
+      setError(locale === "ru" ? "Платеж создан, но YooKassa не вернула ссылку оплаты." : "Payment was created, but YooKassa did not return a payment link.");
+      return;
+    }
+    setNotice(locale === "ru" ? "Открываем безопасную страницу оплаты..." : "Opening secure payment page...");
+    window.location.href = res.data.confirmationUrl;
   }
 
   if (loading && plans.length === 0) {
@@ -232,7 +234,7 @@ export default function SubscriptionDetailPage() {
                       <span className="block font-medium">{benefit.title}</span>
                       {benefit.company && (
                         <span className="mt-0.5 block text-xs text-primary">
-                          {locale === "ru" ? "Выдаёт: " : "Provided by: "}{benefit.company.name}
+                          {locale === "ru" ? "Выдает: " : "Provided by: "}{benefit.company.name}
                         </span>
                       )}
                       {benefit.description && <span className="mt-0.5 block text-muted-foreground">{benefit.description}</span>}

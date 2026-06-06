@@ -17,7 +17,7 @@
     "db:seed:profile-statuses": "node prisma/seed-profile-statuses.mjs",
     "db:seed:company-subscriptions": "node prisma/seed-company-subscriptions.mjs",
     "db:seed:subscription-entitlements": "node prisma/seed-subscription-entitlements.mjs",
-    "dev": "next dev",
+    "dev": "node scripts/dev-local.mjs",
     "dev:local": "node scripts/dev-local.mjs",
     "dev:web": "next dev",
     "telegram:ping": "node scripts/telegram-ping.mjs",

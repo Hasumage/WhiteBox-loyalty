@@ -1052,7 +1052,7 @@ export class RegisteredService {
   }
 
   async history(userId: number) {
-    const [transactions, activeSubscriptions, archivedSubscriptions] = await Promise.all([
+    const [transactions, activeSubscriptions, archivedSubscriptions, subscriptionRedemptions, bundleRedemptions] = await Promise.all([
       this.prisma.loyaltyTransaction.findMany({
         where: { userId },
         orderBy: { occurredAt: "desc" },
@@ -1070,6 +1070,40 @@ export class RegisteredService {
       }),
       this.listActiveSubscriptions(userId),
       this.listArchivedSubscriptions(userId),
+      this.prisma.subscriptionRedemption.findMany({
+        where: { userSubscription: { userId } },
+        orderBy: { redeemedAt: "desc" },
+        take: 100,
+        include: {
+          company: {
+            select: {
+              id: true,
+              slug: true,
+              name: true,
+              category: { select: { id: true, slug: true, name: true, icon: true } },
+            },
+          },
+          entitlement: { select: { uuid: true, title: true } },
+          userSubscription: { select: { subscription: { select: { uuid: true, name: true } } } },
+        },
+      }),
+      this.prisma.subscriptionBundleRedemption.findMany({
+        where: { userSubscriptionBundle: { userId } },
+        orderBy: { redeemedAt: "desc" },
+        take: 100,
+        include: {
+          company: {
+            select: {
+              id: true,
+              slug: true,
+              name: true,
+              category: { select: { id: true, slug: true, name: true, icon: true } },
+            },
+          },
+          participant: { select: { uuid: true, benefitTitle: true } },
+          userSubscriptionBundle: { select: { bundle: { select: { uuid: true, name: true } } } },
+        },
+      }),
     ]);
 
     return {
@@ -1082,6 +1116,30 @@ export class RegisteredService {
         occurredAt: transaction.occurredAt,
         company: transaction.company,
       })),
+      redemptions: [
+        ...subscriptionRedemptions.map((redemption) => ({
+          uuid: redemption.uuid,
+          source: "SUBSCRIPTION" as const,
+          quantity: redemption.quantity,
+          redeemedAt: redemption.redeemedAt,
+          benefit: redemption.entitlement.title,
+          benefitUuid: redemption.entitlement.uuid,
+          planName: redemption.userSubscription.subscription.name,
+          planUuid: redemption.userSubscription.subscription.uuid,
+          company: redemption.company,
+        })),
+        ...bundleRedemptions.map((redemption) => ({
+          uuid: redemption.uuid,
+          source: "BUNDLE" as const,
+          quantity: redemption.quantity,
+          redeemedAt: redemption.redeemedAt,
+          benefit: redemption.participant.benefitTitle,
+          benefitUuid: redemption.participant.uuid,
+          planName: redemption.userSubscriptionBundle.bundle.name,
+          planUuid: redemption.userSubscriptionBundle.bundle.uuid,
+          company: redemption.company,
+        })),
+      ].sort((a, b) => new Date(b.redeemedAt).getTime() - new Date(a.redeemedAt).getTime()),
       subscriptions: [...activeSubscriptions, ...archivedSubscriptions].sort(
         (a, b) => new Date(b.activatedAt).getTime() - new Date(a.activatedAt).getTime(),
       ),

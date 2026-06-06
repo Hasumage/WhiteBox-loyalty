@@ -1,3 +1,5 @@
+import { calculatePlatformRevenueSummary } from "./platform-revenue";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type NumericValue = number | string | { toString(): string };
@@ -9,6 +11,14 @@ export type CompanySubscriptionRevenueRow = {
   status: "ACTIVE" | "EXPIRED" | "CANCELED";
   activatedAt: Date | string;
   expiresAt: Date | string | null;
+  platformCommissionPercent?: NumericValue | null;
+  commissionFreeMonthlyTurnover?: NumericValue | null;
+  commissionGraceEndsAt?: Date | string | null;
+  referralPercent?: NumericValue | null;
+  referralStatus?: string | null;
+  referrerUserId?: number | null;
+  supportManagerUserId?: number | null;
+  supportManagerPercent?: NumericValue | null;
 };
 
 export type CompanyPayoutRow = {
@@ -31,6 +41,10 @@ export type CompanyFinancialSnapshot = {
   recognizedRevenue: number;
   potentialRevenue: number;
   dailyRevenue: number;
+  whiteBoxCommission: number;
+  referralCommission: number;
+  supportManagerCommission: number;
+  companyRecognizedRevenue: number;
   activeSubscriptions: number;
   reservedPayouts: number;
   paidPayouts: number;
@@ -108,15 +122,41 @@ export function calculateCompanyFinancialSnapshot(
     .filter((row) => row.status === "PAID")
     .reduce((total, row) => total + amount(row.amount), 0);
 
+  const platform = calculatePlatformRevenueSummary(
+    subscriptions
+      .filter((row) => row.companyId === companyId)
+      .map((row) => ({
+        companyId: row.companyId,
+        companyName: row.name,
+        price: row.price,
+        status: row.status,
+        activatedAt: row.activatedAt,
+        expiresAt: row.expiresAt,
+        platformCommissionPercent: row.platformCommissionPercent,
+        commissionFreeMonthlyTurnover: row.commissionFreeMonthlyTurnover,
+        commissionGraceEndsAt: row.commissionGraceEndsAt,
+        referralPercent: row.referralPercent,
+        referralStatus: row.referralStatus,
+        referrerUserId: row.referrerUserId,
+        supportManagerUserId: row.supportManagerUserId,
+        supportManagerPercent: row.supportManagerPercent,
+      })),
+    now,
+  );
+
   return {
     subscriptionGross: currency(totals.subscriptionGross),
     recognizedRevenue: currency(totals.recognizedRevenue),
     potentialRevenue: currency(totals.potentialRevenue),
     dailyRevenue: currency(totals.dailyRevenue),
+    whiteBoxCommission: platform.whiteBoxCommission,
+    referralCommission: platform.referralCommission,
+    supportManagerCommission: platform.supportManagerCommission,
+    companyRecognizedRevenue: platform.companyRecognizedRevenue,
     activeSubscriptions: totals.activeSubscriptions,
     reservedPayouts: currency(reservedPayouts),
     paidPayouts: currency(paidPayouts),
-    availableForPayout: Math.max(0, currency(totals.recognizedRevenue - reservedPayouts - paidPayouts)),
+    availableForPayout: Math.max(0, currency(platform.companyRecognizedRevenue - reservedPayouts - paidPayouts)),
     sources: [...sources.values()].map((source) => ({
       ...source,
       dailyRevenue: currency(source.dailyRevenue),
@@ -134,7 +174,7 @@ export function evaluatePayoutCoverage(snapshot: CompanyFinancialSnapshot, opera
   const availableBeforeThisRequest = Math.max(
     0,
     currency(
-      snapshot.recognizedRevenue -
+      snapshot.companyRecognizedRevenue -
         snapshot.paidPayouts -
         snapshot.reservedPayouts +
         (isReserved ? operationAmount : 0),

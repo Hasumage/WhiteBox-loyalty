@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Min, MinLength } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
+import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../../subscriptions/subscription-limits";
 
 export class UpdateCompanySubscriptionDto {
   @ApiPropertyOptional({ example: "Monthly Unlimited" })
@@ -14,10 +15,11 @@ export class UpdateCompanySubscriptionDto {
   @MinLength(5)
   description?: string;
 
-  @ApiPropertyOptional({ example: 49.99 })
+  @ApiPropertyOptional({ example: 299, minimum: MIN_SUBSCRIPTION_PRICE_RUB, maximum: MAX_SUBSCRIPTION_PRICE_RUB })
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(MIN_SUBSCRIPTION_PRICE_RUB)
+  @Max(MAX_SUBSCRIPTION_PRICE_RUB)
   price?: number;
 
   @ApiPropertyOptional({ example: "month", description: "Legacy combined period label" })

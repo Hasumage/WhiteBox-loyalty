@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -10,7 +10,7 @@ import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 
 const navItems = [
-  { href: "/", labelKey: "client.nav.home", icon: Home },
+  { href: "/app", labelKey: "client.nav.home", icon: Home },
   { href: "/map", labelKey: "client.nav.map", icon: MapPin },
   { href: "/scan", labelKey: "client.nav.scan", icon: QrCode, isFab: true },
   { href: "/history", labelKey: "client.nav.history", icon: History },
@@ -57,8 +57,8 @@ export function BottomNav() {
           .filter((item) => !item.isFab)
           .map(({ href, labelKey, icon: Icon }) => {
             const isActive =
-              href === "/"
-                ? pathname === "/"
+              href === "/app"
+                ? pathname === "/app"
                 : href === "/settings"
                   ? pathname === "/settings" || pathname.startsWith("/settings/")
                   : pathname === href || pathname.startsWith(href + "/");
@@ -92,3 +92,4 @@ export function BottomNav() {
     </>
   );
 }
+

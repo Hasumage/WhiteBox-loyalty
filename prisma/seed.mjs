@@ -1,7 +1,14 @@
 import "dotenv/config";
 import { createHash, randomUUID } from "crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, SubscriptionSpendPolicy, UserRole } from "@prisma/client";
+import {
+  CompanyReferralPipelineStatus,
+  CompanyReferralStatus,
+  PermissionScope,
+  PrismaClient,
+  SubscriptionSpendPolicy,
+  UserRole,
+} from "@prisma/client";
 import { Pool } from "pg";
 import { seedProfileStatuses } from "./profile-status-seed-data.mjs";
 
@@ -98,6 +105,7 @@ async function main() {
 
     const peopleSeeds = [
       { name: "Alice Admin", email: "alice.admin@whitebox.test", role: UserRole.ADMIN },
+      { name: "Priya Growth", email: "priya.growth@whitebox.test", role: UserRole.MANAGER },
       { name: "Martin Coffee", email: "martin.coffee@whitebox.test", role: UserRole.COMPANY },
       { name: "Nina Fit", email: "nina.fit@whitebox.test", role: UserRole.COMPANY },
       { name: "Oleg Beauty", email: "oleg.beauty@whitebox.test", role: UserRole.COMPANY },
@@ -142,6 +150,35 @@ async function main() {
     const owners = users.filter((u) => u.role === UserRole.COMPANY);
     const clients = users.filter((u) => u.role === UserRole.CLIENT);
     const admin = users.find((u) => u.role === UserRole.ADMIN);
+    const prManager = users.find((u) => u.email === "priya.growth@whitebox.test");
+
+    if (prManager) {
+      await prisma.adminUserPermission.createMany({
+        data: [
+          {
+            userId: prManager.id,
+            scope: PermissionScope.PR,
+            canView: true,
+            canEdit: true,
+            canApprove: false,
+          },
+          {
+            userId: prManager.id,
+            scope: PermissionScope.COMPANIES,
+            canView: true,
+            canEdit: false,
+            canApprove: false,
+          },
+          {
+            userId: prManager.id,
+            scope: PermissionScope.AUDIT,
+            canView: true,
+            canEdit: false,
+            canApprove: false,
+          },
+        ],
+      });
+    }
 
     const companySeeds = [
       {
@@ -242,6 +279,53 @@ async function main() {
             companyId: company.id,
             ...rule,
             createdAt: daysAgo(95 - i * 4),
+          },
+        });
+      }
+    }
+
+    if (prManager) {
+      const referralSeeds = [
+        {
+          companySlug: "aurora-coffee",
+          referralPercent: 1,
+          source: "PR manager",
+          notes: "Warm lead from local coffee entrepreneur network.",
+          pipelineStatus: CompanyReferralPipelineStatus.REVENUE_ACTIVE,
+          startedAt: daysAgo(45),
+        },
+        {
+          companySlug: "pulse-fitness",
+          referralPercent: 1,
+          source: "PR manager",
+          notes: "Invited after joint subscription pitch with wellness segment.",
+          pipelineStatus: CompanyReferralPipelineStatus.CONNECTED,
+          startedAt: daysAgo(38),
+        },
+        {
+          companySlug: "fork-flame",
+          referralPercent: 0.75,
+          source: "PR manager",
+          notes: "Restaurant group onboarded through partner club outreach.",
+          pipelineStatus: CompanyReferralPipelineStatus.NEGOTIATION,
+          startedAt: daysAgo(26),
+        },
+      ];
+
+      for (const referralSeed of referralSeeds) {
+        const company = companies.find((item) => item.slug === referralSeed.companySlug);
+        if (!company) continue;
+        await prisma.companyReferral.create({
+          data: {
+            companyId: company.id,
+            referrerUserId: prManager.id,
+            status: CompanyReferralStatus.ACTIVE,
+            pipelineStatus: referralSeed.pipelineStatus,
+            referralPercent: referralSeed.referralPercent,
+            source: referralSeed.source,
+            notes: referralSeed.notes,
+            startedAt: referralSeed.startedAt,
+            createdAt: referralSeed.startedAt,
           },
         });
       }

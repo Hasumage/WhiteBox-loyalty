@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { UserRole } from "@prisma/client";
 import { CurrentUser, type RequestUser } from "../auth/decorators/current-user.decorator";
@@ -146,8 +146,10 @@ export class RegisteredController {
   }
 
   @Post("subscriptions/:uuid/activate")
-  @ApiOperation({ summary: "Activate subscription for current user (payment stub flow)" })
+  @ApiOperation({ summary: "Deprecated direct activation endpoint. Use registered/payments/subscriptions/:uuid/checkout." })
   activateSubscription(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
-    return this.registeredService.activateSubscription(user.userId, uuid);
+    void user;
+    void uuid;
+    throw new BadRequestException("Direct subscription activation is disabled. Create a payment checkout first.");
   }
 }

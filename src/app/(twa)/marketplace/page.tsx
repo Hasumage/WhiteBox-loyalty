@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -116,7 +116,7 @@ export default function MarketplacePage() {
       className="min-h-full px-4 pb-4 pt-6"
     >
       <Link
-        href="/"
+        href="/app"
         className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -330,3 +330,4 @@ export default function MarketplacePage() {
     </motion.div>
   );
 }
+

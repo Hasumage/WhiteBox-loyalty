@@ -5,17 +5,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
+  ArrowRight,
   BriefcaseBusiness,
-  ChevronDown,
   Compass,
   Copy,
   Flame,
+  Gift,
+  Handshake,
   Heart,
+  LockKeyhole,
   MessageSquareText,
+  PanelTop,
   Settings,
   ShieldCheck,
   Sparkles,
-  Star,
   Store,
   Target,
   Ticket,
@@ -271,267 +274,396 @@ export default function SettingsPage() {
     return <TwaLoadingScreen title={t("client.profile.loadingTitle")} subtitle={t("client.profile.loadingSubtitle")} />;
   }
 
+  const displayName = user?.name ?? profile.user.name ?? t("client.profile.guest");
+  const selectedStatus = profileStatusState?.selectedStatus;
+  const newStatusCount = profileStatusState?.summary.new ?? 0;
+  const metrics = [
+    { label: t("client.profile.partners"), value: profile.stats.partnerCount, icon: Store },
+    { label: t("client.profile.subs"), value: profile.stats.activeSubscriptions, icon: WalletCards },
+    { label: t("client.profile.favorites"), value: profile.stats.favoriteCategories, icon: Heart },
+  ];
+  const quickLinks = [
+    {
+      href: "/settings/account",
+      label: t("client.profile.accountSettings"),
+      detail: t("client.profile.accountSettingsSubtitle"),
+      icon: LockKeyhole,
+      accent: "from-cyan-300/18 to-white/[0.04]",
+    },
+    {
+      href: "/settings/statuses",
+      label: t("client.profile.profileStatus"),
+      detail: t("client.profile.profileStatusDescription"),
+      icon: Trophy,
+      accent: "from-amber-300/18 to-white/[0.04]",
+      badge: newStatusCount ? interpolate(t("client.profile.newStatuses"), { count: newStatusCount }) : null,
+    },
+    {
+      href: "/settings/favorites",
+      label: t("client.profile.favoriteCategories"),
+      detail: favoriteSummary,
+      icon: Heart,
+      accent: "from-rose-300/16 to-white/[0.04]",
+    },
+    {
+      href: "/companies",
+      label: t("client.profile.visitPartners"),
+      detail: t("client.profile.startEarning"),
+      icon: Store,
+      accent: "from-emerald-300/14 to-white/[0.04]",
+    },
+  ];
+  const moreLinks = [
+    ["/settings/reviews", MessageSquareText, t("client.profile.myReviews"), t("client.profile.myReviewsSubtitle")],
+    ["/settings/partnership", ShieldCheck, t("client.profile.partnership"), t("client.profile.partnershipSubtitle")],
+    ["/settings/business", BriefcaseBusiness, t("client.profile.forBusiness"), t("client.profile.forBusinessSubtitle")],
+    ["/settings/company-referrals", Handshake, t("client.profile.companyReferrals"), t("client.profile.companyReferralsSubtitle")],
+    ["/marketplace", Ticket, t("client.profile.trySubscriptions"), t("client.profile.unlockPerks")],
+  ] as const;
+
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.25 }}
-      className="min-h-full px-4 pb-4 pt-6"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28 }}
+      className="min-h-full space-y-4 px-4 pb-6 pt-5"
     >
-      <header id="section-profile-header" className="mb-6 grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-primary/20 text-2xl font-bold text-primary ring-2 ring-primary/30" aria-hidden>
-          {user?.name ? initials(user.name) : "?"}
-        </div>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("client.profile.title")}</h1>
-          <p className="mt-0.5 truncate text-sm text-muted-foreground">{user?.name ?? profile.user.name ?? t("client.profile.guest")}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Badge variant="secondary" className="bg-primary/15 text-primary"><Star className="h-3 w-3" /> {activityLabel}</Badge>
-            <Badge variant="secondary"><WalletCards className="h-3 w-3" /> {profile.stats.totalBalance} {t("client.common.pointsShort")}</Badge>
-          </div>
-        </div>
-      </header>
-
-      {message && <div className="mb-3 rounded-2xl border border-white/10 bg-muted/10 px-4 py-3 text-sm">{message}</div>}
-
-      <div className="grid gap-3">
-        <Card className="glass border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{t("client.profile.languageTitle")}</CardTitle>
-            <CardDescription>{t("client.profile.languageDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <LanguageSwitcher locale={locale} onChange={(nextLocale) => void setLocale(nextLocale)} />
-          </CardContent>
-        </Card>
-
-        <Card className="glass relative overflow-hidden border-cyan-200/20 bg-cyan-300/[0.04]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_8%_0%,rgba(103,232,249,0.18),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(251,146,60,0.12),transparent_26%)]" />
-          <CardHeader className="relative pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4 text-cyan-100" /> Статус профиля
-            </CardTitle>
-            <CardDescription>
-              Выберите редкий, эпический или легендарный статус под настроение аккаунта.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="relative space-y-3">
-            {profileStatusState?.selectedStatus ? (
-              <ProfileStatusBadge
-                rarity={profileStatusState.selectedStatus.rarity}
-                icon={profileStatusState.selectedStatus.icon}
-                title={profileStatusState.selectedStatus.title}
-                className="max-w-full"
-              />
-            ) : (
-              <p className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-muted-foreground">
-                Статус ещё не выбран. Открытые статусы уже ждут в коллекции.
+      <section
+        id="section-profile-header"
+        className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/80 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(103,232,249,0.18),transparent_34%),radial-gradient(circle_at_100%_8%,rgba(255,255,255,0.12),transparent_28%)]" />
+        <div className="relative space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <Badge variant="secondary" className="mb-3 gap-1.5 border-cyan-200/20 bg-cyan-300/10 text-cyan-100">
+                <PanelTop className="h-3 w-3" />
+                {t("client.profile.profileControls")}
+              </Badge>
+              <h1 className="text-3xl font-semibold tracking-tight">{t("client.profile.settingsHub")}</h1>
+              <p className="mt-2 max-w-[22rem] text-sm leading-relaxed text-muted-foreground">
+                {t("client.profile.settingsHubSubtitle")}
               </p>
-            )}
-            <Button asChild variant="secondary" className="w-full rounded-2xl">
-              <Link href="/settings/statuses">
-                <Trophy className="h-4 w-4" />
-                Открыть коллекцию статусов
-                {profileStatusState?.summary.new ? (
-                  <span className="ml-auto rounded-full bg-cyan-200 px-2 py-0.5 text-xs font-bold text-black">
-                    +{profileStatusState.summary.new}
-                  </span>
-                ) : null}
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="glass relative overflow-hidden border-white/10 bg-slate-950/70">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(255,255,255,0.12),transparent_30%),radial-gradient(circle_at_88%_0%,rgba(34,211,238,0.11),transparent_34%)]" />
-          <CardContent className="relative space-y-4 px-4 pb-4 pt-1.5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-                  <Flame className="h-3.5 w-3.5" />
-                  {t("client.profile.whiteboxPulse")}
-                </p>
-                <h2 className="mt-2 text-xl font-semibold tracking-tight">{activityTone}</h2>
-                <p className="mt-1 max-w-[13rem] text-xs leading-relaxed text-muted-foreground">
-                  {profile.stats.activityScore > 0
-                    ? t("client.profile.nextStepsSubtitle")
-                    : t("client.profile.chooseCategories")}
-                </p>
-              </div>
-
-              <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
-                <div className="absolute inset-0 rounded-full bg-primary/10 blur-xl" />
-                <div
-                  className="relative flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-[conic-gradient(var(--primary)_var(--score),rgba(255,255,255,0.1)_0)] p-1 shadow-[0_18px_42px_rgba(0,0,0,0.35)]"
-                  style={{ "--score": `${scoreProgress}%` } as React.CSSProperties}
-                >
-                  <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-slate-950 text-center">
-                    <span className="text-2xl font-bold tabular-nums">{profile.stats.activityScore}</span>
-                    <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{t("client.profile.pulse")}</span>
-                  </div>
-                </div>
-              </div>
             </div>
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border border-cyan-200/20 bg-cyan-300/10 text-xl font-bold text-cyan-50 shadow-[0_0_35px_rgba(103,232,249,0.12)]">
+              {user?.name ? initials(user.name) : "?"}
+            </div>
+          </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: t("client.profile.partners"), value: profile.stats.partnerCount, icon: Store },
-                { label: t("client.profile.subs"), value: profile.stats.activeSubscriptions, icon: WalletCards },
-                { label: t("client.profile.favorites"), value: profile.stats.favoriteCategories, icon: Heart },
-              ].map((metric) => {
+          <div className="rounded-[1.5rem] border border-white/10 bg-black/25 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-lg font-semibold">{displayName}</p>
+                <p className="truncate text-xs text-muted-foreground">{profile.user.email || profile.user.uuid || t("client.profile.guest")}</p>
+              </div>
+              <LanguageSwitcher locale={locale} onChange={(nextLocale) => void setLocale(nextLocale)} className="shrink-0" />
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {metrics.map((metric) => {
                 const Icon = metric.icon;
                 return (
-                  <div key={metric.label} className="rounded-2xl border border-white/10 bg-black/20 px-2.5 py-3 text-center">
+                  <div key={metric.label} className="rounded-2xl border border-white/10 bg-white/[0.04] px-2.5 py-3 text-center">
                     <Icon className="mx-auto mb-1 h-4 w-4 text-primary" />
                     <p className="text-lg font-bold tabular-nums">{metric.value}</p>
-                    <p className="text-[10px] text-muted-foreground">{metric.label}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">{metric.label}</p>
                   </div>
                 );
               })}
             </div>
+          </div>
+        </div>
+      </section>
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-3">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold">{t("client.profile.nextSteps")}</p>
-                  <p className="text-xs text-muted-foreground">{t("client.profile.nextStepsSubtitle")}</p>
+      {message && (
+        <div className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">
+          {message}
+        </div>
+      )}
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">{t("client.profile.quickActions")}</h2>
+            <p className="text-xs text-muted-foreground">{t("client.profile.quickActionsSubtitle")}</p>
+          </div>
+          <Sparkles className="h-5 w-5 text-primary" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {quickLinks.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                id={item.href === "/settings/account" ? "settings-block" : undefined}
+                className={cn(
+                  "group relative min-h-[9.5rem] overflow-hidden rounded-[1.6rem] border border-white/10 bg-slate-950/70 p-3 transition hover:-translate-y-0.5 hover:border-white/20",
+                  "bg-gradient-to-br",
+                  item.accent,
+                )}
+              >
+                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-white/10 blur-2xl" />
+                <div className="relative flex h-full flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/25 text-cyan-100">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    {item.badge ? (
+                      <span className="rounded-full bg-cyan-200 px-2 py-0.5 text-[10px] font-bold text-black">{item.badge}</span>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold leading-tight">{item.label}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-semibold text-cyan-100">
+                    <span>{t("client.profile.open")}</span>
+                    <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                  </div>
                 </div>
-                <Badge variant="secondary" className="shrink-0 gap-1 bg-primary/15 text-primary">
-                  <Trophy className="h-3 w-3" />
-                  {activityLabel}
-                </Badge>
-              </div>
-              <div className="grid gap-2">
-                {nextActions.map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <Link
-                      key={action.href}
-                      href={action.href}
-                      className={cn(
-                        "group flex items-center gap-3 rounded-2xl border px-3 py-2.5 transition-colors",
-                        action.done
-                          ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
-                          : "border-white/10 bg-slate-950/40 hover:border-white/20 hover:bg-white/[0.06]",
-                      )}
-                    >
-                      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", action.done ? "bg-emerald-400/15 text-emerald-200" : "bg-primary/15 text-primary")}>
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">{action.label}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{action.done ? t("client.profile.done") : action.detail}</span>
-                      </span>
-                      {action.done ? <Target className="h-4 w-4 shrink-0 text-emerald-200" /> : <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-muted-foreground transition-transform group-hover:translate-x-0.5" />}
-                    </Link>
-                  );
-                })}
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <Card className="glass overflow-hidden border-white/10 bg-slate-950/70 p-0">
+        <CardContent className="space-y-4 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                <Flame className="h-3.5 w-3.5" />
+                {t("client.profile.whiteboxPulse")}
+              </p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">{activityTone}</h2>
+              <p className="mt-1 max-w-[15rem] text-xs leading-relaxed text-muted-foreground">
+                {profile.stats.activityScore > 0 ? t("client.profile.nextStepsSubtitle") : t("client.profile.chooseCategories")}
+              </p>
+            </div>
+            <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-primary/10 blur-xl" />
+              <div
+                className="relative flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-[conic-gradient(var(--primary)_var(--score),rgba(255,255,255,0.1)_0)] p-1 shadow-[0_18px_42px_rgba(0,0,0,0.35)]"
+                style={{ "--score": `${scoreProgress}%` } as React.CSSProperties}
+              >
+                <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-slate-950 text-center">
+                  <span className="text-2xl font-bold tabular-nums">{profile.stats.activityScore}</span>
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{t("client.profile.pulse")}</span>
+                </div>
               </div>
             </div>
+          </div>
 
-            <Button asChild className="w-full rounded-2xl">
-              <Link href={primaryAction.href}>
-                <Compass className="mr-2 h-4 w-4" />
-                {t("client.profile.boostProfile")}
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="glass border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{t("client.profile.favoriteCategories")}</CardTitle>
-            <CardDescription>{favoriteSummary}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              {favoriteCategories.length === 0 ? (
-                <span className="rounded-full border border-dashed border-white/20 px-3 py-1 text-xs text-muted-foreground">{t("client.profile.chooseCategories")}</span>
-              ) : (
-                favoriteCategories.slice(0, 8).map((cat) => (
-                  <span
-                    key={cat.slug}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/35 bg-white px-3 py-1 text-xs font-semibold text-black shadow-[0_0_16px_rgba(255,255,255,0.08)]"
+          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold">{t("client.profile.nextSteps")}</p>
+                <p className="text-xs text-muted-foreground">{t("client.profile.nextStepsSubtitle")}</p>
+              </div>
+              <Badge variant="secondary" className="shrink-0 gap-1 bg-primary/15 text-primary">
+                <Trophy className="h-3 w-3" />
+                {activityLabel}
+              </Badge>
+            </div>
+            <div className="grid gap-2">
+              {nextActions.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <Link
+                    key={action.href}
+                    href={action.href}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-2xl border px-3 py-2.5 transition-colors",
+                      action.done
+                        ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+                        : "border-white/10 bg-slate-950/40 hover:border-white/20 hover:bg-white/[0.06]",
+                    )}
                   >
-                    <CategoryIcon iconName={cat.icon} className="h-3.5 w-3.5 text-black" />
-                    {categoryName(cat, t)}
-                  </span>
-                ))
-              )}
+                    <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", action.done ? "bg-emerald-400/15 text-emerald-200" : "bg-primary/15 text-primary")}>
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{action.label}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{action.done ? t("client.profile.done") : action.detail}</span>
+                    </span>
+                    {action.done ? <Target className="h-4 w-4 shrink-0 text-emerald-200" /> : <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />}
+                  </Link>
+                );
+              })}
             </div>
-            <Link href="/settings/favorites" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-muted/10 px-3 py-2 text-sm transition-colors hover:bg-muted/20">
-              <Heart className="h-4 w-4 text-primary" /> {t("client.profile.selectFavoriteCategories")}
+          </div>
+
+          <Button asChild className="w-full rounded-2xl">
+            <Link href={primaryAction.href}>
+              <Compass className="mr-2 h-4 w-4" />
+              {t("client.profile.boostProfile")}
             </Link>
-          </CardContent>
-        </Card>
+          </Button>
+        </CardContent>
+      </Card>
 
-        <Card className="glass border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base"><Ticket className="h-4 w-4 text-primary" /> {t("client.profile.promoCodes")}</CardTitle>
-            <CardDescription>{t("client.profile.promoCodesSubtitle")}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex gap-2">
-              <Input className="glass border-white/10 uppercase" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder="PROMO CODE" />
-              <Button type="button" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>{t("client.profile.apply")}</Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base"><UsersRound className="h-4 w-4 text-primary" /> {t("client.profile.inviteFriends")}</CardTitle>
-            <CardDescription>
-              {profile.referral.isActive
-                ? interpolate(t("client.profile.referralActive"), {
-                    inviter: profile.referral.inviterBonusPoints,
-                    invited: profile.referral.invitedBonusPoints,
-                  })
-                : t("client.profile.inviteFriendsSubtitle")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <button type="button" onClick={copyReferralCode} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-muted/10 px-3 py-3 text-left">
-              <div><p className="text-xs text-muted-foreground">{t("client.profile.yourReferralCode")}</p><p className="font-semibold tracking-[0.18em]">{profile.referral.code || "..."}</p></div>
-              <Copy className="h-4 w-4 text-primary" />
-            </button>
-            <div className="flex gap-2">
-              <Input className="glass border-white/10 uppercase" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder="FRIEND CODE" />
-              <Button type="button" variant="secondary" className="glass border-white/10" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>{t("client.profile.redeem")}</Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Link href="/settings/account" id="settings-block">
-          <Card className="glass border-white/10 transition-colors hover:bg-muted/10">
-            <CardHeader className="pb-2"><CardTitle className="text-base">{t("client.profile.accountSettings")}</CardTitle><CardDescription>{t("client.profile.accountSettingsSubtitle")}</CardDescription></CardHeader>
-            <CardContent><div className="flex items-center gap-2 text-sm text-muted-foreground"><Settings className="h-4 w-4" /> {t("client.profile.openAccountPreferences")}</div></CardContent>
-          </Card>
-        </Link>
-
-        <Card className="glass border-white/10">
-          <CardHeader className="pb-2"><CardTitle className="text-base">{t("client.profile.more")}</CardTitle><CardDescription>{t("client.profile.moreSubtitle")}</CardDescription></CardHeader>
-          <CardContent className="space-y-2">
-            {[
-              ["/settings/reviews", MessageSquareText, t("client.profile.myReviews"), t("client.profile.myReviewsSubtitle")],
-              ["/settings/partnership", ShieldCheck, t("client.profile.partnership"), t("client.profile.partnershipSubtitle")],
-              ["/settings/business", BriefcaseBusiness, t("client.profile.forBusiness"), t("client.profile.forBusinessSubtitle")],
-            ].map(([href, Icon, title, description]) => (
-              <Link key={href as string} href={href as string} className="flex items-center justify-between rounded-xl border border-white/10 bg-muted/10 px-3 py-3 transition-colors hover:bg-muted/20">
-                <div className="flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-primary" />
-                  <div><p className="text-sm font-medium">{title as string}</p><p className="text-xs text-muted-foreground">{description as string}</p></div>
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">{t("client.profile.personalization")}</h2>
+          <p className="text-xs text-muted-foreground">{t("client.profile.personalizationSubtitle")}</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Card className="glass flex min-w-0 flex-col border-cyan-200/20 bg-cyan-300/[0.04]">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="h-4 w-4 text-cyan-100" />
+                {t("client.profile.profileStatus")}
+              </CardTitle>
+              <CardDescription>{t("client.profile.profileStatusDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-1 flex-col gap-3 pb-4">
+              {selectedStatus ? (
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("client.profile.currentStatus")}</p>
+                  <ProfileStatusBadge rarity={selectedStatus.rarity} icon={selectedStatus.icon} title={selectedStatus.title} className="max-w-full" />
                 </div>
-                <ChevronDown className="h-4 w-4 -rotate-90 text-muted-foreground" />
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
+              ) : (
+                <p className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-muted-foreground">
+                  {t("client.profile.noStatusSelected")}
+                </p>
+              )}
+              <Button asChild variant="secondary" className="mt-auto h-auto w-full min-w-0 overflow-hidden rounded-2xl px-3 py-3 !whitespace-normal">
+                <Link href="/settings/statuses" className="min-w-0 text-center text-sm leading-snug">
+                  <Trophy className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 max-w-full break-words">{t("client.profile.openStatusCollection")}</span>
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
 
-        <Link href="/companies" className="rounded-xl border border-white/10 bg-muted/10 px-3 py-3 transition-colors hover:bg-muted/20">
-          <div className="flex items-center gap-2"><Store className="h-4 w-4 text-primary" /><div><p className="text-sm font-medium">{t("client.home.explorePartners")}</p><p className="text-xs text-muted-foreground">{t("client.home.explorePartnersSubtitle")}</p></div></div>
-        </Link>
-      </div>
+          <Card className="glass flex min-w-0 flex-col border-white/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Heart className="h-4 w-4 text-primary" />
+                {t("client.profile.favoriteCategories")}
+              </CardTitle>
+              <CardDescription>{favoriteSummary}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-1 flex-col gap-3 pb-4">
+              <div className="flex flex-wrap gap-2">
+                {favoriteCategories.length === 0 ? (
+                  <span className="max-w-full rounded-2xl border border-dashed border-white/20 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                    {t("client.profile.chooseCategories")}
+                  </span>
+                ) : (
+                  favoriteCategories.slice(0, 8).map((cat) => (
+                    <span
+                      key={cat.slug}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-white/35 bg-white px-3 py-1 text-xs font-semibold text-black shadow-[0_0_16px_rgba(255,255,255,0.08)]"
+                    >
+                      <CategoryIcon iconName={cat.icon} className="h-3.5 w-3.5 text-black" />
+                      {categoryName(cat, t)}
+                    </span>
+                  ))
+                )}
+              </div>
+              <Button asChild variant="secondary" className="mt-auto h-auto w-full min-w-0 overflow-hidden rounded-2xl px-3 py-3 !whitespace-normal">
+                <Link href="/settings/favorites" className="min-w-0 text-center text-sm leading-snug">
+                  <Heart className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 max-w-full break-words">{t("client.profile.selectFavoriteCategories")}</span>
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section id="section-payments" className="space-y-3 scroll-mt-6">
+        <div>
+          <h2 className="text-lg font-semibold">{t("client.profile.rewardsCenter")}</h2>
+          <p className="text-xs text-muted-foreground">{t("client.profile.rewardsCenterSubtitle")}</p>
+        </div>
+        <div className="grid gap-3 xl:grid-cols-2">
+          <Card className="glass border-white/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Gift className="h-4 w-4 text-primary" />
+                {t("client.profile.promoCodes")}
+              </CardTitle>
+              <CardDescription>{t("client.profile.promoCodesSubtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2 pb-4 min-[460px]:grid-cols-[1fr_auto]">
+              <Input className="glass border-white/10 uppercase" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder={t("client.profile.promoPlaceholder")} />
+              <Button type="button" className="min-[460px]:px-5" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>
+                {t("client.profile.apply")}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="glass border-white/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <UsersRound className="h-4 w-4 text-primary" />
+                {t("client.profile.inviteFriends")}
+              </CardTitle>
+              <CardDescription>
+                {profile.referral.isActive
+                  ? interpolate(t("client.profile.referralActive"), {
+                      inviter: profile.referral.inviterBonusPoints,
+                      invited: profile.referral.invitedBonusPoints,
+                    })
+                  : t("client.profile.inviteFriendsSubtitle")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 pb-4">
+              <button type="button" onClick={copyReferralCode} className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-muted/10 px-3 py-3 text-left">
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("client.profile.yourReferralCode")}</p>
+                  <p className="break-all font-semibold tracking-[0.18em]">{profile.referral.code || "..."}</p>
+                </div>
+                <Copy className="h-4 w-4 shrink-0 text-primary" />
+              </button>
+              <div className="grid gap-2 min-[460px]:grid-cols-[1fr_auto]">
+                <Input className="glass border-white/10 uppercase" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder={t("client.profile.referralPlaceholder")} />
+                <Button type="button" variant="secondary" className="glass border-white/10 min-[460px]:px-5" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>
+                  {t("client.profile.redeem")}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">{t("client.profile.accountAndMore")}</h2>
+          <p className="text-xs text-muted-foreground">{t("client.profile.accountAndMoreSubtitle")}</p>
+        </div>
+        <div className="grid gap-2">
+          <Link href="/settings/account" className="flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-card px-4 py-3 transition-colors hover:bg-muted/10">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-primary">
+                <Settings className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{t("client.profile.accountSettings")}</p>
+                <p className="truncate text-xs text-muted-foreground">{t("client.profile.openAccountPreferences")}</p>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </Link>
+
+          {moreLinks.map(([href, Icon, title, description]) => (
+            <Link key={href} href={href} className="flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-card px-4 py-3 transition-colors hover:bg-muted/10">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-primary">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{title}</p>
+                  <p className="truncate text-xs text-muted-foreground">{description}</p>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </Link>
+          ))}
+        </div>
+      </section>
     </motion.div>
   );
 }

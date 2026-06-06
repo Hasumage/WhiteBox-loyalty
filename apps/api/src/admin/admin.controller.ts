@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { AuditWorkspace, PermissionScope, UserRole } from "@prisma/client";
+import { AuditWorkspace, PaymentStatus, PermissionScope, UserRole } from "@prisma/client";
 import { Response } from "express";
 import { CurrentUser, type RequestUser } from "../auth/decorators/current-user.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -36,6 +36,7 @@ import { UpdateCompanyUserDto } from "./dto/update-company-user.dto";
 import { UpdateReferralCampaignDto } from "./dto/update-referral-campaign.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { UpsertCompanyReferralDto } from "./dto/upsert-company-referral.dto";
 import { UpsertCompanyLocationDto } from "./dto/upsert-company-location.dto";
 import { UpsertCompanyProfileDto } from "./dto/upsert-company-profile.dto";
 import { CreateSubscriptionEntitlementDto } from "../company/dto/company-workspace.dto";
@@ -173,6 +174,23 @@ export class AdminController {
   async subscriptionStats(@CurrentUser() actor: RequestUser) {
     await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.subscriptionStats();
+  }
+
+  @Get("payments")
+  @ApiOperation({ summary: "List user payments from payment providers" })
+  @ApiQuery({ name: "query", required: false, type: String })
+  @ApiQuery({ name: "status", required: false, enum: PaymentStatus })
+  @ApiQuery({ name: "page", required: false, type: Number, example: 1 })
+  @ApiQuery({ name: "limit", required: false, type: Number, example: 20 })
+  async listPayments(
+    @CurrentUser() actor: RequestUser,
+    @Query("query") query?: string,
+    @Query("status") status?: PaymentStatus,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.FINANCE, "canView");
+    return this.adminService.listPayments({ query, status, page: Number(page), limit: Number(limit) });
   }
 
   @Get("subscriptions/bundles")
@@ -396,6 +414,29 @@ export class AdminController {
   async getCompanyUser(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
     await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.getCompanyUserByUuid(uuid);
+  }
+
+  @Get("company-users/:uuid/referral")
+  @ApiOperation({ summary: "Get company referral / PR attribution settings" })
+  @ApiQuery({ name: "query", required: false, type: String })
+  async getCompanyReferral(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser, @Query("query") query?: string) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.PR, "canView");
+    return this.adminService.getCompanyReferralAdmin(uuid, query);
+  }
+
+  @Put("company-users/:uuid/referral")
+  @ApiOperation({ summary: "Assign or update company referral / PR attribution" })
+  @ApiBody({ type: UpsertCompanyReferralDto })
+  async upsertCompanyReferral(@Param("uuid") uuid: string, @Body() dto: UpsertCompanyReferralDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.PR, "canEdit");
+    return this.adminService.upsertCompanyReferral(uuid, dto, actor.userId);
+  }
+
+  @Delete("company-users/:uuid/referral")
+  @ApiOperation({ summary: "End company referral / PR attribution" })
+  async endCompanyReferral(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.PR, "canEdit");
+    return this.adminService.endCompanyReferral(uuid, actor.userId);
   }
 
   @Patch("company-users/:uuid")

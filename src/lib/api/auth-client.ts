@@ -3,6 +3,8 @@ const STORAGE_REFRESH = "wb_refresh_token";
 const STORAGE_USER = "wb_user";
 /** Same name as `src/middleware.ts` — allows Edge middleware to verify JWT */
 const ACCESS_COOKIE = "wb_access_token";
+const CLIENT_HOME = "/app";
+const PUBLIC_AUTH_ROUTES = new Set(["/", "/landing", "/login", "/register", "/company/register"]);
 
 function setAccessCookie(accessToken: string) {
   if (typeof document === "undefined") return;
@@ -55,9 +57,11 @@ export function authenticatedDestination(user: Pick<StoredUser, "role">, request
     return user.role === "SUPPORT" ? "/admin/support" : "/admin";
   }
   if (user.role === "COMPANY") return "/company";
-  return requestedNext && requestedNext.startsWith("/") && !requestedNext.startsWith("//")
-    ? requestedNext
-    : "/";
+  if (requestedNext && requestedNext.startsWith("/") && !requestedNext.startsWith("//")) {
+    const nextPath = requestedNext.split(/[?#]/, 1)[0] || "/";
+    if (!PUBLIC_AUTH_ROUTES.has(nextPath)) return requestedNext;
+  }
+  return CLIENT_HOME;
 }
 
 function apiBase(): string {

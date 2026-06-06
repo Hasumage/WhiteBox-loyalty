@@ -67,6 +67,8 @@ const EMPTY_STATS = {
   usagePercent: 0,
 };
 
+const MIN_SUBSCRIPTION_PRICE_RUB = 299;
+
 const periodOptions = [
   { value: "DAY", label: "Каждый день", description: "Лимит обновляется ежедневно", icon: Sun },
   { value: "WEEK", label: "Каждую неделю", description: "Лимит обновляется раз в неделю", icon: CalendarDays },
@@ -399,14 +401,15 @@ export default function CompanySubscriptionsPage() {
   }
 
   async function saveSelectedPlan() {
-    if (!editingSubscription || !planEdit.name.trim() || !planEdit.description.trim() || !Number(planEdit.price)) return;
+    const priceAmount = Number(planEdit.price);
+    if (!editingSubscription || !planEdit.name.trim() || !planEdit.description.trim() || !Number.isFinite(priceAmount) || priceAmount < MIN_SUBSCRIPTION_PRICE_RUB) return;
     try {
       setError("");
       setSuccess("");
       await updateCompanySubscription(editingSubscription.uuid, {
         name: planEdit.name.trim(),
         description: planEdit.description.trim(),
-        price: Number(planEdit.price),
+        price: priceAmount,
         renewalValue: Number(planEdit.renewalValue) || 1,
         renewalUnit: planEdit.renewalUnit,
         acknowledgeSubscriberRefundPolicy: acknowledgeRefundPolicy,
@@ -671,7 +674,7 @@ export default function CompanySubscriptionsPage() {
                     </label>
                     <label className="space-y-2">
                       <span className="text-sm font-medium">Цена, ₽</span>
-                      <Input type="number" min={0} value={planEdit.price} onChange={(event) => setPlanEdit((current) => ({ ...current, price: event.target.value }))} className="h-12 rounded-xl" />
+                      <Input type="number" min={MIN_SUBSCRIPTION_PRICE_RUB} value={planEdit.price} onChange={(event) => setPlanEdit((current) => ({ ...current, price: event.target.value }))} className="h-12 rounded-xl" />
                     </label>
                     <label className="space-y-2">
                       <span className="text-sm font-medium">Срок</span>
@@ -809,7 +812,7 @@ export default function CompanySubscriptionsPage() {
                   <Button variant="outline" onClick={() => setEditingUuid("")} className="h-12 rounded-xl">
                     Закрыть
                   </Button>
-                  <Button onClick={() => void saveSelectedPlan()} disabled={!acknowledgeRefundPolicy || !planEdit.name.trim() || !Number(planEdit.price)} className="h-12 rounded-xl px-6">
+                  <Button onClick={() => void saveSelectedPlan()} disabled={!acknowledgeRefundPolicy || !planEdit.name.trim() || Number(planEdit.price) < MIN_SUBSCRIPTION_PRICE_RUB} className="h-12 rounded-xl px-6">
                     <Save />
                     Сохранить подписку
                   </Button>

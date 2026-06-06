@@ -118,6 +118,34 @@ export type TwaUserSubscription = {
   subscription: TwaSubscriptionPlan;
 };
 
+export type TwaPaymentStatus = "PENDING" | "WAITING_FOR_CAPTURE" | "SUCCEEDED" | "CANCELED" | "FAILED" | "REFUNDED";
+
+export type TwaPaymentCheckout = {
+  uuid: string;
+  status: TwaPaymentStatus;
+  amount: string;
+  currency: string;
+  confirmationUrl: string | null;
+  providerPaymentId: string | null;
+  providerStatus: string | null;
+  paidAt: string | null;
+  plan?: {
+    type: "subscription" | "bundle";
+    uuid: string;
+    name: string;
+    renewalValue: number;
+    renewalUnit: string;
+  } | null;
+  activatedSubscription?: {
+    id: number;
+    status: "ACTIVE" | "EXPIRED" | "CANCELED";
+    activatedAt: string;
+    expiresAt: string | null;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type TwaHistory = {
   transactions: Array<{
     uuid: string;
@@ -126,6 +154,22 @@ export type TwaHistory = {
     amount: number;
     description: string | null;
     occurredAt: string;
+    company: {
+      id: number;
+      slug: string;
+      name: string;
+      category: ApiCategory;
+    };
+  }>;
+  redemptions: Array<{
+    uuid: string;
+    source: "SUBSCRIPTION" | "BUNDLE";
+    quantity: number;
+    redeemedAt: string;
+    benefit: string;
+    benefitUuid: string;
+    planName: string;
+    planUuid: string;
     company: {
       id: number;
       slug: string;
@@ -247,6 +291,43 @@ export type UserTelegramLink = {
   token: string;
   expiresAt: string;
   deepLink: string;
+};
+
+export type UserCompanyReferralDashboard = {
+  code: string;
+  link: string;
+  minPayoutRub: number;
+  totals: {
+    companies: number;
+    activeCompanies: number;
+    recognizedGross: number;
+    futureGross: number;
+    referralCommission: number;
+    reserved: number;
+    paid: number;
+    available: number;
+  };
+  companies: Array<{
+    slug: string;
+    name: string;
+    status: string;
+    statusLabel: string;
+    pipelineStatus: string;
+    verificationStatus: string;
+    isActive: boolean;
+    referralPercent: number;
+    startedAt: string;
+    recognizedGross: number;
+    futureGross: number;
+    referralCommission: number;
+    activeSubscriptions: number;
+  }>;
+  payouts: Array<{
+    uuid: string;
+    amount: number;
+    status: string;
+    createdAt: string;
+  }>;
 };
 
 function apiBase(): string {
@@ -372,6 +453,25 @@ export async function requestTelegramPhone() {
     "/api/telegram/request-phone",
     { method: "POST" },
     "Failed to request Telegram phone.",
+  );
+}
+
+export async function getUserCompanyReferrals() {
+  return nextApiJson<UserCompanyReferralDashboard>(
+    "/api/user/company-referrals",
+    { method: "GET" },
+    "Failed to load company referrals.",
+  );
+}
+
+export async function requestUserCompanyReferralPayout(amount: number) {
+  return nextApiJson<{ operationUuid: string; dashboard: UserCompanyReferralDashboard }>(
+    "/api/user/company-referrals",
+    {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    },
+    "Failed to request referral payout.",
   );
 }
 
@@ -504,6 +604,7 @@ export function getTwaProfile() {
 
 const historyFallback: TwaHistory = {
   transactions: [],
+  redemptions: [],
   subscriptions: [],
   archivedSubscriptions: [],
 };
@@ -545,6 +646,36 @@ export async function activateTwaSubscription(uuid: string) {
   }
   const data = (await res.json()) as TwaUserSubscription;
   clearTwaCache();
+  return { ok: true as const, data };
+}
+
+export async function createTwaSubscriptionCheckout(uuid: string) {
+  const res = await fetch(`${apiBase()}/registered/payments/subscriptions/${uuid}/checkout`, {
+    method: "POST",
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const message = Array.isArray(data.message) ? data.message.join(", ") : data.message ?? "Failed";
+    return { ok: false as const, message };
+  }
+  const data = (await res.json()) as TwaPaymentCheckout;
+  return { ok: true as const, data };
+}
+
+export async function getTwaPayment(uuid: string) {
+  const res = await fetch(`${apiBase()}/registered/payments/${uuid}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const message = Array.isArray(data.message) ? data.message.join(", ") : data.message ?? "Failed";
+    return { ok: false as const, message };
+  }
+  const data = (await res.json()) as TwaPaymentCheckout;
+  if (data.status === "SUCCEEDED") clearTwaCache();
   return { ok: true as const, data };
 }
 

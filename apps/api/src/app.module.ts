@@ -12,6 +12,8 @@ import { HealthModule } from "./health/health.module";
 import { MaintenanceGuard } from "./maintenance/maintenance.guard";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { OAuthModule } from "./oauth/oauth.module";
+import { PaymentsModule } from "./payments/payments.module";
+import { RegisteredPaymentsController } from "./payments/registered-payments.controller";
 import { PrismaModule } from "./prisma/prisma.module";
 import { RegisteredController } from "./registered/registered.controller";
 import { RegisteredModule } from "./registered/registered.module";
@@ -31,6 +33,7 @@ import { RegisteredModule } from "./registered/registered.module";
     AdminModule,
     CompanyModule,
     RegisteredModule,
+    PaymentsModule,
     OAuthModule,
     HealthModule,
     MaintenanceModule,
@@ -44,6 +47,6 @@ import { RegisteredModule } from "./registered/registered.module";
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(JwtAuthMiddleware).forRoutes(AdminController, CompanyController, RegisteredController);
+    consumer.apply(JwtAuthMiddleware).forRoutes(AdminController, CompanyController, RegisteredController, RegisteredPaymentsController);
   }
 }

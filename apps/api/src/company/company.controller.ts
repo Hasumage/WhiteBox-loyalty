@@ -9,6 +9,7 @@ import { UpsertCompanyLocationDto } from "../admin/dto/upsert-company-location.d
 import { CompanyService } from "./company.service";
 import {
   AwardCompanyPointsDto,
+  ApplyCompanyBillingPromoDto,
   CreateCompanyClubBundleDto,
   CreateCompanyMemberDto,
   CreateSubscriptionEntitlementDto,
@@ -146,6 +147,21 @@ export class CompanyController {
   @Post("finance/payouts")
   requestPayout(@CurrentUser() user: RequestUser, @Body() dto: RequestCompanyPayoutDto) {
     return this.companyService.requestPayout(user.userId, dto);
+  }
+
+  @Get("billing")
+  billing(@CurrentUser() user: RequestUser) {
+    return this.companyService.billing(user.userId);
+  }
+
+  @Post("billing/promo")
+  applyBillingPromo(@CurrentUser() user: RequestUser, @Body() dto: ApplyCompanyBillingPromoDto) {
+    return this.companyService.applyBillingPromo(user.userId, dto);
+  }
+
+  @Post("billing/pay")
+  payBillingInvoice(@CurrentUser() user: RequestUser) {
+    return this.companyService.payBillingInvoice(user.userId);
   }
 
   @Get("subscriptions")

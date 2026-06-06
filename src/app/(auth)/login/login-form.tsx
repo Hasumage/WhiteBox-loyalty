@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { FrozenAccountDialog } from "@/components/auth/FrozenAccountDialog";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import {
   authenticatedDestination,
   login,
@@ -39,7 +40,7 @@ type TelegramWindow = Window & {
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useI18n("ru");
+  const { locale, setLocale, t } = useI18n("ru");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +149,7 @@ export function LoginForm() {
     <Card className="glass border-white/10">
       <CardHeader>
         <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-3">
-          <Link href="/landing" className="flex min-w-0 items-center gap-3">
+          <Link href="/" className="flex min-w-0 items-center gap-3">
             <WhiteBoxLogo className="h-9 w-9 shrink-0" />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold text-foreground">WhiteBox</span>
@@ -156,13 +157,16 @@ export function LoginForm() {
             </span>
           </Link>
           <Link
-            href="/landing"
+            href="/"
             className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
           >
             {t("client.auth.landing")} <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
-        <CardTitle>{t("client.auth.loginTitle")}</CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle>{t("client.auth.loginTitle")}</CardTitle>
+          <LanguageSwitcher locale={locale} onChange={(nextLocale) => void setLocale(nextLocale)} compact />
+        </div>
         <CardDescription>{t("client.auth.loginSubtitle")}</CardDescription>
       </CardHeader>
       <form onSubmit={onSubmit}>

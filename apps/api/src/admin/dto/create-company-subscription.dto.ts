@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { SubscriptionEntitlementWindow } from "@prisma/client";
 import { Type } from "class-transformer";
 import { ArrayMinSize, IsArray, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
+import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../../subscriptions/subscription-limits";
 
 export class CreateCompanySubscriptionEntitlementDto {
   @ApiProperty({ example: "Coffee of the day" })
@@ -44,9 +45,10 @@ export class CreateCompanySubscriptionDto {
   @MinLength(5)
   description!: string;
 
-  @ApiProperty({ example: 49.99 })
+  @ApiProperty({ example: 299, minimum: MIN_SUBSCRIPTION_PRICE_RUB, maximum: MAX_SUBSCRIPTION_PRICE_RUB })
   @IsNumber()
-  @Min(0)
+  @Min(MIN_SUBSCRIPTION_PRICE_RUB)
+  @Max(MAX_SUBSCRIPTION_PRICE_RUB)
   price!: number;
 
   @ApiPropertyOptional({ example: "month", description: "Legacy combined period label" })
