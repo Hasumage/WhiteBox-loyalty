@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n/use-i18n";
 import { formatPlanPrice as formatLocalizedPlanPrice, interpolate } from "@/lib/i18n/format";
 import { categoryName } from "@/lib/i18n/categories";
 import type { TranslateFn } from "@/lib/i18n/format";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -81,10 +82,14 @@ export default function WalletPage() {
     const cachedMarketplace = getCachedTwaMarketplace();
     if (cachedCompanies.length) {
       setCompanies(cachedCompanies);
-      setPlans(cachedMarketplace.subscriptions);
+      if (SUBSCRIPTIONS_ENABLED) setPlans(cachedMarketplace.subscriptions);
       setLoading(false);
     }
-    void Promise.all([getTwaCompanies(), getTwaMarketplace()]).then(([apiCompanies, marketplace]) => {
+    const requests = SUBSCRIPTIONS_ENABLED
+      ? Promise.all([getTwaCompanies(), getTwaMarketplace()] as const)
+      : Promise.all([getTwaCompanies(), Promise.resolve({ subscriptions: [] })] as const);
+
+    void requests.then(([apiCompanies, marketplace]) => {
       if (ignore) return;
       setCompanies(apiCompanies);
       setPlans(marketplace.subscriptions);

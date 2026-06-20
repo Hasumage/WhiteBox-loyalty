@@ -37,7 +37,7 @@ describe("passport storage", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "whitebox-passport-test-"));
+    dir = await mkdtemp(path.join(tmpdir(), "nearloy-passport-test-"));
     process.env.PASSPORT_STORAGE_DIR = dir;
     process.env.PASSPORT_STORAGE_SECRET = "test-secret-with-enough-length";
     jest.clearAllMocks();

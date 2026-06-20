@@ -149,6 +149,13 @@ enum PassportFileStatus {
   MISSING
 }
 
+enum CompanyKycAccessAction {
+  UPSERT_FROM_VERIFICATION
+  REVEAL_DATA
+  VIEW_PHOTO
+  DELETE_PHOTO
+}
+
 enum PromoCodeRewardType {
   POINTS
   SUBSCRIPTION
@@ -248,6 +255,28 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum EmailMessageStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum EmailMessageTargetType {
+  USER
+  COMPANY
+  DIRECT
+}
+
+enum EmailVerificationPurpose {
+  REGISTRATION
+}
+
+enum EmailVerificationStatus {
+  PENDING
+  CONSUMED
+  EXPIRED
+}
+
 model User {
   id              Int                @id @default(autoincrement())
   uuid            String             @unique @default(uuid())
@@ -305,6 +334,10 @@ model User {
   approvedSubscriptionBundleParticipants SubscriptionBundleParticipant[] @relation("SubscriptionBundleParticipantApprover")
   createdCompanyBillingPromoCodes CompanyBillingPromoCode[] @relation("CompanyBillingPromoCreator")
   payments Payment[]
+  kycAccessLogs CompanyKycAccessLog[] @relation("CompanyKycAccessActor")
+  deletedKycPhotos CompanyKycRecord[] @relation("CompanyKycPhotoDeletedBy")
+  sentEmailMessages EmailMessage[] @relation("EmailSender")
+  targetEmailMessages EmailMessage[] @relation("EmailTargetUser")
 }
 
 model ProfileStatus {
@@ -463,6 +496,8 @@ model Company {
   billingInvoices    CompanyBillingInvoice[]
   billingPromoRedemptions CompanyBillingPromoRedemption[]
   payments           Payment[]
+  kycRecord          CompanyKycRecord?
+  targetEmailMessages EmailMessage[] @relation("EmailTargetCompany")
 
   @@index([categoryId])
   @@index([supportManagerId])
@@ -654,10 +689,69 @@ model CompanyVerificationApplication {
 
   company           Company?                  @relation(fields: [companyId], references: [id], onDelete: SetNull)
   passportFiles     PassportVerificationFile[]
+  kycRecord         CompanyKycRecord?
 
   @@index([status, createdAt])
   @@index([contactEmail])
   @@index([legalInn])
+}
+
+model CompanyKycRecord {
+  id                       Int                       @id @default(autoincrement())
+  uuid                     String                    @unique @default(uuid())
+  companyId                Int                       @unique
+  applicationId            Int?                      @unique
+  status                   CompanyVerificationStatus @default(APPROVED)
+  employmentType           CompanyEmploymentType?
+  identityVerificationMode IdentityVerificationMode   @default(FULL)
+  legalFirstName           String?
+  legalMiddleName          String?
+  legalLastName            String?
+  birthDate                DateTime?
+  legalFullName            String?
+  legalInn                 String?
+  legalOgrnip              String?
+  legalRegistrationRegion  String?
+  passportEncryptedPayload String?
+  passportEncryptionIv     String?
+  passportEncryptionTag    String?
+  passportLast4            String?
+  passportPhotoEncrypted   Bytes?
+  passportPhotoEncryptionIv String?
+  passportPhotoEncryptionTag String?
+  passportPhotoMimeType    String?
+  passportPhotoOriginalName String?
+  passportPhotoSize        Int?
+  passportPhotoSha256      String?
+  passportPhotoDeletedAt   DateTime?
+  passportPhotoDeletedById Int?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  company                  Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  application              CompanyVerificationApplication? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  passportPhotoDeletedBy   User?                     @relation("CompanyKycPhotoDeletedBy", fields: [passportPhotoDeletedById], references: [id], onDelete: SetNull)
+  accessLogs               CompanyKycAccessLog[]
+
+  @@index([status, updatedAt])
+}
+
+model CompanyKycAccessLog {
+  id          Int                    @id @default(autoincrement())
+  uuid        String                 @unique @default(uuid())
+  kycRecordId Int
+  actorUserId Int?
+  action      CompanyKycAccessAction
+  reason      String?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime              @default(now())
+
+  kycRecord   CompanyKycRecord      @relation(fields: [kycRecordId], references: [id], onDelete: Cascade)
+  actor       User?                  @relation("CompanyKycAccessActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([kycRecordId, createdAt])
+  @@index([actorUserId, createdAt])
 }
 
 model PassportVerificationFile {
@@ -1204,6 +1298,56 @@ model EmailChangeRequest {
 
   @@index([userId])
   @@index([requestedByUserId])
+  @@index([expiresAt])
+}
+
+model EmailMessage {
+  id              String                 @id @default(cuid())
+  uuid            String                 @unique @default(uuid())
+  targetType      EmailMessageTargetType @default(DIRECT)
+  toEmail         String
+  toName          String?
+  subject         String
+  bodyText        String                 @db.Text
+  bodyHtml        String?                @db.Text
+  status          EmailMessageStatus     @default(PENDING)
+  provider        String?
+  error           String?                @db.Text
+  sentByUserId    Int?
+  targetUserId    Int?
+  targetCompanyId Int?
+  createdAt       DateTime               @default(now())
+  sentAt          DateTime?
+  updatedAt       DateTime               @updatedAt
+
+  sentBy        User?    @relation("EmailSender", fields: [sentByUserId], references: [id], onDelete: SetNull)
+  targetUser    User?    @relation("EmailTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  targetCompany Company? @relation("EmailTargetCompany", fields: [targetCompanyId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([toEmail])
+  @@index([sentByUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([targetCompanyId, createdAt])
+}
+
+model EmailVerificationCode {
+  id              String                  @id @default(cuid())
+  email           String
+  normalizedEmail String
+  name            String
+  passwordHash    String
+  role            UserRole                @default(CLIENT)
+  codeHash        String
+  purpose         EmailVerificationPurpose @default(REGISTRATION)
+  status          EmailVerificationStatus @default(PENDING)
+  attempts        Int                     @default(0)
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([normalizedEmail, status, expiresAt])
   @@index([expiresAt])
 }
 

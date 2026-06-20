@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
@@ -70,7 +70,7 @@ export function TwaLoadingScreen({
         </div>
 
         <div className="relative z-10">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-white/45">WhiteBox</p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-white/45">NearLoy</p>
           <h1 className="text-2xl font-semibold tracking-tight text-white">{displayTitle}</h1>
           <p className="mx-auto mt-2 max-w-[17rem] text-sm leading-relaxed text-white/58">{displaySubtitle}</p>
         </div>

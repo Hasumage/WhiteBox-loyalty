@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Building2, FileCheck, Landmark, Send, ShieldCheck, UploadCloud } from "lucide-react";
-import { WhiteBoxLogo } from "@/components/brand/WhiteBoxLogo";
+import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +37,7 @@ const copy = {
     meta: "верификация компании",
     back: "Лендинг",
     badge: "Ручная проверка",
-    title: "Регистрация компании в WhiteBox",
+    title: "Регистрация компании в NearLoy",
     intro:
       "Company-доступ выдается только проверенным партнерам. На старте мы просим только универсальные данные для заявки, а условия выплат и договорные поля подключим позже под конкретный тип бизнеса.",
     cards: [
@@ -97,7 +97,7 @@ const copy = {
     meta: "verified company onboarding",
     back: "Landing",
     badge: "Manual verification",
-    title: "Register a company in WhiteBox",
+    title: "Register a company in NearLoy",
     intro:
       "Company access is issued only to verified partners. We collect only universal application details first; payout and contract fields will be added later per business type.",
     cards: [
@@ -178,7 +178,7 @@ export default function CompanyRegisterPage() {
   useEffect(() => {
     setLocale(readClientLocale("en"));
     setCompanyReferralCode(new URLSearchParams(window.location.search).get("ref")?.trim() ?? "");
-    const raw = window.localStorage.getItem("whitebox.company-register-draft");
+    const raw = window.localStorage.getItem("nearloy.company-register-draft");
     if (!raw || !formRef.current) return;
     try {
       const draft = JSON.parse(raw) as Record<string, string>;
@@ -189,7 +189,7 @@ export default function CompanyRegisterPage() {
       if (draft.employmentType) setEmploymentType(draft.employmentType);
       setDraftSavedAt("restored");
     } catch {
-      window.localStorage.removeItem("whitebox.company-register-draft");
+      window.localStorage.removeItem("nearloy.company-register-draft");
     }
   }, []);
 
@@ -200,7 +200,7 @@ export default function CompanyRegisterPage() {
         .filter(([key]) => key !== "password" && key !== "passwordConfirm")
         .map(([key, value]) => [key, String(value)]),
     );
-    window.localStorage.setItem("whitebox.company-register-draft", JSON.stringify(draft));
+    window.localStorage.setItem("nearloy.company-register-draft", JSON.stringify(draft));
     setDraftSavedAt(new Date().toLocaleTimeString(locale === "ru" ? "ru-RU" : "en-US", { hour: "2-digit", minute: "2-digit" }));
   }
 
@@ -279,7 +279,7 @@ export default function CompanyRegisterPage() {
       if (!response.ok) throw new Error(result?.message || String(t.error));
       setStatus("sent");
       setMessage(String(t.success));
-      window.localStorage.removeItem("whitebox.company-register-draft");
+      window.localStorage.removeItem("nearloy.company-register-draft");
       form.reset();
       setEmploymentType("SELF_EMPLOYED");
       setPassportFileName("");
@@ -296,9 +296,9 @@ export default function CompanyRegisterPage() {
       <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-3">
-            <WhiteBoxLogo className="h-10 w-10" />
+            <NearLoyLogo className="h-10 w-10" />
             <div>
-              <p className="text-xl font-semibold">WhiteBox</p>
+              <p className="text-xl font-semibold">NearLoy</p>
               <p className="text-xs text-white/48">{String(t.meta)}</p>
             </div>
           </Link>

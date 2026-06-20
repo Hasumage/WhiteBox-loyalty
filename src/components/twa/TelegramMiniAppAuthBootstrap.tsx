@@ -60,7 +60,7 @@ export function TelegramMiniAppAuthBootstrap() {
 
       if ("accessToken" in result && result.accessToken) {
         setStoredSession(result);
-        window.dispatchEvent(new Event("whitebox:auth-updated"));
+        window.dispatchEvent(new Event("nearloy:auth-updated"));
         window.location.reload();
         return;
       }
@@ -68,7 +68,7 @@ export function TelegramMiniAppAuthBootstrap() {
       setAuthing(false);
       // No scary UI here: unlinked Telegram users can still sign in normally.
       console.info(
-        "WhiteBox Telegram Mini App auth skipped:",
+        "NearLoy Telegram Mini App auth skipped:",
         "message" in result ? result.message : "Unknown response",
       );
     })();
@@ -85,7 +85,7 @@ export function TelegramMiniAppAuthBootstrap() {
       <div className="glass max-w-xs rounded-3xl border border-cyan-200/20 p-6 shadow-[0_0_40px_rgba(103,232,249,0.12)]">
         <p className="text-lg font-semibold text-foreground">Входим через Telegram</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Проверяем подпись Mini App и открываем вашу WhiteBox-сессию.
+          Проверяем подпись Mini App и открываем вашу NearLoy-сессию.
         </p>
       </div>
     </div>

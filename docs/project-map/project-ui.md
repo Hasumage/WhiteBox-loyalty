@@ -1,4 +1,4 @@
-# WhiteBox - UI Components and Routes
+# NearLoy - UI Components and Routes
 
 ## Route structure
 
@@ -103,14 +103,14 @@
 
 ## Company UX
 
-- The company portal follows the admin console visual language while keeping permissions isolated from WhiteBox staff roles.
+- The company portal follows the admin console visual language while keeping permissions isolated from NearLoy staff roles.
 - Cashiers land on customer operations: QR open, scoped search, fixed point award, purchase cashback and entitlement redemption.
 - Owners and managers maintain plans, usage limits, staff access and payout requests.
 - Finance cards explicitly distinguish monthly forecast from funds approved for payout.
 
 ## Key components
 
-- `WhiteBoxLogo` - portal brand.
+- `NearLoyLogo` - portal brand.
 - `BottomNav` - TWA nav.
 - `CategoryIcon` - shared category icon renderer.
 - `CategoryChipStrip` - horizontal category chips.

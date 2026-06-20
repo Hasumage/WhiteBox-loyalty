@@ -42,13 +42,13 @@ export const adminDictionary = {
     "admin.telegram.connectedSuccess": "Everything is ready, notifications will arrive in direct messages.",
     "admin.telegram.connectedText": "This account is already linked to Telegram. New company verification requests will be sent to the connected administrator.",
     "admin.telegram.chatId": "Connected chat id",
-    "admin.telegram.linkHint": "The link is valid for 15 minutes. It opens the WhiteBox bot and sends a one-time /start token. After that, Telegram chat id is stored in your admin account.",
+    "admin.telegram.linkHint": "The link is valid for 15 minutes. It opens the NearLoy bot and sends a one-time /start token. After that, Telegram chat id is stored in your admin account.",
     "admin.telegram.reconnect": "Reconnect Telegram",
     "admin.telegram.createSecureLink": "Create secure link",
     "admin.telegram.reconnectHint": "If you changed Telegram account, create a new link and open it in the correct profile.",
     "admin.telegram.routingBadge": "Telegram routing",
     "admin.telegram.centerTitle": "Telegram notification center",
-    "admin.telegram.centerDescription": "Notifications are routed through database admins. Environment variables configure the bot only, not the people who receive messages.",
+    "admin.telegram.centerDescription": "Admin notifications are routed to the shared Telegram admin chat. Personal Telegram links are kept for user-specific flows.",
     "admin.telegram.refresh": "Refresh",
     "admin.telegram.connectMy": "Connect my Telegram",
     "admin.telegram.reconnectMy": "Reconnect my Telegram",
@@ -77,7 +77,7 @@ export const adminDictionary = {
     "admin.telegram.noRouting": "No routing",
     "admin.telegram.access": "Access",
     "admin.telegram.noAdmins": "No admin users found.",
-    "admin.telegram.routingNote": "Notification recipients are active ADMIN, SUPER_ADMIN and MANAGER accounts with linked Telegram. SUPPORT can connect Telegram for future support flows, but does not receive company verification or landing lead notifications by default."
+    "admin.telegram.routingNote": "Operational events use TELEGRAM_ADMIN_CHAT_ID. Personal Telegram links are not admin notification routing rules."
   },
   ru: {
     "admin.layout.workspace": "Рабочая область админки",
@@ -122,13 +122,13 @@ export const adminDictionary = {
     "admin.telegram.connectedSuccess": "Всё готово, уведомления будут приходить в личку.",
     "admin.telegram.connectedText": "Этот аккаунт уже связан с Telegram. Новые заявки на верификацию компаний будут отправляться подключенному администратору.",
     "admin.telegram.chatId": "Подключённый chat id",
-    "admin.telegram.linkHint": "Ссылка действует 15 минут. Она открывает бота WhiteBox и отправляет одноразовый токен /start. После этого Telegram chat id сохраняется в вашей админской учётной записи.",
+    "admin.telegram.linkHint": "Ссылка действует 15 минут. Она открывает бота NearLoy и отправляет одноразовый токен /start. После этого Telegram chat id сохраняется в вашей админской учётной записи.",
     "admin.telegram.reconnect": "Переподключить Telegram",
     "admin.telegram.createSecureLink": "Создать защищённую ссылку",
     "admin.telegram.reconnectHint": "Если поменяли Telegram-аккаунт, создайте новую ссылку и откройте её в нужном профиле.",
     "admin.telegram.routingBadge": "Маршрутизация Telegram",
     "admin.telegram.centerTitle": "Центр Telegram-уведомлений",
-    "admin.telegram.centerDescription": "Уведомления отправляются администраторам из базы данных. Переменные окружения настраивают только бота, а не людей, которые получают сообщения.",
+    "admin.telegram.centerDescription": "Админские уведомления уходят в общий Telegram-чат команды. Личные привязки Telegram остаются для персональных сценариев.",
     "admin.telegram.refresh": "Обновить",
     "admin.telegram.connectMy": "Подключить мой Telegram",
     "admin.telegram.reconnectMy": "Переподключить мой Telegram",
@@ -157,6 +157,6 @@ export const adminDictionary = {
     "admin.telegram.noRouting": "Не получает",
     "admin.telegram.access": "Доступ",
     "admin.telegram.noAdmins": "Админы не найдены.",
-    "admin.telegram.routingNote": "Получатели уведомлений — активные ADMIN, SUPER_ADMIN и MANAGER с подключённым Telegram. SUPPORT может подключить Telegram для будущих саппорт-сценариев, но по умолчанию не получает заявки на верификацию компаний и лиды с лендинга."
+    "admin.telegram.routingNote": "Операционные события используют TELEGRAM_ADMIN_CHAT_ID. Личные привязки Telegram больше не являются маршрутом админских уведомлений."
   }
 } as const;

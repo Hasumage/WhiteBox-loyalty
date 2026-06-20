@@ -13,6 +13,7 @@ import { categoryName } from "@/lib/i18n/categories";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { formatPlanPrice as formatLocalizedPlanPrice, interpolate } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/format";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 function titleFromSlug(slug: string) {
   return slug
@@ -38,7 +39,11 @@ export default function CategoryDetailPage() {
 
   useEffect(() => {
     let ignore = false;
-    void Promise.all([getTwaCompanies(), getTwaMarketplace()]).then(([apiCompanies, marketplace]) => {
+    const requests = SUBSCRIPTIONS_ENABLED
+      ? Promise.all([getTwaCompanies(), getTwaMarketplace()] as const)
+      : Promise.all([getTwaCompanies(), Promise.resolve({ subscriptions: [] })] as const);
+
+    void requests.then(([apiCompanies, marketplace]) => {
       if (ignore) return;
       setCompanies(apiCompanies);
       setPlans(marketplace.subscriptions);
@@ -82,31 +87,33 @@ export default function CategoryDetailPage() {
       </div>
       <p className="mb-4 text-sm text-muted-foreground">{t("client.category.partnersPlans")}</p>
 
-      <section className="mb-6">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-          <CircleDollarSign className="h-4 w-4" />
-          {t("client.category.subscriptions")}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {categoryPlans.map((plan, idx) => (
-            <Link key={plan.uuid} href={`/marketplace/${plan.uuid}`}>
-              <Card className="glass overflow-hidden border-white/10 transition-all hover:border-white/20">
-                <div className="h-24 w-full bg-gradient-to-br from-primary/20 via-primary/10 to-muted/30 p-3">
-                  <div className="flex h-full items-end">
-                    <span className="rounded-full bg-background/70 px-2 py-1 text-xs">{interpolate(t("client.category.top"), { index: idx + 1 })}</span>
+      {SUBSCRIPTIONS_ENABLED && (
+        <section className="mb-6">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <CircleDollarSign className="h-4 w-4" />
+            {t("client.category.subscriptions")}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {categoryPlans.map((plan, idx) => (
+              <Link key={plan.uuid} href={`/marketplace/${plan.uuid}`}>
+                <Card className="glass overflow-hidden border-white/10 transition-all hover:border-white/20">
+                  <div className="h-24 w-full bg-gradient-to-br from-primary/20 via-primary/10 to-muted/30 p-3">
+                    <div className="flex h-full items-end">
+                      <span className="rounded-full bg-background/70 px-2 py-1 text-xs">{interpolate(t("client.category.top"), { index: idx + 1 })}</span>
+                    </div>
                   </div>
-                </div>
-                <CardContent className="p-3">
-                  <p className="text-sm font-semibold">{plan.name}</p>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{plan.description}</p>
-                  <p className="mt-2 text-sm font-medium text-primary">{formatPlanPrice(plan, t)}</p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-        {categoryPlans.length === 0 && <p className="py-4 text-sm text-muted-foreground">{t("client.category.noSubscriptions")}</p>}
-      </section>
+                  <CardContent className="p-3">
+                    <p className="text-sm font-semibold">{plan.name}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{plan.description}</p>
+                    <p className="mt-2 text-sm font-medium text-primary">{formatPlanPrice(plan, t)}</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+          {categoryPlans.length === 0 && <p className="py-4 text-sm text-muted-foreground">{t("client.category.noSubscriptions")}</p>}
+        </section>
+      )}
 
       <section>
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">

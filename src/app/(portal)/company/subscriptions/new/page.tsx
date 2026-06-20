@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { OptionSelect } from "@/components/ui/option-select";
+import { SubscriptionsComingSoon } from "@/components/subscriptions/SubscriptionsComingSoon";
 import { Textarea } from "@/components/ui/textarea";
 import { companyProfile, createCompanySubscription, type EntitlementWindow } from "@/lib/api/company-client";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 type RenewalUnit = "week" | "month" | "year";
 
@@ -59,6 +61,14 @@ function entitlementWindowLabel(unit: EntitlementWindow) {
 }
 
 export default function NewCompanySubscriptionPage() {
+  if (!SUBSCRIPTIONS_ENABLED) {
+    return <SubscriptionsComingSoon mode="company" backHref="/company/subscriptions" primaryHref="/company/clients" />;
+  }
+
+  return <NewCompanySubscriptionEnabledPage />;
+}
+
+function NewCompanySubscriptionEnabledPage() {
   const router = useRouter();
   const [canManage, setCanManage] = useState(false);
   const [loading, setLoading] = useState(true);

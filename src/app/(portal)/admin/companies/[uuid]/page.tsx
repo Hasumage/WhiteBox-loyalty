@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -54,6 +54,7 @@ import {
   adminGetCompanyReferral,
   adminGetCompanyUser,
   adminListCategories,
+  adminSendEmail,
   adminUpdateCompanyLocation,
   adminUpdateCompanySubscription,
   adminUpdateCompanyUser,
@@ -301,6 +302,9 @@ export default function AdminCompanyProfilePage() {
   const [referral, setReferral] = useState<AdminCompanyReferralResponse | null>(null);
   const [referralQuery, setReferralQuery] = useState("");
   const [referralSaving, setReferralSaving] = useState(false);
+  const [companyEmailSubject, setCompanyEmailSubject] = useState("");
+  const [companyEmailMessage, setCompanyEmailMessage] = useState("");
+  const [companyEmailSending, setCompanyEmailSending] = useState(false);
   const [referralDraft, setReferralDraft] = useState<{
     referrerUserId: string;
     referralPercent: string;
@@ -688,7 +692,7 @@ export default function AdminCompanyProfilePage() {
       return;
     }
     if (!Number.isFinite(referralPercent) || referralPercent < 0 || referralPercent > 12) {
-      setError("\u041f\u0440\u043e\u0446\u0435\u043d\u0442 \u0440\u0435\u0444\u0435\u0440\u0430\u043b\u0430 \u0434\u043e\u043b\u0436\u0435\u043d \u0431\u044b\u0442\u044c \u043e\u0442 0 \u0434\u043e 12% \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 WhiteBox.");
+      setError("\u041f\u0440\u043e\u0446\u0435\u043d\u0442 \u0440\u0435\u0444\u0435\u0440\u0430\u043b\u0430 \u0434\u043e\u043b\u0436\u0435\u043d \u0431\u044b\u0442\u044c \u043e\u0442 0 \u0434\u043e 12% \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 NearLoy.");
       return;
     }
     setReferralSaving(true);
@@ -1018,6 +1022,27 @@ export default function AdminCompanyProfilePage() {
     setNotice(t("admin.companyDetail.allSaved"));
   }
 
+  async function sendCompanyEmail() {
+    if (!companyEmailSubject.trim() || !companyEmailMessage.trim()) return;
+    setCompanyEmailSending(true);
+    setNotice(null);
+    const response = await adminSendEmail({
+      targetType: "COMPANY",
+      targetUuid: companyUserUuid,
+      subject: companyEmailSubject.trim(),
+      message: companyEmailMessage.trim(),
+    });
+    setCompanyEmailSending(false);
+    if (!response.ok) {
+      setError(typeof response.message === "string" ? response.message : "Не удалось отправить письмо компании");
+      return;
+    }
+    setError(null);
+    setNotice(`Письмо отправлено на ${response.data.sentTo}.`);
+    setCompanyEmailSubject("");
+    setCompanyEmailMessage("");
+  }
+
   if (error && !accountForm && !companyForm) {
     return (
       <Card className="glass border-destructive/30">
@@ -1167,7 +1192,7 @@ export default function AdminCompanyProfilePage() {
                 {"\u0050\u0052 \u0438 \u0440\u0435\u0444\u0435\u0440\u0430\u043b\u044c\u043d\u0430\u044f \u0430\u0442\u0440\u0438\u0431\u0443\u0446\u0438\u044f"}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                {"\u041e\u0434\u0438\u043d \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u0440\u0435\u0444\u0435\u0440\u0430\u043b \u043d\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u044e. \u0412\u044b\u043f\u043b\u0430\u0442\u0430 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f \u043e\u0442 \u043e\u0431\u043e\u0440\u043e\u0442\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u043e\u043a \u0438 \u0443\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0438\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 WhiteBox, \u0430 \u043d\u0435 \u0438\u0437 \u0431\u0430\u043b\u0430\u043d\u0441\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438."}
+                {"\u041e\u0434\u0438\u043d \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u0440\u0435\u0444\u0435\u0440\u0430\u043b \u043d\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u044e. \u0412\u044b\u043f\u043b\u0430\u0442\u0430 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f \u043e\u0442 \u043e\u0431\u043e\u0440\u043e\u0442\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u043e\u043a \u0438 \u0443\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0438\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 NearLoy, \u0430 \u043d\u0435 \u0438\u0437 \u0431\u0430\u043b\u0430\u043d\u0441\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438."}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1216,14 +1241,14 @@ export default function AdminCompanyProfilePage() {
                   icon: CalendarClock,
                 },
                 {
-                  label: "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f WhiteBox",
+                  label: "\u041a\u043e\u043c\u0438\u0441\u0441\u0438\u044f NearLoy",
                   hint: "12% \u043e\u0442 \u043e\u0431\u043e\u0440\u043e\u0442\u0430",
                   value: `${formatPrice(referralRevenue?.platformCommissionGross ?? 0)} \u20bd`,
                   icon: BadgePercent,
                 },
                 {
                   label: "\u0412\u044b\u043f\u043b\u0430\u0442\u0430 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u043c\u0443",
-                  hint: "\u0438\u0437 \u0434\u043e\u043b\u0438 WhiteBox",
+                  hint: "\u0438\u0437 \u0434\u043e\u043b\u0438 NearLoy",
                   value: `${formatPrice(referralRevenue?.referralCommission ?? 0)} \u20bd`,
                   icon: Handshake,
                 },
@@ -1400,13 +1425,13 @@ export default function AdminCompanyProfilePage() {
                   </div>
                   <p className="text-lg font-semibold">{"\u041a\u0430\u043a \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f"}</p>
                   <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                    {"\u041a\u043e\u043c\u043f\u0430\u043d\u0438\u044f \u043f\u043b\u0430\u0442\u0438\u0442 12% \u0441 \u043e\u0431\u043e\u0440\u043e\u0442\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u043e\u043a. \u0415\u0441\u043b\u0438 \u0437\u0430 \u043d\u0435\u0439 \u0437\u0430\u043a\u0440\u0435\u043f\u043b\u0451\u043d \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439, \u0435\u0433\u043e \u043f\u0440\u043e\u0446\u0435\u043d\u0442 \u0432\u044b\u043f\u043b\u0430\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0438\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 WhiteBox."}
+                    {"\u041a\u043e\u043c\u043f\u0430\u043d\u0438\u044f \u043f\u043b\u0430\u0442\u0438\u0442 12% \u0441 \u043e\u0431\u043e\u0440\u043e\u0442\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u043e\u043a. \u0415\u0441\u043b\u0438 \u0437\u0430 \u043d\u0435\u0439 \u0437\u0430\u043a\u0440\u0435\u043f\u043b\u0451\u043d \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439, \u0435\u0433\u043e \u043f\u0440\u043e\u0446\u0435\u043d\u0442 \u0432\u044b\u043f\u043b\u0430\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0438\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 NearLoy."}
                   </p>
                   <div className="mt-5 grid gap-3 text-sm">
                     <div className="rounded-2xl border border-white/10 bg-background/50 p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{"\u041f\u0440\u0438\u043c\u0435\u0440"}</p>
                       <p className="mt-2 leading-6 text-muted-foreground">
-                        {"56 000 \u20bd \u043e\u0431\u043e\u0440\u043e\u0442\u0430 \u2192 6 720 \u20bd \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 WhiteBox \u2192 560 \u20bd \u0432\u044b\u043f\u043b\u0430\u0442\u044b \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u043c\u0443 \u2192 6 160 \u20bd \u0447\u0438\u0441\u0442\u043e\u0439 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438."}
+                        {"56 000 \u20bd \u043e\u0431\u043e\u0440\u043e\u0442\u0430 \u2192 6 720 \u20bd \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 NearLoy \u2192 560 \u20bd \u0432\u044b\u043f\u043b\u0430\u0442\u044b \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u043c\u0443 \u2192 6 160 \u20bd \u0447\u0438\u0441\u0442\u043e\u0439 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438."}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.055] p-4">
@@ -1505,6 +1530,41 @@ export default function AdminCompanyProfilePage() {
             <Save className="h-4 w-4" />
             {t("admin.companyDetail.saveAccount")}
           </Button>
+          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/[0.045] p-4">
+            <div className="mb-3 space-y-1">
+              <p className="inline-flex items-center gap-2 font-semibold">
+                <Megaphone className="h-4 w-4 text-cyan-100" />
+                Написать компании
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Отправьте письмо владельцу компании. Сообщение сохранится в истории email.
+              </p>
+            </div>
+            <div className="grid gap-3">
+              <Input
+                value={companyEmailSubject}
+                onChange={(event) => setCompanyEmailSubject(event.target.value)}
+                placeholder="Тема письма"
+                maxLength={160}
+              />
+              <Textarea
+                value={companyEmailMessage}
+                onChange={(event) => setCompanyEmailMessage(event.target.value)}
+                placeholder="Текст письма владельцу компании"
+                rows={5}
+                maxLength={4000}
+              />
+              <Button
+                type="button"
+                className="w-full sm:w-fit"
+                onClick={() => void sendCompanyEmail()}
+                disabled={companyEmailSending || !companyEmailSubject.trim() || !companyEmailMessage.trim()}
+              >
+                <Megaphone className="h-4 w-4" />
+                {companyEmailSending ? "Отправляем..." : "Отправить письмо"}
+              </Button>
+            </div>
+          </div>
         </CardContent>}
       </Card>
 

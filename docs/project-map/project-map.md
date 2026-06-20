@@ -1,8 +1,8 @@
-# WhiteBox - Project Map
+# NearLoy - Project Map
 
 ## Current product shape
 
-WhiteBox is a loyalty marketplace with four active surfaces:
+NearLoy is a loyalty marketplace with four active surfaces:
 
 - TWA/mobile client app for end users.
 - Public landing and verified company intake.
@@ -12,7 +12,7 @@ WhiteBox is a loyalty marketplace with four active surfaces:
 The runtime is a monorepo:
 
 ```text
-whitebox/
+nearloy/
   apps/api/              # NestJS REST API
   prisma/                # Prisma schema, migrations, seed
   src/app/(auth)/        # Login/register/email confirmation
@@ -73,7 +73,7 @@ Admin:
 
 Public:
 
-- `/landing` dark WhiteBox marketing landing with Telegram-backed contact form.
+- `/landing` dark NearLoy marketing landing with Telegram-backed contact form.
 - `/company/register` multi-step company account request and verification form.
 
 Company portal:
@@ -101,7 +101,7 @@ Company portal:
 - `src/lib/i18n/*` - portable RU/EN dictionaries, locale detection and persistence.
 - `src/lib/telegram/*` - Telegram client, webhook handlers, admin linking and delivery tests.
 - `src/lib/api/admin-client.ts`, `src/lib/api/twa-client.ts`, `src/lib/api/auth-client.ts` - frontend API clients.
-- `.github/workflows/whitebox-ci-cd.yml` - PR verification and production migration gate.
+- `.github/workflows/nearloy-ci-cd.yml` - PR verification and production migration gate.
 
 ## Local and production environments
 
@@ -109,7 +109,7 @@ Company portal:
 - Production DB credentials live in Railway variables and GitHub Secrets, not in committed files.
 - PRs run full checks against a temporary GitHub Actions PostgreSQL service.
 - Pushes to `main` run the same checks and then apply production Prisma migrations.
-- Railway deploys `whitebox-api` and `whitebox-web` from `main`.
+- Railway deploys `nearloy-api` and `nearloy-web` from `main`.
 
 ## Notes
 

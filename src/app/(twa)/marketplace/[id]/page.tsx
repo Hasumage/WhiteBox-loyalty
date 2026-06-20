@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
+import { SubscriptionsComingSoon } from "@/components/subscriptions/SubscriptionsComingSoon";
 import {
   createTwaSubscriptionCheckout,
   getCachedTwaMarketplace,
@@ -17,6 +18,7 @@ import {
   type TwaSubscriptionPlan,
 } from "@/lib/api/twa-client";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { categoryName } from "@/lib/i18n/categories";
 import { formatPlanPrice as formatLocalizedPlanPrice, formatRenewal as formatLocalizedRenewal } from "@/lib/i18n/format";
@@ -46,6 +48,14 @@ function entitlementLimit(
 }
 
 export default function SubscriptionDetailPage() {
+  if (!SUBSCRIPTIONS_ENABLED) {
+    return <SubscriptionsComingSoon mode="client" backHref="/marketplace" primaryHref="/map" />;
+  }
+
+  return <SubscriptionDetailEnabledPage />;
+}
+
+function SubscriptionDetailEnabledPage() {
   const { locale, t } = useI18n("ru");
   const params = useParams();
   const id = String(params.id ?? "");

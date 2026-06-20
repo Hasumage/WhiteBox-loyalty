@@ -5,11 +5,11 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowRight, BadgeCheck, BellRing, Gift, QrCode, Sparkles, TicketCheck, WalletCards } from "lucide-react";
 import { LandingLeadForm } from "@/components/landing/LandingLeadForm";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
-import { OpenWhiteBoxDemo } from "@/components/landing/OpenWhiteBoxDemo";
+import { OpenNearLoyDemo } from "@/components/landing/OpenNearLoyDemo";
 
 export const metadata: Metadata = {
-  title: "WhiteBox — бонусы, подписки и сервис для клиентов",
-  description: "WhiteBox помогает клиентам хранить бонусы, подписки, статусы и историю операций в одном удобном интерфейсе.",
+  title: "NearLoy — бонусы, подписки и сервис для клиентов",
+  description: "NearLoy помогает клиентам хранить бонусы, подписки, статусы и историю операций в одном удобном интерфейсе.",
 };
 
 type IconItem = {
@@ -26,7 +26,7 @@ const userHighlights: IconItem[] = [
 ];
 
 const steps = [
-  { title: "Откройте WhiteBox", text: "Войдите в приложение или Telegram Mini App и получите доступ к своему кошельку." },
+  { title: "Откройте NearLoy", text: "Войдите в приложение или Telegram Mini App и получите доступ к своему кошельку." },
   { title: "Найдите партнёра", text: "Карта и категории помогают выбрать компанию рядом или онлайн-сервис." },
   { title: "Покажите QR", text: "Кассир быстро найдёт профиль, начислит баллы или погасит услугу подписки." },
   { title: "Следите за выгодой", text: "История, статусы и подписки остаются прозрачными и доступны в любой момент." },
@@ -88,7 +88,7 @@ export default function HomePage() {
             Бонусы, подписки и статусы в одном интерфейсе
           </div>
           <h1 className="mt-7 max-w-4xl text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
-            WhiteBox для клиентов, которые хотят получать больше от любимых компаний
+            NearLoy для клиентов, которые хотят получать больше от любимых компаний
           </h1>
           <p className="mt-6 max-w-2xl text-xl leading-9 text-white/62">
             Храните бонусы, подписки, уровни и историю операций в телефоне. Показывайте QR на кассе, получайте сервис быстрее и используйте преимущества партнёров без пластиковых карт.
@@ -104,7 +104,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <HeroImagePanel src="/landing/user-rewards-status.png" alt="WhiteBox loyalty status dashboard with rewards and progress" />
+        <HeroImagePanel src="/landing/user-rewards-status.png" alt="NearLoy loyalty status dashboard with rewards and progress" />
       </section>
 
       <section className="relative z-10 border-y border-white/10 bg-white/[0.035] py-16">
@@ -124,13 +124,13 @@ export default function HomePage() {
       <section className="relative z-10 py-16">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-8">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">WhiteBox внутри</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">NearLoy внутри</p>
             <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Ваш QR-кошелёк, бонусы и подписки в одном пространстве</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
-              WhiteBox собирает ключевые сценарии клиента: быстрый QR на кассе, бонусы, подписки, уровни и историю действий. Всё выглядит как единый сервис, а не набор разрозненных карт.
+              NearLoy собирает ключевые сценарии клиента: быстрый QR на кассе, бонусы, подписки, уровни и историю действий. Всё выглядит как единый сервис, а не набор разрозненных карт.
             </p>
           </div>
-          <OpenWhiteBoxDemo />
+          <OpenNearLoyDemo />
         </div>
       </section>
 
@@ -187,7 +187,7 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">Для бизнеса</p>
-            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Если вы компания, у WhiteBox есть отдельная страница</h2>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Если вы компания, у NearLoy есть отдельная страница</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
               Мы разделили лендинг: клиентская страница объясняет удобство сервиса, а бизнес-страница показывает подписки, финансы, кассу, роли и возврат клиентов.
             </p>
@@ -211,7 +211,7 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:items-start lg:px-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">Контакт</p>
-            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Хотите попробовать WhiteBox?</h2>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Хотите попробовать NearLoy?</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
               Напишите, какой сценарий интересен: бонусы, подписки, карта партнёров, Telegram Mini App или пилот с конкретной компанией.
             </p>

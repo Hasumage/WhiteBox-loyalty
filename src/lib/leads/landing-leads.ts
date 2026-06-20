@@ -8,6 +8,7 @@ import {
   type LandingLead,
   type TelegramRecipient,
 } from "@/lib/telegram/telegram-service";
+import { adminTelegramRecipients as sharedAdminTelegramRecipients } from "@/lib/telegram/admin-chat";
 import { checkTelegramDeliveryFire } from "@/lib/telegram/telegram-queue";
 
 export const LANDING_LEAD_MAX_FIELD_LENGTH = 1200;
@@ -115,29 +116,7 @@ export function publicLeadUrl(leadUuid: string) {
 }
 
 export async function adminTelegramRecipients(): Promise<TelegramRecipient[]> {
-  const admins = await prisma.user.findMany({
-    where: {
-      role: { in: ["ADMIN", "SUPER_ADMIN", "MANAGER"] },
-      telegramId: { not: null },
-      accountStatus: "ACTIVE",
-    },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      telegramId: true,
-    },
-    orderBy: { id: "asc" },
-  });
-
-  return admins
-    .filter((admin) => admin.telegramId)
-    .map((admin) => ({
-      chatId: admin.telegramId!.toString(),
-      role: admin.role.toLowerCase(),
-      label: admin.name || admin.email || `admin:${admin.id}`,
-    }));
+  return sharedAdminTelegramRecipients();
 }
 
 export async function isDuplicateLead(

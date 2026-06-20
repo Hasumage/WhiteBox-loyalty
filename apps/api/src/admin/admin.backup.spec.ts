@@ -1,4 +1,5 @@
 import { AdminService } from "./admin.service";
+import { EmailService } from "../email/email.service";
 
 describe("AdminService company workspace backup coverage", () => {
   it("includes operational company tables in snapshot collection", async () => {
@@ -44,6 +45,7 @@ describe("AdminService company workspace backup coverage", () => {
       prisma as never,
       { get: jest.fn() } as never,
       { setRestoreStage: jest.fn() } as never,
+      { sendEmailChangeConfirmation: jest.fn(), sendAdminMessage: jest.fn() } as unknown as EmailService,
     );
 
     const tables = await (

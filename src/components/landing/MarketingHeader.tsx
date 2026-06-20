@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, Building2, LogIn, UserRound } from "lucide-react";
-import { WhiteBoxLogo } from "@/components/brand/WhiteBoxLogo";
+import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
@@ -55,10 +55,10 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-3">
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-200/40 bg-cyan-200/10 text-cyan-100 shadow-[0_0_24px_rgba(103,232,249,0.18)]">
-            <WhiteBoxLogo className="h-7 w-7" />
+            <NearLoyLogo className="h-7 w-7" />
           </span>
           <span>
-            <span className="block text-xl font-semibold leading-none text-white">WhiteBox</span>
+            <span className="block text-xl font-semibold leading-none text-white">NearLoy</span>
             <span className="mt-1 block text-xs text-white/46">{labels.subtitle}</span>
           </span>
         </Link>

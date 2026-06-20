@@ -1,5 +1,5 @@
 {
-  "name": "whitebox",
+  "name": "nearloy",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
@@ -14,6 +14,7 @@
     "db:status": "prisma migrate status",
     "db:validate": "prisma validate",
     "db:seed": "node prisma/seed.mjs",
+    "db:seed:map-demo": "node prisma/seed-map-demo.mjs",
     "db:seed:profile-statuses": "node prisma/seed-profile-statuses.mjs",
     "db:seed:company-subscriptions": "node prisma/seed-company-subscriptions.mjs",
     "db:seed:subscription-entitlements": "node prisma/seed-subscription-entitlements.mjs",
@@ -30,10 +31,10 @@
     "start:web": "next start",
     "lint": "eslint",
     "ci:verify": "npm run db:generate && npm run db:validate && npm run test:web && npm run lint && npm run build:web && npm run api:build && npm run api:test",
-    "api:dev": "npm run start:dev -w whitebox-api",
-    "api:build": "npm run build -w whitebox-api",
-    "api:start": "npm run start:prod -w whitebox-api",
-    "api:test": "npm run test -w whitebox-api",
+    "api:dev": "npm run start:dev -w nearloy-api",
+    "api:build": "npm run build -w nearloy-api",
+    "api:start": "npm run start:prod -w nearloy-api",
+    "api:test": "npm run test -w nearloy-api",
     "telegram:poll:local": "node scripts/telegram-poll-local.mjs"
   },
   "dependencies": {

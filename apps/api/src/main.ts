@@ -17,7 +17,7 @@ async function bootstrap() {
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle("WhiteBox API")
+    .setTitle("NearLoy API")
     .setDescription(
       "Authentication (Passport + JWT), user roles (CLIENT / COMPANY / ADMIN), OAuth groundwork. Existing TWA UI targets CLIENT users.",
     )

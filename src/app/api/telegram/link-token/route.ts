@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       telegramLinkToken.create({ data: { token, userId: user.id, expiresAt } }),
     ]);
 
-    const username = (process.env.TELEGRAM_BOT_USERNAME || "White_Box_Loyalty_bot").replace(/^@/, "");
+    const username = (process.env.TELEGRAM_BOT_USERNAME || "NearLoy_Loyalty_bot").replace(/^@/, "");
     return NextResponse.json({ token, expiresAt, deepLink: `https://t.me/${username}?start=link_${token}` });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create Telegram link";

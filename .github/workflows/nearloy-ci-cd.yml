@@ -1,4 +1,4 @@
-name: WhiteBox CI/CD
+name: NearLoy CI/CD
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ on:
       - main
 
 concurrency:
-  group: whitebox-${{ github.ref }}
+  group: nearloy-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -78,7 +78,7 @@ jobs:
       DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
       DIRECT_URL: ${{ secrets.PRODUCTION_DIRECT_URL || secrets.PRODUCTION_DATABASE_URL }}
       JWT_SECRET: production-migration-job-does-not-sign-runtime-tokens
-      NEXT_PUBLIC_API_URL: https://whitebox-api-production.up.railway.app/api
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -105,4 +105,4 @@ jobs:
       - name: Deployment handoff
         run: |
           echo "Production migrations are applied."
-          echo "Railway should deploy whitebox-api and whitebox-web from main after this workflow is green."
+          echo "Railway should deploy the configured API and web services from main after this workflow is green."

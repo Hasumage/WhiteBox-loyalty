@@ -77,7 +77,7 @@ export default function CompanyTeamPage() {
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">Доступ сотрудников</p>
         <h1 className="text-3xl font-semibold">Команда компании</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Эти роли действуют только внутри вашей компании и никогда не дают доступ к админке WhiteBox.
+          Эти роли действуют только внутри вашей компании и никогда не дают доступ к админке NearLoy.
         </p>
       </header>
 

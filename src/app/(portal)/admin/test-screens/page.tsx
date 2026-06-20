@@ -1,4 +1,4 @@
-﻿import { Award, CalendarHeart, Crown, Handshake, Medal, QrCode, Sparkles, Trophy, TrendingUp, UsersRound } from "lucide-react";
+import { Award, CalendarHeart, Crown, Handshake, Medal, QrCode, Sparkles, Trophy, TrendingUp, UsersRound } from "lucide-react";
 import { ConceptLinkCard, ConceptPageShell } from "./concept-components";
 
 const screens = [
@@ -41,7 +41,7 @@ const screens = [
   {
     href: "/admin/test-screens/mascot",
     title: "Маскот",
-    description: "Пробный дружелюбный персонаж в духе Duolingo, но под WhiteBox.",
+    description: "Пробный дружелюбный персонаж в духе Duolingo, но под NearLoy.",
     icon: Sparkles,
   },
   {
@@ -53,7 +53,7 @@ const screens = [
   {
     href: "/admin/test-screens/club",
     title: "Клуб",
-    description: "Приватное сообщество предпринимателей: интро, коллаборации, доверие и сделки внутри WhiteBox.",
+    description: "Приватное сообщество предпринимателей: интро, коллаборации, доверие и сделки внутри NearLoy.",
     icon: Handshake,
   },
 ];

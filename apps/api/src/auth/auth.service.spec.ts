@@ -3,8 +3,10 @@ import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import { ConflictException } from "@nestjs/common";
 import { UserRole } from "@prisma/client";
+import * as bcrypt from "bcrypt";
 import { createHmac } from "crypto";
 import { AuthService } from "./auth.service";
+import { EmailService } from "../email/email.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 function signedTelegramInitData(
@@ -43,10 +45,12 @@ describe("AuthService", () => {
       update: jest.Mock;
     };
     emailChangeRequest: { findUnique: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
+    emailVerificationCode: { create: jest.Mock; findFirst: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
     $transaction: jest.Mock;
     userFavoriteCategory: { count: jest.Mock };
   };
   let jwt: { signAsync: jest.Mock };
+  let email: { sendRegistrationCode: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -81,18 +85,26 @@ describe("AuthService", () => {
         update: jest.fn(),
         updateMany: jest.fn(),
       },
+      emailVerificationCode: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
       $transaction: jest.fn((input) => (typeof input === "function" ? input(prisma) : Promise.resolve(input))),
       userFavoriteCategory: {
         count: jest.fn().mockResolvedValue(0),
       },
     };
     jwt = { signAsync: jest.fn().mockResolvedValue("access.jwt.token") };
+    email = { sendRegistrationCode: jest.fn().mockResolvedValue({ id: "email-message-id" }) };
 
     const testingModule: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
+        { provide: EmailService, useValue: email },
         {
           provide: ConfigService,
           useValue: {
@@ -209,6 +221,99 @@ describe("AuthService", () => {
     expect(prisma.userProfileStatusUnlock.upsert).not.toHaveBeenCalled();
   });
 
+  it("requestRegistrationCode stores a pending verification and emails a 6-digit code", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.emailVerificationCode.updateMany.mockResolvedValue({ count: 0 });
+    prisma.emailVerificationCode.create.mockResolvedValue({ id: "pending-code" });
+
+    const result = await service.requestRegistrationCode({
+      name: "New Client",
+      email: "New.Client@Example.COM",
+      password: "password12",
+      confirmPassword: "password12",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.email).toBe("new.client@example.com");
+    expect(prisma.emailVerificationCode.updateMany).toHaveBeenCalledWith({
+      where: { normalizedEmail: "new.client@example.com", status: "PENDING", consumedAt: null },
+      data: { status: "EXPIRED" },
+    });
+    expect(prisma.emailVerificationCode.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        email: "New.Client@Example.COM",
+        normalizedEmail: "new.client@example.com",
+        name: "New Client",
+        role: UserRole.CLIENT,
+        passwordHash: expect.any(String),
+        codeHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      }),
+    });
+    expect(email.sendRegistrationCode).toHaveBeenCalledWith({
+      toEmail: "new.client@example.com",
+      toName: "New Client",
+      code: expect.stringMatching(/^\d{6}$/),
+      expiresAt: expect.any(Date),
+    });
+  });
+
+  it("verifyRegistrationCode creates a verified user and consumes the code", async () => {
+    const codeHash = await bcrypt.hash("123456", 4);
+    const passwordHash = await bcrypt.hash("password12", 4);
+    prisma.emailVerificationCode.findFirst.mockResolvedValue({
+      id: "pending-code",
+      normalizedEmail: "verified@example.com",
+      name: "Verified User",
+      role: UserRole.CLIENT,
+      passwordHash,
+      codeHash,
+      attempts: 0,
+    });
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({
+      id: 31,
+      uuid: "31313131-3131-4313-8313-313131313131",
+      email: "verified@example.com",
+      name: "Verified User",
+      role: UserRole.CLIENT,
+      passwordHash,
+      telegramId: null,
+      phoneNumber: null,
+      phoneVerifiedAt: null,
+      companyReferralCode: null,
+      emailVerifiedAt: new Date(),
+      accountStatus: "ACTIVE",
+      deletionScheduledAt: null,
+      selectedProfileStatusId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    prisma.emailVerificationCode.update.mockResolvedValue({ id: "pending-code" });
+    prisma.platformCounter.upsert.mockResolvedValue({ key: "top100_client_registrations", value: 101 });
+    prisma.refreshToken.create.mockResolvedValue({ id: "rt-verified" });
+
+    const result = await service.verifyRegistrationCode({
+      email: "VERIFIED@example.com",
+      code: "123456",
+    });
+
+    expect(result.accessToken).toBe("access.jwt.token");
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        name: "Verified User",
+        email: "verified@example.com",
+        passwordHash,
+        role: UserRole.CLIENT,
+        emailVerifiedAt: expect.any(Date),
+      }),
+    });
+    expect(prisma.emailVerificationCode.update).toHaveBeenCalledWith({
+      where: { id: "pending-code" },
+      data: { status: "CONSUMED", consumedAt: expect.any(Date) },
+    });
+  });
+
   it("login fails for unknown user", async () => {
     prisma.user.findUnique.mockResolvedValue(null);
     await expect(service.login({ email: "x@y.com", password: "password12" })).rejects.toThrow(
@@ -293,7 +398,7 @@ describe("AuthService", () => {
 
     await expect(
       service.loginWithTelegramMiniApp(signedTelegramInitData({ id: 1348887499 })),
-    ).rejects.toThrow("Telegram account is not linked to WhiteBox");
+    ).rejects.toThrow("Telegram account is not linked to NearLoy");
   });
 
   it("rotates a valid refresh token and issues a restored session", async () => {

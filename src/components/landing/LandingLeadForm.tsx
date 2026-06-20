@@ -16,12 +16,12 @@ type LandingLeadFormProps = {
 export function LandingLeadForm({
   source,
   title = "Запустим пилот",
-  note = "Оставьте контакт, и мы обсудим подходящий сценарий подключения WhiteBox.",
+  note = "Оставьте контакт, и мы обсудим подходящий сценарий подключения NearLoy.",
 }: LandingLeadFormProps) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
   const [formStartedAt, setFormStartedAt] = useState(() => Date.now());
-  const contactSubject = useMemo(() => encodeURIComponent("WhiteBox pilot request"), []);
+  const contactSubject = useMemo(() => encodeURIComponent("NearLoy pilot request"), []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

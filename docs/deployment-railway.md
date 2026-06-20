@@ -1,6 +1,6 @@
 # Railway deployment
 
-WhiteBox is not a static/PHP application. It needs Node.js runtime for both:
+NearLoy is not a static/PHP application. It needs Node.js runtime for both:
 
 - Next.js web app
 - NestJS API
@@ -71,7 +71,7 @@ Optional variables:
 
 ```env
 YANDEX_GEOCODER_API_KEY=<key>
-EMAIL_FROM=no-reply@whitebox.local
+EMAIL_FROM=no-reply@nearloy.local
 ```
 
 The API health endpoint is:
@@ -128,7 +128,7 @@ Expected flow:
 2. Repository owner merges manually.
 3. Push to `main` runs full checks again.
 4. GitHub Actions applies production Prisma migrations.
-5. Railway deploys `whitebox-api` and `whitebox-web` from the same commit.
+5. Railway deploys `nearloy-api` and `nearloy-web` from the same commit.
 
 ## Why not FTP/static hosting?
 

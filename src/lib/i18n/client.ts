@@ -2,7 +2,7 @@
 
 import { LOCALE_COOKIE, normalizeLocale, type Locale } from "./shared";
 
-export const LOCALE_CHANGE_EVENT = "whitebox:locale-change";
+export const LOCALE_CHANGE_EVENT = "nearloy:locale-change";
 
 export function readClientLocale(fallback: Locale = "en"): Locale {
   if (typeof document === "undefined") return fallback;

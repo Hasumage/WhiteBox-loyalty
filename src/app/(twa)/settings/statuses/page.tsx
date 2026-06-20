@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -148,7 +148,7 @@ export default function TwaProfileStatusesPage() {
         </p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight">Выберите настроение аккаунта</h1>
         <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-          Статус показывается в профиле и помогает подчеркнуть вашу историю в WhiteBox. Новые статусы открываются событиями, акциями и вручную админом.
+          Статус показывается в профиле и помогает подчеркнуть вашу историю в NearLoy. Новые статусы открываются событиями, акциями и вручную админом.
         </p>
         {state?.selectedStatus && (
           <div className="mt-4">

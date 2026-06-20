@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
+import { Textarea } from "@/components/ui/textarea";
 import {
   adminDeleteUser,
   adminForceLogoutUser,
@@ -29,6 +30,7 @@ import {
   adminListProfileStatuses,
   adminReactivateUser,
   adminRequestEmailChange,
+  adminSendEmail,
   adminUpdateUser,
   type AdminProfileStatus,
   type AdminRole,
@@ -93,8 +95,11 @@ export default function AdminUserProfilePage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [requestingEmailChange, setRequestingEmailChange] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [forcingLogout, setForcingLogout] = useState(false);
   const [newEmail, setNewEmail] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [currentRole, setCurrentRole] = useState<string | null>(null);
@@ -191,6 +196,27 @@ export default function AdminUserProfilePage() {
         : `${t("admin.userDetail.emailSentTo")} ${response.data.sentTo}.`,
     );
     setNewEmail("");
+  }
+
+  async function onSendEmail() {
+    if (!userUuid || !emailSubject.trim() || !emailMessage.trim()) return;
+    setSendingEmail(true);
+    setNotice(null);
+    const response = await adminSendEmail({
+      targetType: "USER",
+      targetUuid: userUuid,
+      subject: emailSubject.trim(),
+      message: emailMessage.trim(),
+    });
+    setSendingEmail(false);
+    if (!response.ok) {
+      setError(typeof response.message === "string" ? response.message : "Не удалось отправить письмо");
+      return;
+    }
+    setError(null);
+    setNotice(`Письмо отправлено на ${response.data.sentTo}.`);
+    setEmailSubject("");
+    setEmailMessage("");
   }
 
   async function onDelete() {
@@ -397,6 +423,33 @@ export default function AdminUserProfilePage() {
         <Card className="glass border-cyan-300/20 bg-cyan-400/5">
           <CardHeader className="pt-3 pb-0">
             <CardTitle className="flex items-center gap-2 text-base">
+              <Mail className="h-5 w-5 text-cyan-100" /> Написать пользователю
+            </CardTitle>
+            <CardDescription>Отправьте письмо на текущий email пользователя. Сообщение сохранится в истории email.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 pb-3">
+            <Input
+              value={emailSubject}
+              onChange={(event) => setEmailSubject(event.target.value)}
+              placeholder="Тема письма"
+              maxLength={160}
+            />
+            <Textarea
+              value={emailMessage}
+              onChange={(event) => setEmailMessage(event.target.value)}
+              placeholder="Текст письма"
+              rows={5}
+              maxLength={4000}
+            />
+            <Button onClick={() => void onSendEmail()} disabled={sendingEmail || !emailSubject.trim() || !emailMessage.trim()}>
+              <Mail className="h-4 w-4" /> {sendingEmail ? "Отправляем..." : "Отправить письмо"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="glass border-cyan-300/20 bg-cyan-400/5">
+          <CardHeader className="pt-3 pb-0">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Mail className="h-5 w-5 text-cyan-100" /> {t("admin.userDetail.resetEmail")}
             </CardTitle>
             <CardDescription>{t("admin.userDetail.resetEmailDescription")}</CardDescription>
@@ -411,7 +464,7 @@ export default function AdminUserProfilePage() {
           </CardContent>
         </Card>
 
-        <Card className="glass border-white/10">
+        <Card className="glass border-white/10 lg:col-span-2">
           <CardHeader className="pt-3 pb-0">
             <CardTitle className="flex items-center gap-2 text-base">
               <Ban className="h-5 w-5 text-amber-200" /> {t("admin.userDetail.lockState")}

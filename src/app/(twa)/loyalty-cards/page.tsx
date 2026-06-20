@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { categoryName } from "@/lib/i18n/categories";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 const item = {
   hidden: { opacity: 0, y: 8 },
@@ -41,7 +42,7 @@ export default function LoyaltyCardsPage() {
     let ignore = false;
     const cachedDashboard = getCachedTwaDashboard();
     const cachedFavorites = getCachedFavoriteCategorySlugs();
-    if (cachedDashboard.wallet.companies.length || cachedDashboard.activeSubscriptions.length) {
+    if (cachedDashboard.wallet.companies.length || (SUBSCRIPTIONS_ENABLED && cachedDashboard.activeSubscriptions.length)) {
       setDashboard(cachedDashboard);
       setLoading(false);
     }

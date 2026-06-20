@@ -10,6 +10,7 @@ import {
   AuditWorkspace,
   CompanyReferralPipelineStatus,
   CompanyReferralStatus,
+  EmailMessageTargetType,
   PaymentStatus,
   PermissionScope,
   PromoCodeRewardType,
@@ -22,8 +23,10 @@ import {
 } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { createHash, randomBytes, randomUUID } from "crypto";
+import { EmailService } from "../email/email.service";
 import { MaintenanceStateService } from "../maintenance/maintenance-state.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { assertSubscriptionsEnabled } from "../common/subscriptions-feature";
 import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../subscriptions/subscription-limits";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { CreateCompanySubscriptionDto } from "./dto/create-company-subscription.dto";
@@ -35,6 +38,7 @@ import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { UpdateCompanySubscriptionDto } from "./dto/update-company-subscription.dto";
 import { UpdateCompanyUserDto } from "./dto/update-company-user.dto";
 import { UpdateReferralCampaignDto } from "./dto/update-referral-campaign.dto";
+import { AdminEmailTargetType, SendEmailDto } from "./dto/send-email.dto";
 import { UpsertCompanyReferralDto } from "./dto/upsert-company-referral.dto";
 import { UpsertCompanyLocationDto } from "./dto/upsert-company-location.dto";
 import { UpsertCompanyProfileDto } from "./dto/upsert-company-profile.dto";
@@ -98,6 +102,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly maintenance: MaintenanceStateService,
+    private readonly email: EmailService,
   ) {}
 
   private paymentMoney(value: Prisma.Decimal | number | string | null | undefined) {
@@ -431,7 +436,7 @@ export class AdminService {
         tags: ["GIT"],
         ipAddress: null,
         countryCode: null,
-        linkUrl: "https://github.com/magistoro/WhiteBox-loyalty/pulls",
+        linkUrl: "https://github.com/magistoro/NearLoy-loyalty/pulls",
         linkLabel: "Open pull requests",
         createdAt: new Date("2026-04-24T20:10:00.000Z"),
       },
@@ -452,7 +457,7 @@ export class AdminService {
         tags: ["GIT"],
         ipAddress: null,
         countryCode: null,
-        linkUrl: "https://github.com/magistoro/WhiteBox-loyalty/commits/main",
+        linkUrl: "https://github.com/magistoro/NearLoy-loyalty/commits/main",
         linkLabel: "Open main commits",
         createdAt: new Date("2026-04-25T08:20:00.000Z"),
       },
@@ -1860,11 +1865,14 @@ export class AdminService {
     const frontendOrigin = this.config.get("FRONTEND_ORIGIN") ?? "http://localhost:3000";
     const confirmUrl = `${frontendOrigin}/email-change/confirm?token=${rawToken}`;
 
-    // Placeholder transport: integrate with real SMTP/provider webhook when available.
-    // We still return success and (in non-production) preview URL for manual verification.
-    if (process.env.NODE_ENV !== "test") {
-      console.info(`[email-change] send to ${newEmail}: ${confirmUrl}`);
-    }
+    await this.email.sendEmailChangeConfirmation({
+      toEmail: newEmail,
+      toName: target.name,
+      confirmUrl,
+      expiresAt,
+      sentByUserId: actorUserId,
+      targetUserId: target.id,
+    });
 
     await this.createAuditEvent({
       workspace: AuditWorkspace.MANAGER,
@@ -1888,6 +1896,79 @@ export class AdminService {
       expiresAt: expiresAt.toISOString(),
       ...(process.env.NODE_ENV === "production" ? {} : { previewUrl: confirmUrl }),
     };
+  }
+
+  async sendEmail(dto: SendEmailDto, actorUserId: number) {
+    const targetType = dto.targetType ?? AdminEmailTargetType.DIRECT;
+
+    if (targetType === AdminEmailTargetType.DIRECT) {
+      if (!dto.email?.trim()) {
+        throw new BadRequestException("Email is required for direct messages");
+      }
+
+      const sent = await this.email.sendAdminMessage({
+        toEmail: dto.email.trim().toLowerCase(),
+        subject: dto.subject,
+        message: dto.message,
+        sentByUserId: actorUserId,
+        targetType: EmailMessageTargetType.DIRECT,
+      });
+
+      return { success: true as const, emailMessageUuid: sent.uuid, sentTo: sent.toEmail };
+    }
+
+    if (!dto.targetUuid?.trim()) {
+      throw new BadRequestException("Target UUID is required");
+    }
+
+    if (targetType === AdminEmailTargetType.USER) {
+      const user = await this.prisma.user.findUnique({
+        where: { uuid: dto.targetUuid },
+        select: { id: true, uuid: true, email: true, name: true },
+      });
+      if (!user) {
+        throw new NotFoundException("User not found");
+      }
+
+      const sent = await this.email.sendAdminMessage({
+        toEmail: user.email,
+        toName: user.name,
+        subject: dto.subject,
+        message: dto.message,
+        sentByUserId: actorUserId,
+        targetType: EmailMessageTargetType.USER,
+        targetUserId: user.id,
+      });
+
+      return { success: true as const, emailMessageUuid: sent.uuid, sentTo: sent.toEmail };
+    }
+
+    const companyOwner = await this.prisma.user.findUnique({
+      where: { uuid: dto.targetUuid },
+      select: {
+        id: true,
+        uuid: true,
+        email: true,
+        name: true,
+        managedCompany: { select: { id: true, name: true } },
+      },
+    });
+    if (!companyOwner?.managedCompany) {
+      throw new NotFoundException("Company account not found");
+    }
+
+    const sent = await this.email.sendAdminMessage({
+      toEmail: companyOwner.email,
+      toName: companyOwner.name || companyOwner.managedCompany.name,
+      subject: dto.subject,
+      message: dto.message,
+      sentByUserId: actorUserId,
+      targetType: EmailMessageTargetType.COMPANY,
+      targetUserId: companyOwner.id,
+      targetCompanyId: companyOwner.managedCompany.id,
+    });
+
+    return { success: true as const, emailMessageUuid: sent.uuid, sentTo: sent.toEmail };
   }
 
   async deleteUserByUuid(uuid: string, actorUserId: number) {
@@ -2236,7 +2317,7 @@ export class AdminService {
       category: AuditCategory.BILLING,
       level: AuditLevel.WARN,
       action: "Company referral updated",
-      details: `Referral for "${user.managedCompany.name}" assigned to ${referrer.email} with ${percent}% payout from recognized subscription turnover, paid from the WhiteBox share.`,
+      details: `Referral for "${user.managedCompany.name}" assigned to ${referrer.email} with ${percent}% payout from recognized subscription turnover, paid from the NearLoy share.`,
       actorUserId,
       targetUuid: companyUserUuid,
       targetLabel: user.managedCompany.name,
@@ -2891,6 +2972,7 @@ export class AdminService {
   }
 
   async createCompanySubscription(companyUserUuid: string, dto: CreateCompanySubscriptionDto, actorUserId?: number) {
+    assertSubscriptionsEnabled();
     this.assertSubscriptionPrice(dto.price);
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
@@ -2963,6 +3045,7 @@ export class AdminService {
     dto: UpdateCompanySubscriptionDto,
     actorUserId?: number,
   ) {
+    assertSubscriptionsEnabled();
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
       throw new BadRequestException("Company profile must exist before managing subscriptions.");
@@ -3032,6 +3115,7 @@ export class AdminService {
     dto: CreateSubscriptionEntitlementDto,
     actorUserId?: number,
   ) {
+    assertSubscriptionsEnabled();
     const user = await this.requireCompanyUser(companyUserUuid);
     if (!user.managedCompany) {
       throw new BadRequestException("Company profile must exist before managing subscriptions.");
@@ -3246,6 +3330,8 @@ export class AdminService {
   }
 
   async createPairedSubscription(dto: CreatePairedSubscriptionDto, actorUserId?: number) {
+    assertSubscriptionsEnabled();
+
     this.assertSubscriptionPrice(dto.price);
     const participants = dto.participants.map((participant, index) => ({
       companyId: Number(participant.companyId),
@@ -3382,6 +3468,8 @@ export class AdminService {
     }
 
     if (rewardType === PromoCodeRewardType.SUBSCRIPTION) {
+      assertSubscriptionsEnabled();
+
       if (!dto.subscriptionUuid) {
         throw new BadRequestException("Subscription UUID is required for subscription promo codes.");
       }
@@ -3446,6 +3534,8 @@ export class AdminService {
     }
 
     if (nextRewardType === PromoCodeRewardType.SUBSCRIPTION) {
+      assertSubscriptionsEnabled();
+
       if (dto.subscriptionUuid !== undefined) {
         const subscription = await this.prisma.subscription.findUnique({
           where: { uuid: dto.subscriptionUuid },

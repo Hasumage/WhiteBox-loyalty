@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { companyDashboard, type CompanyDashboard } from "@/lib/api/company-client";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 function money(value: number) {
   return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(value);
@@ -24,23 +25,28 @@ export default function CompanyPortalPage() {
     companyDashboard()
       .then((data) => {
         setDashboard(data);
-        const tutorialKey = `whitebox:company-tutorial:${data.company.name}`;
+        const tutorialKey = `nearloy:company-tutorial:${data.company.name}`;
         setTutorialOpen(window.localStorage.getItem(tutorialKey) !== "complete");
       })
       .catch((reason: Error) => setError(reason.message));
   }, []);
 
   const metrics = dashboard?.metrics;
+  const recentOperations = (dashboard?.recentOperations ?? []).filter(
+    (operation) => SUBSCRIPTIONS_ENABLED || operation.kind !== "SUBSCRIPTION",
+  );
   const tutorial = [
     { title: "Найдите клиента", detail: "Отсканируйте QR или найдите клиента по имени и email на кассе.", icon: QrCode },
     { title: "Начислите баллы", detail: "Введите сумму покупки: уровень клиента сам определит размер кэшбэка.", icon: Coins },
     { title: "Погасите услугу", detail: "Для активной подписки выдавайте услугу в один клик, лимиты защищены системой.", icon: WalletCards },
     { title: "Следите за доходом", detail: "Финансы показывают уже заработанную сумму и будущий остаток подписок.", icon: Banknote },
   ];
-  const TutorialIcon = tutorial[tutorialStep].icon;
+  const tutorialSteps = SUBSCRIPTIONS_ENABLED ? tutorial : tutorial.filter((step) => step.icon !== WalletCards);
+  const safeTutorialStep = Math.min(tutorialStep, tutorialSteps.length - 1);
+  const TutorialIcon = tutorialSteps[safeTutorialStep].icon;
 
   function closeTutorial() {
-    if (dashboard) window.localStorage.setItem(`whitebox:company-tutorial:${dashboard.company.name}`, "complete");
+    if (dashboard) window.localStorage.setItem(`nearloy:company-tutorial:${dashboard.company.name}`, "complete");
     setTutorialOpen(false);
   }
   return (
@@ -61,9 +67,11 @@ export default function CompanyPortalPage() {
             <Button asChild size="lg" className="rounded-xl">
               <Link href="/company/clients"><QrCode /> Сканировать QR клиента</Link>
             </Button>
-            <Button asChild size="lg" variant="secondary" className="rounded-xl">
-              <Link href="/company/subscriptions"><WalletCards /> Правила подписок</Link>
-            </Button>
+            {SUBSCRIPTIONS_ENABLED && (
+              <Button asChild size="lg" variant="secondary" className="rounded-xl">
+                <Link href="/company/subscriptions"><WalletCards /> Правила подписок</Link>
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -83,19 +91,19 @@ export default function CompanyPortalPage() {
               </span>
               <div>
                 <p className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100">
-                  <BookOpen className="h-3.5 w-3.5" /> Быстрый старт {tutorialStep + 1} / {tutorial.length}
+                  <BookOpen className="h-3.5 w-3.5" /> Быстрый старт {safeTutorialStep + 1} / {tutorialSteps.length}
                 </p>
-                <h2 className="text-lg font-semibold">{tutorial[tutorialStep].title}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{tutorial[tutorialStep].detail}</p>
+                <h2 className="text-lg font-semibold">{tutorialSteps[safeTutorialStep].title}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{tutorialSteps[safeTutorialStep].detail}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={closeTutorial}><X /> Пропустить</Button>
               <Button
                 size="sm"
-                onClick={() => tutorialStep === tutorial.length - 1 ? closeTutorial() : setTutorialStep((step) => step + 1)}
+                onClick={() => safeTutorialStep === tutorialSteps.length - 1 ? closeTutorial() : setTutorialStep((step) => step + 1)}
               >
-                {tutorialStep === tutorial.length - 1 ? "Начать работу" : "Далее"} <ArrowRight />
+                {safeTutorialStep === tutorialSteps.length - 1 ? "Начать работу" : "Далее"} <ArrowRight />
               </Button>
             </div>
           </CardContent>
@@ -108,7 +116,9 @@ export default function CompanyPortalPage() {
           { label: "Активные подписки", value: metrics?.activeSubscribers ?? "-", detail: "платящих клиентов", icon: WalletCards },
           { label: "Текущий доход", value: metrics ? money(metrics.recognizedSubscriptionRevenue) : "-", detail: metrics ? `+${money(metrics.dailySubscriptionRevenue)} в день` : "по прошедшим дням", icon: Banknote },
           { label: "Начислено баллов", value: metrics?.pointsAwarded ?? "-", detail: "через покупки", icon: ReceiptText },
-        ].map(({ label, value, detail, icon: Icon }) => (
+        ]
+          .filter((item) => SUBSCRIPTIONS_ENABLED || (item.icon !== WalletCards && item.icon !== Banknote))
+          .map(({ label, value, detail, icon: Icon }) => (
           <Card key={label} className="glass overflow-hidden border-white/10 py-0">
             <CardContent className="flex items-start justify-between gap-3 p-5">
               <div>
@@ -130,14 +140,16 @@ export default function CompanyPortalPage() {
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Последние операции</h2>
-                <p className="text-sm text-muted-foreground">Подписки, начисления и списания баллов</p>
+                <p className="text-sm text-muted-foreground">
+                  {SUBSCRIPTIONS_ENABLED ? "Подписки, начисления и списания баллов" : "Начисления и списания баллов"}
+                </p>
               </div>
               <Button asChild variant="ghost" size="sm">
                 <Link href="/company/clients">Открыть кассу <ArrowRight /></Link>
               </Button>
             </div>
             <div className="space-y-2">
-              {dashboard?.recentOperations.map((operation) => (
+              {recentOperations.map((operation) => (
                 <div key={operation.uuid} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="rounded-xl border border-cyan-200/10 bg-cyan-200/[0.05] p-2 text-cyan-100">
@@ -159,9 +171,11 @@ export default function CompanyPortalPage() {
                   </div>
                 </div>
               ))}
-              {dashboard && dashboard.recentOperations.length === 0 && (
+              {dashboard && recentOperations.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-white/12 p-8 text-center text-sm text-muted-foreground">
-                  Первая подписка или операция с баллами появится здесь после обслуживания клиента.
+                  {SUBSCRIPTIONS_ENABLED
+                    ? "Первая подписка или операция с баллами появится здесь после обслуживания клиента."
+                    : "Первая операция с баллами появится здесь после обслуживания клиента."}
                 </div>
               )}
             </div>
@@ -178,16 +192,27 @@ export default function CompanyPortalPage() {
                 <Link href="/company/payments">Финансы</Link>
               </Button>
             </div>
-            <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.05] p-4">
-              <p className="text-sm font-semibold">Контрольных услуг: {metrics?.activeEntitlements ?? "-"}</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Правила погашения не позволят выдать ежедневный бонус дважды в один период.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Будущий доход подписок</p>
-              <p className="mt-2 text-xl font-semibold">{metrics ? money(metrics.potentialSubscriptionRevenue) : "-"}</p>
-            </div>
+            {SUBSCRIPTIONS_ENABLED ? (
+              <>
+                <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.05] p-4">
+                  <p className="text-sm font-semibold">Контрольных услуг: {metrics?.activeEntitlements ?? "-"}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Правила погашения не позволят выдать ежедневный бонус дважды в один период.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Будущий доход подписок</p>
+                  <p className="mt-2 text-xl font-semibold">{metrics ? money(metrics.potentialSubscriptionRevenue) : "-"}</p>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.05] p-4">
+                <p className="text-sm font-semibold">Мы создаём кое-что потрясающее</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  В первой версии компании работают с клиентами, QR, баллами и уровнями. Подписки вернутся отдельным стабильным обновлением.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

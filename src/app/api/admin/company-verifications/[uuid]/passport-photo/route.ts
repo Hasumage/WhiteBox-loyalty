@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { requireAdminScope } from "@/lib/admin/require-admin-scope";
+import { readKycPassportPhotoByApplicationUuid } from "@/lib/company-onboarding/kyc-vault";
 import { readEncryptedPassportFile } from "@/lib/company-onboarding/passport-storage";
 import { prisma } from "@/lib/prisma";
 
@@ -20,6 +21,21 @@ export async function GET(
   if (!access.ok) return access.response;
 
   const uuid = await readUuid(context.params);
+  const kycPhoto = await readKycPassportPhotoByApplicationUuid(uuid, {
+    actorUserId: session.userId,
+    request,
+    reason: "Admin opened passport photo",
+  });
+  if (kycPhoto) {
+    return new NextResponse(kycPhoto.buffer, {
+      headers: {
+        "Content-Type": kycPhoto.mimeType,
+        "Content-Disposition": `inline; filename="${kycPhoto.originalName || "passport-photo"}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
   const application = await prisma.companyVerificationApplication.findUnique({
     where: { uuid },
     select: {

@@ -298,6 +298,24 @@ export type AdminDashboardResponse = {
 export type AdminCompanyVerificationStatus = "DRAFT" | "SUBMITTED" | "REVIEWING" | "APPROVED" | "REJECTED";
 export type AdminCompanyEmploymentType = "SELF_EMPLOYED" | "INDIVIDUAL_ENTREPRENEUR";
 export type AdminIdentityVerificationMode = "FULL" | "DEFERRED";
+export type AdminCompanyKycAccessAction = "UPSERT_FROM_VERIFICATION" | "REVEAL_DATA" | "VIEW_PHOTO" | "DELETE_PHOTO";
+
+export type AdminCompanyKycAccessLog = {
+  uuid: string;
+  action: AdminCompanyKycAccessAction;
+  reason: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  actor: { name: string; email: string } | null;
+};
+
+export type AdminRevealedPassportData = {
+  series?: string;
+  number?: string;
+  issuedAt?: string;
+  issuedBy?: string;
+  departmentCode?: string;
+};
 
 export type AdminCompanyVerificationApplication = {
   id: number;
@@ -342,6 +360,18 @@ export type AdminCompanyVerificationApplication = {
     uploadedAt: string;
     status: "ACTIVE" | "DELETED" | "MISSING";
   }>;
+  kycRecord: {
+    uuid: string;
+    status: AdminCompanyVerificationStatus;
+    passportLast4: string | null;
+    passportPhotoMimeType: string | null;
+    passportPhotoOriginalName: string | null;
+    passportPhotoSize: number | null;
+    passportPhotoSha256: string | null;
+    passportPhotoDeletedAt: string | null;
+    updatedAt: string;
+    accessLogs: AdminCompanyKycAccessLog[];
+  } | null;
   company: {
     id: number;
     slug: string;
@@ -1105,6 +1135,28 @@ export async function adminRequestEmailChange(uuid: string, newEmail: string) {
       expiresAt: string;
       previewUrl?: string;
     },
+  };
+}
+
+export async function adminSendEmail(input: {
+  targetType: "USER" | "COMPANY" | "DIRECT";
+  targetUuid?: string;
+  email?: string;
+  subject: string;
+  message: string;
+}) {
+  const res = await fetch(`${apiBase()}/admin/email/send`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to send email" };
+  }
+  return {
+    ok: true as const,
+    data: (await res.json()) as { success: true; emailMessageUuid: string; sentTo: string },
   };
 }
 
@@ -2061,6 +2113,37 @@ export async function adminUpdateCompanyVerification(uuid: string, input: {
     return { ok: false as const, message: data.message ?? "Failed to update company verification request" };
   }
   return { ok: true as const, data: (await res.json()) as AdminCompanyVerificationApplication };
+}
+
+export async function adminRevealCompanyVerificationKyc(uuid: string, reason?: string) {
+  const res = await fetch(`/api/admin/company-verifications/${uuid}/kyc/reveal`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to reveal KYC data" };
+  }
+  return {
+    ok: true as const,
+    data: (await res.json()) as {
+      passportData: AdminRevealedPassportData | null;
+      accessLogs: AdminCompanyKycAccessLog[];
+    },
+  };
+}
+
+export async function adminDeleteCompanyVerificationKycPhoto(uuid: string) {
+  const res = await fetch(`/api/admin/company-verifications/${uuid}/kyc/passport-photo`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to delete KYC passport photo" };
+  }
+  return { ok: true as const, data: (await res.json()) as { ok: true; passportPhotoDeletedAt: string | null } };
 }
 
 export async function adminSyncPassportStorage() {

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -12,7 +12,7 @@ import {
   type UserProfileStatusState,
 } from "@/lib/api/twa-client";
 
-const SESSION_KEY = "whitebox.profile-status-unlock-toast";
+const SESSION_KEY = "nearloy.profile-status-unlock-toast";
 
 export function ProfileStatusUnlockToast() {
   const [state, setState] = useState<UserProfileStatusState | null>(null);

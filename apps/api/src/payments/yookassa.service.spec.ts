@@ -1,4 +1,4 @@
-﻿import { BadGatewayException, BadRequestException, ServiceUnavailableException } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { YooKassaService } from "./yookassa.service";
 
@@ -22,10 +22,10 @@ describe("YooKassaService", () => {
       service.createPayment({
         amount: "100.00",
         currency: "RUB",
-        description: "WhiteBox subscription",
-        returnUrl: "https://whitebox.test/return",
-        customerEmail: "client@whitebox.test",
-        metadata: { whiteboxPaymentUuid: "pay_1" },
+        description: "NearLoy subscription",
+        returnUrl: "https://nearloy.test/return",
+        customerEmail: "client@nearloy.test",
+        metadata: { nearloyPaymentUuid: "pay_1" },
       }),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
@@ -50,11 +50,11 @@ describe("YooKassaService", () => {
     const result = await service.createPayment({
       amount: "499.00",
       currency: "RUB",
-      description: "WhiteBox subscription checkout",
-      returnUrl: "https://whitebox.test/payment/success?payment=abc",
+      description: "NearLoy subscription checkout",
+      returnUrl: "https://nearloy.test/payment/success?payment=abc",
       idempotenceKey: "idem-1",
-      customerEmail: "client@whitebox.test",
-      metadata: { whiteboxPaymentUuid: "abc", planUuid: "sub_1" },
+      customerEmail: "client@nearloy.test",
+      metadata: { nearloyPaymentUuid: "abc", planUuid: "sub_1" },
     });
 
     expect(result.idempotenceKey).toBe("idem-1");
@@ -68,9 +68,9 @@ describe("YooKassaService", () => {
     expect(body.capture).toBe(true);
     expect(body.payment_method_data).toEqual({ type: "bank_card" });
     expect(body.save_payment_method).toBe(false);
-    expect(body.confirmation).toEqual({ type: "redirect", return_url: "https://whitebox.test/payment/success?payment=abc" });
-    expect(body.metadata.whiteboxPaymentUuid).toBe("abc");
-    expect(body.receipt.customer.email).toBe("client@whitebox.test");
+    expect(body.confirmation).toEqual({ type: "redirect", return_url: "https://nearloy.test/payment/success?payment=abc" });
+    expect(body.metadata.nearloyPaymentUuid).toBe("abc");
+    expect(body.receipt.customer.email).toBe("client@nearloy.test");
     expect(body.receipt.items[0]).toEqual(expect.objectContaining({ vat_code: 1, payment_mode: "full_payment", payment_subject: "service" }));
   });
 
@@ -89,10 +89,10 @@ describe("YooKassaService", () => {
       service.createPayment({
         amount: "990000.00",
         currency: "RUB",
-        description: "WhiteBox subscription",
-        returnUrl: "https://whitebox.test/return",
-        customerEmail: "client@whitebox.test",
-        metadata: { whiteboxPaymentUuid: "pay_1" },
+        description: "NearLoy subscription",
+        returnUrl: "https://nearloy.test/return",
+        customerEmail: "client@nearloy.test",
+        metadata: { nearloyPaymentUuid: "pay_1" },
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -110,10 +110,10 @@ describe("YooKassaService", () => {
       service.createPayment({
         amount: "100.00",
         currency: "RUB",
-        description: "WhiteBox subscription",
-        returnUrl: "https://whitebox.test/return",
-        customerEmail: "client@whitebox.test",
-        metadata: { whiteboxPaymentUuid: "pay_1" },
+        description: "NearLoy subscription",
+        returnUrl: "https://nearloy.test/return",
+        customerEmail: "client@nearloy.test",
+        metadata: { nearloyPaymentUuid: "pay_1" },
       }),
     ).rejects.toBeInstanceOf(BadGatewayException);
   });

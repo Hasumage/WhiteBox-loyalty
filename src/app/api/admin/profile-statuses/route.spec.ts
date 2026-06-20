@@ -1,4 +1,4 @@
-﻿jest.mock("@/lib/prisma", () => ({
+jest.mock("@/lib/prisma", () => ({
   prisma: {
     user: {
       findUnique: jest.fn(),
@@ -38,7 +38,7 @@ const status = {
   id: "status-1",
   slug: "top-100",
   title: "Топ 100",
-  description: "Первые реальные пользователи WhiteBox.",
+  description: "Первые реальные пользователи NearLoy.",
   rarity: "LEGENDARY",
   icon: "Trophy",
   isActive: true,

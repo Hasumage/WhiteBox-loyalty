@@ -1,8 +1,9 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { SubscriptionStatus } from "@prisma/client";
 import { RegisteredService } from "./registered.service";
 
 describe("RegisteredService", () => {
+  const originalSubscriptionsEnabled = process.env.SUBSCRIPTIONS_ENABLED;
   let service: RegisteredService;
   let prisma: {
     category: { findMany: jest.Mock };
@@ -25,6 +26,7 @@ describe("RegisteredService", () => {
   };
 
   beforeEach(() => {
+    process.env.SUBSCRIPTIONS_ENABLED = "true";
     prisma = {
       category: { findMany: jest.fn() },
       userFavoriteCategory: {
@@ -83,6 +85,21 @@ describe("RegisteredService", () => {
       }),
     };
     service = new RegisteredService(prisma as never);
+  });
+
+  afterAll(() => {
+    if (originalSubscriptionsEnabled === undefined) {
+      delete process.env.SUBSCRIPTIONS_ENABLED;
+    } else {
+      process.env.SUBSCRIPTIONS_ENABLED = originalSubscriptionsEnabled;
+    }
+  });
+
+  it("rejects direct subscription activation while subscriptions are disabled", async () => {
+    process.env.SUBSCRIPTIONS_ENABLED = "false";
+
+    await expect(service.activateSubscription(9, "sub-30")).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(prisma.subscription.findUnique).not.toHaveBeenCalled();
   });
 
   it("marketplace returns active DB subscriptions with ownership flags", async () => {
@@ -172,7 +189,7 @@ describe("RegisteredService", () => {
     const second = await service.userQr(7);
 
     expect(prisma.user.findUnique).toHaveBeenCalledTimes(2);
-    expect(first.payload).toBe("whitebox:user:11111111-1111-4111-8111-111111111111");
+    expect(first.payload).toBe("nearloy:user:11111111-1111-4111-8111-111111111111");
     expect(second.payload).toBe(first.payload);
     expect(first.generatedAt).toBeInstanceOf(Date);
   });

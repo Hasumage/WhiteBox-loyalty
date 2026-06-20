@@ -1,4 +1,4 @@
-﻿import { PaymentPurpose, PaymentProvider, PaymentStatus, SubscriptionStatus } from "@prisma/client";
+import { PaymentPurpose, PaymentProvider, PaymentStatus, SubscriptionStatus } from "@prisma/client";
 import { fetch as undiciFetch } from "undici";
 import { PaymentsService } from "./payments.service";
 
@@ -18,7 +18,7 @@ function paymentRecord(overrides: Record<string, unknown> = {}) {
     status: PaymentStatus.PENDING,
     amount: "1000.00",
     currency: "RUB",
-    description: "WhiteBox subscription: Coffee",
+    description: "NearLoy subscription: Coffee",
     userId: 7,
     companyId: 3,
     subscriptionId: 5,
@@ -29,7 +29,7 @@ function paymentRecord(overrides: Record<string, unknown> = {}) {
     providerStatus: "pending",
     idempotenceKey: "idem-1",
     confirmationUrl: "https://yookassa.test/pay",
-    returnUrl: "https://whitebox.test/payment/success?payment=pay-local-1",
+    returnUrl: "https://nearloy.test/payment/success?payment=pay-local-1",
     paidAt: null,
     canceledAt: null,
     cancelReason: null,
@@ -77,6 +77,42 @@ describe("PaymentsService", () => {
 
     if (originalTelegramProxy === undefined) delete process.env.TELEGRAM_PROXY_URL;
     else process.env.TELEGRAM_PROXY_URL = originalTelegramProxy;
+  });
+
+  it("builds a clean success return URL even when the configured value already contains the success path", () => {
+    const originalReturnUrl = process.env.YOOKASSA_RETURN_URL;
+    process.env.YOOKASSA_RETURN_URL = "https://nearloy.example/payment/success";
+    const service = new PaymentsService({} as never, {} as never, {} as never);
+
+    const returnUrl = (service as unknown as { appReturnUrl: (uuid: string) => string }).appReturnUrl("pay-uuid-1");
+
+    expect(returnUrl).toBe("https://nearloy.example/payment/success?payment=pay-uuid-1");
+    expect(returnUrl).not.toContain("/payment/success/payment/success");
+
+    if (originalReturnUrl === undefined) delete process.env.YOOKASSA_RETURN_URL;
+    else process.env.YOOKASSA_RETURN_URL = originalReturnUrl;
+  });
+
+  it("does not activate the same successful payment twice", async () => {
+    const { succeededWithRelations } = paidPaymentFixture();
+    const prisma = {
+      payment: {
+        findFirst: jest.fn().mockResolvedValue(succeededWithRelations),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
+      telegramMessageQueue: { create: jest.fn() },
+    };
+    const yookassa = { getPayment: jest.fn() };
+    const registeredService = { activateSubscription: jest.fn() };
+    const service = new PaymentsService(prisma as never, yookassa as never, registeredService as never);
+
+    const result = await service.getUserPayment(7, "pay-local-1");
+
+    expect(yookassa.getPayment).not.toHaveBeenCalled();
+    expect(registeredService.activateSubscription).not.toHaveBeenCalled();
+    expect(prisma.payment.update).not.toHaveBeenCalled();
+    expect(result.activatedSubscription).toEqual(expect.objectContaining({ id: 44, status: SubscriptionStatus.ACTIVE }));
   });
 
   it("syncs a successful YooKassa payment and activates the subscription from the return page", async () => {

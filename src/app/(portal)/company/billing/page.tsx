@@ -32,11 +32,11 @@ export default function CompanyBillingPage() {
     <div className="space-y-6">
       <header>
         <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">
-          <ReceiptText className="h-4 w-4" /> WhiteBox Club
+          <ReceiptText className="h-4 w-4" /> NearLoy Club
         </p>
         <h1 className="text-3xl font-semibold">Абонентская плата</h1>
         <p className="mt-2 text-muted-foreground">
-          Комиссия 12% с продаж подписок автоматически уменьшает ежемесячный платёж WhiteBox.
+          Комиссия 12% с продаж подписок автоматически уменьшает ежемесячный платёж NearLoy.
         </p>
       </header>
 
@@ -45,7 +45,7 @@ export default function CompanyBillingPage() {
       {trialEndsAt && (
         <section className="rounded-[2rem] border border-cyan-200/20 bg-[radial-gradient(circle_at_10%_10%,rgba(103,232,249,0.18),transparent_45%),rgba(255,255,255,0.03)] p-6">
           <Gift className="h-7 w-7 text-cyan-100" />
-          <h2 className="mt-4 text-2xl font-semibold">30 дней WhiteBox бесплатно</h2>
+          <h2 className="mt-4 text-2xl font-semibold">30 дней NearLoy бесплатно</h2>
           <p className="mt-2 text-muted-foreground">Тестовый период действует до {new Date(trialEndsAt).toLocaleDateString("ru-RU")}.</p>
         </section>
       )}
@@ -77,7 +77,7 @@ export default function CompanyBillingPage() {
         </div>
 
         <div className="rounded-3xl border border-cyan-200/15 bg-cyan-300/[0.035] p-5">
-          <h2 className="flex items-center gap-2 font-semibold"><Wallet className="h-4 w-4" /> Баланс WhiteBox</h2>
+          <h2 className="flex items-center gap-2 font-semibold"><Wallet className="h-4 w-4" /> Баланс NearLoy</h2>
           <p className="mt-3 text-3xl font-semibold">{money(data?.availableBalance ?? 0)}</p>
           <p className="mt-2 text-sm text-muted-foreground">Оплата списывается из заработанного и доступного компании баланса.</p>
           <Button

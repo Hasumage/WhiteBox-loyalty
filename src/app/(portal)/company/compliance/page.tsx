@@ -166,7 +166,7 @@ export default function CompanyCompliancePage() {
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100">Следующий шаг</p>
                     <h2 className="mt-2 text-xl font-semibold">Верифицируйте компанию</h2>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                      Отправьте защищённую заявку, чтобы команда WhiteBox могла подтвердить бизнес. Полная проверка
+                      Отправьте защищённую заявку, чтобы команда NearLoy могла подтвердить бизнес. Полная проверка
                       нужна для выпуска подписок и выплат.
                     </p>
                     {application?.status === "REJECTED" && (
@@ -294,7 +294,7 @@ export default function CompanyCompliancePage() {
                     <input type="checkbox" name="consentAccepted" required className="mt-1 accent-cyan-100" />
                     <span>
                       Я подтверждаю достоверность сведений и согласен на обработку данных для проверки партнёра
-                      WhiteBox.
+                      NearLoy.
                     </span>
                   </label>
 

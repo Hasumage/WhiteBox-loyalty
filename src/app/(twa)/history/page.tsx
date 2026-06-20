@@ -15,6 +15,7 @@ import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { formatPlanPrice as formatLocalizedPlanPrice, relativeDate } from "@/lib/i18n/format";
 import { categoryName } from "@/lib/i18n/categories";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import type { Locale } from "@/lib/i18n/shared";
 import type { TranslateFn } from "@/lib/i18n/format";
 
@@ -54,14 +55,28 @@ export default function HistoryPage() {
   useEffect(() => {
     let ignore = false;
     const cached = getCachedTwaHistory();
-    const normalizedCached = { ...cached, redemptions: cached.redemptions ?? [] };
-    if (normalizedCached.transactions.length || normalizedCached.redemptions.length || normalizedCached.subscriptions.length || normalizedCached.archivedSubscriptions.length) {
+    const normalizedCached = {
+      ...cached,
+      redemptions: cached.redemptions ?? [],
+      subscriptions: SUBSCRIPTIONS_ENABLED ? cached.subscriptions : [],
+      archivedSubscriptions: SUBSCRIPTIONS_ENABLED ? cached.archivedSubscriptions : [],
+    };
+    if (
+      normalizedCached.transactions.length ||
+      normalizedCached.redemptions.length ||
+      (SUBSCRIPTIONS_ENABLED && (normalizedCached.subscriptions.length || normalizedCached.archivedSubscriptions.length))
+    ) {
       setHistory(normalizedCached);
       setLoading(false);
     }
     void getTwaHistory().then((data) => {
       if (ignore) return;
-      setHistory({ ...data, redemptions: data.redemptions ?? [] });
+      setHistory({
+        ...data,
+        redemptions: data.redemptions ?? [],
+        subscriptions: SUBSCRIPTIONS_ENABLED ? data.subscriptions : [],
+        archivedSubscriptions: SUBSCRIPTIONS_ENABLED ? data.archivedSubscriptions : [],
+      });
       setLoading(false);
     });
     return () => {
@@ -69,7 +84,12 @@ export default function HistoryPage() {
     };
   }, []);
 
-  if (loading && history.transactions.length === 0 && history.redemptions.length === 0 && history.subscriptions.length === 0 && history.archivedSubscriptions.length === 0) {
+  if (
+    loading &&
+    history.transactions.length === 0 &&
+    history.redemptions.length === 0 &&
+    (!SUBSCRIPTIONS_ENABLED || (history.subscriptions.length === 0 && history.archivedSubscriptions.length === 0))
+  ) {
     return <TwaLoadingScreen title={t("client.history.loadingTitle")} subtitle={t("client.history.loadingSubtitle")} />;
   }
 
@@ -101,10 +121,12 @@ export default function HistoryPage() {
             <ArrowDownLeft className="mr-1.5 h-4 w-4" />
             {t("client.history.activity")}
           </TabsTrigger>
-          <TabsTrigger value="subscriptions" className="flex-1">
-            <Archive className="mr-1.5 h-4 w-4" />
-            {t("client.history.subscriptions")}
-          </TabsTrigger>
+          {SUBSCRIPTIONS_ENABLED && (
+            <TabsTrigger value="subscriptions" className="flex-1">
+              <Archive className="mr-1.5 h-4 w-4" />
+              {t("client.history.subscriptions")}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="activity" className="mt-0">
@@ -172,7 +194,8 @@ export default function HistoryPage() {
           </ScrollArea>
         </TabsContent>
 
-        <TabsContent value="subscriptions" className="mt-0">
+        {SUBSCRIPTIONS_ENABLED && (
+          <TabsContent value="subscriptions" className="mt-0">
           <ScrollArea className="h-[calc(100dvh-14rem)] pr-2">
             <div className="space-y-1.5">
               {history.subscriptions.map((subscription, index) => {
@@ -228,7 +251,8 @@ export default function HistoryPage() {
               <p className="py-8 text-center text-sm text-muted-foreground">{t("client.history.noArchivedSubscriptions")}</p>
             )}
           </ScrollArea>
-        </TabsContent>
+          </TabsContent>
+        )}
       </Tabs>
     </motion.div>
   );

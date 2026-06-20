@@ -20,7 +20,7 @@ describe("CompanyService", () => {
     companyId: 7,
     role: CompanyMemberRole.OWNER,
     isActive: true,
-    user: { uuid: "owner", name: "Owner", email: "owner@whitebox.test" },
+    user: { uuid: "owner", name: "Owner", email: "owner@nearloy.test" },
     company: {
       id: 7,
       categoryId: 1,
@@ -1117,7 +1117,7 @@ describe("CompanyService", () => {
     expect(result.availableForPayout).toBe(500);
   });
 
-  it("subtracts paid WhiteBox billing fees from the company withdrawable balance", async () => {
+  it("subtracts paid NearLoy billing fees from the company withdrawable balance", async () => {
     const day = 24 * 60 * 60 * 1000;
     const startedAt = new Date(Date.now() - day * 12);
     prisma.financeOperation.findMany.mockResolvedValue([]);

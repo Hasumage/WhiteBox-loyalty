@@ -22,7 +22,7 @@ const mockedPrisma = jest.mocked(prisma, { shallow: false });
 describe("user telegram link token route", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.TELEGRAM_BOT_USERNAME = "White_Box_Loyalty_bot";
+    process.env.TELEGRAM_BOT_USERNAME = "NearLoy_Loyalty_bot";
   });
 
   it("creates a one-time Telegram link for any active user", async () => {
@@ -35,7 +35,7 @@ describe("user telegram link token route", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.deepLink).toContain("https://t.me/White_Box_Loyalty_bot?start=link_");
+    expect(body.deepLink).toContain("https://t.me/NearLoy_Loyalty_bot?start=link_");
     expect(mockedPrisma.telegramLinkToken.updateMany).toHaveBeenCalledWith({
       where: { userId: 7, usedAt: null, expiresAt: { gt: expect.any(Date) } },
       data: { usedAt: expect.any(Date) },

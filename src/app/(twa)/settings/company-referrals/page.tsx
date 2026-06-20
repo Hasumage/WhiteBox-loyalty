@@ -109,10 +109,10 @@ export default function CompanyReferralsPage() {
               РљРѕРјРїР°РЅРёСЏ РїРѕ СЂРµРєРѕРјРµРЅРґР°С†РёРё
             </Badge>
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight">РџСЂРёРіР»Р°С€Р°Р№С‚Рµ РєРѕРјРїР°РЅРёРё РІ WhiteBox</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">РџСЂРёРіР»Р°С€Р°Р№С‚Рµ РєРѕРјРїР°РЅРёРё РІ NearLoy</h1>
               <p className="mt-2 text-sm leading-6 text-white/58">
                 РћС‚РїСЂР°РІСЊС‚Рµ СЃСЃС‹Р»РєСѓ РїСЂРµРґРїСЂРёРЅРёРјР°С‚РµР»СЋ. Р•СЃР»Рё РєРѕРјРїР°РЅРёСЏ РїРѕРґРєР»СЋС‡РёС‚СЃСЏ Рё РЅР°С‡РЅС‘С‚ РїРѕР»СѓС‡Р°С‚СЊ РІС‹СЂСѓС‡РєСѓ СЃ РїРѕРґРїРёСЃРѕРє,
-                РІР°Рј Р±СѓРґРµС‚ РЅР°С‡РёСЃР»СЏС‚СЊСЃСЏ СЂРµС„РµСЂР°Р»СЊРЅР°СЏ РґРѕР»СЏ РёР· РєРѕРјРёСЃСЃРёРё WhiteBox.
+                РІР°Рј Р±СѓРґРµС‚ РЅР°С‡РёСЃР»СЏС‚СЊСЃСЏ СЂРµС„РµСЂР°Р»СЊРЅР°СЏ РґРѕР»СЏ РёР· РєРѕРјРёСЃСЃРёРё NearLoy.
               </p>
             </div>
             <div className="rounded-[1.5rem] border border-white/10 bg-black/25 p-3">
@@ -183,7 +183,7 @@ export default function CompanyReferralsPage() {
             <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5 text-white/55">Р—Р°РіСЂСѓР¶Р°РµРј РєРѕРјРїР°РЅРёРё...</div>
           ) : dashboard.companies.length === 0 ? (
             <div className="rounded-[1.5rem] border border-dashed border-white/12 bg-white/[0.035] p-6 text-sm leading-6 text-white/55">
-              РџРѕРєР° РЅРµС‚ РїСЂРёРіР»Р°С€С‘РЅРЅС‹С… РєРѕРјРїР°РЅРёР№. РћС‚РїСЂР°РІСЊС‚Рµ СЃСЃС‹Р»РєСѓ РїРµСЂРІРѕРјСѓ РїР°СЂС‚РЅС‘СЂСѓ, Р° WhiteBox РїСЂРёРІСЏР¶РµС‚ Р·Р°СЏРІРєСѓ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.
+              РџРѕРєР° РЅРµС‚ РїСЂРёРіР»Р°С€С‘РЅРЅС‹С… РєРѕРјРїР°РЅРёР№. РћС‚РїСЂР°РІСЊС‚Рµ СЃСЃС‹Р»РєСѓ РїРµСЂРІРѕРјСѓ РїР°СЂС‚РЅС‘СЂСѓ, Р° NearLoy РїСЂРёРІСЏР¶РµС‚ Р·Р°СЏРІРєСѓ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.
             </div>
           ) : (
             dashboard.companies.map((company) => (

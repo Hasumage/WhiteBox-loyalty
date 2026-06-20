@@ -6,6 +6,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import { CreateCompanySubscriptionDto } from "../admin/dto/create-company-subscription.dto";
 import { UpsertCompanyLocationDto } from "../admin/dto/upsert-company-location.dto";
+import { assertSubscriptionsEnabled } from "../common/subscriptions-feature";
 import { CompanyService } from "./company.service";
 import {
   AwardCompanyPointsDto,
@@ -166,11 +167,13 @@ export class CompanyController {
 
   @Get("subscriptions")
   subscriptions(@CurrentUser() user: RequestUser) {
+    assertSubscriptionsEnabled();
     return this.companyService.subscriptions(user.userId);
   }
 
   @Post("subscriptions")
   createSubscription(@CurrentUser() user: RequestUser, @Body() dto: CreateCompanySubscriptionDto) {
+    assertSubscriptionsEnabled();
     return this.companyService.createSubscription(user.userId, dto);
   }
 
@@ -181,6 +184,7 @@ export class CompanyController {
     @Param("uuid") uuid: string,
     @Body() dto: UpdateCompanyOwnedSubscriptionDto,
   ) {
+    assertSubscriptionsEnabled();
     return this.companyService.updateSubscription(user.userId, uuid, dto);
   }
 
@@ -190,6 +194,7 @@ export class CompanyController {
     @Param("uuid") uuid: string,
     @Body() dto: CreateSubscriptionEntitlementDto,
   ) {
+    assertSubscriptionsEnabled();
     return this.companyService.createEntitlement(user.userId, uuid, dto);
   }
 
@@ -201,11 +206,13 @@ export class CompanyController {
     @Param("entitlementUuid") entitlementUuid: string,
     @Body() dto: UpdateSubscriptionEntitlementDto,
   ) {
+    assertSubscriptionsEnabled();
     return this.companyService.updateEntitlement(user.userId, uuid, entitlementUuid, dto);
   }
 
   @Post("subscriptions/redemptions")
   redeemEntitlement(@CurrentUser() user: RequestUser, @Body() dto: RedeemSubscriptionEntitlementDto) {
+    assertSubscriptionsEnabled();
     return this.companyService.redeemEntitlement(user.userId, dto);
   }
 
@@ -218,24 +225,28 @@ export class CompanyController {
   @Post("club/bundles")
   @ApiOperation({ summary: "Create a paired subscription proposal for another company" })
   createClubBundle(@CurrentUser() user: RequestUser, @Body() dto: CreateCompanyClubBundleDto) {
+    assertSubscriptionsEnabled();
     return this.companyService.createClubBundleProposal(user.userId, dto);
   }
 
   @Post("club/bundles/:uuid/approve")
   @ApiOperation({ summary: "Approve current company participation in a paired subscription" })
   approveClubBundle(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
+    assertSubscriptionsEnabled();
     return this.companyService.approveClubBundle(user.userId, uuid);
   }
 
   @Post("club/bundles/:uuid/reject")
   @ApiOperation({ summary: "Reject current company participation in a paired subscription" })
   rejectClubBundle(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
+    assertSubscriptionsEnabled();
     return this.companyService.rejectClubBundle(user.userId, uuid);
   }
 
   @Post("club/bundles/redemptions")
   @ApiOperation({ summary: "Redeem a paired subscription benefit owned by the current company" })
   redeemClubBundleBenefit(@CurrentUser() user: RequestUser, @Body() dto: RedeemSubscriptionBundleBenefitDto) {
+    assertSubscriptionsEnabled();
     return this.companyService.redeemBundleBenefit(user.userId, dto);
   }
 }

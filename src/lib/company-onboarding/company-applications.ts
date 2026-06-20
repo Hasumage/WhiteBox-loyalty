@@ -4,6 +4,7 @@ import * as bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
 import { attachCompanyReferral, findCompanyReferralReferrer, normalizeCompanyReferralCode } from "@/lib/company-referrals/company-referrals";
 import { supportManagerConnectData } from "@/lib/company-referrals/support-manager";
+import { adminTelegramRecipients } from "@/lib/telegram/admin-chat";
 import { sendTelegramMessageQueued } from "@/lib/telegram/telegram-queue";
 import { escapeTelegramHtml } from "@/lib/telegram/telegram-service";
 import { encryptPassportData, type EncryptedPassportData, type ManualPassportData } from "./passport-data";
@@ -260,7 +261,7 @@ export async function createCompanyVerificationApplication(params: {
 
   const existingUser = await prisma.user.findUnique({ where: { email: params.payload.contactEmail }, select: { id: true } });
   if (existingUser) {
-    throw new Error("A WhiteBox account with this email already exists. Sign in first or use another email.");
+    throw new Error("A NearLoy account with this email already exists. Sign in first or use another email.");
   }
 
   const slug = await uniqueCompanySlug(params.payload.companyName);
@@ -438,13 +439,10 @@ export async function notifyAdminsAboutCompanyApplication(applicationUuid: strin
   const application = await prisma.companyVerificationApplication.findUnique({ where: { uuid: applicationUuid } });
   if (!application) throw new Error("Application not found.");
 
-  const admins = await prisma.user.findMany({
-    where: { role: { in: ["ADMIN", "SUPER_ADMIN", "MANAGER"] }, telegramId: { not: null } },
-    select: { telegramId: true, email: true, name: true },
-  });
+  const recipients = adminTelegramRecipients();
 
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken || admins.length === 0) return { sent: 0, admins: admins.length };
+  if (!botToken || recipients.length === 0) return { sent: 0, admins: recipients.length };
 
   const url = applicationAdminUrl(application.uuid);
   const employmentTypeLabel =
@@ -452,7 +450,7 @@ export async function notifyAdminsAboutCompanyApplication(applicationUuid: strin
   const verificationModeLabel =
     application.identityVerificationMode === "FULL" ? "полная проверка" : "тестовый доступ без паспорта";
   const text = [
-    "\u{1F3E2} <b>Новая заявка на верификацию компании WhiteBox</b>",
+    "\u{1F3E2} <b>Новая заявка на верификацию компании NearLoy</b>",
     `<code>${escapeTelegramHtml(application.uuid)}</code>`,
     "",
     `<b>Компания:</b> ${escapeTelegramHtml(application.companyName)}`,
@@ -467,17 +465,16 @@ export async function notifyAdminsAboutCompanyApplication(applicationUuid: strin
   ].filter(Boolean).join("\n");
 
   let sent = 0;
-  for (const admin of admins) {
-    if (!admin.telegramId) continue;
+  for (const recipient of recipients) {
     try {
       const delivery = await sendTelegramMessageQueued({
         botToken,
-        chatId: admin.telegramId.toString(),
+        chatId: recipient.chatId,
         text,
         parseMode: "HTML",
         proxyUrl: process.env.TELEGRAM_PROXY_URL,
-        recipientRole: "admin",
-        recipientLabel: admin.name || admin.email || "admin",
+        recipientRole: recipient.role ?? "admin_chat",
+        recipientLabel: recipient.label ?? "NearLoy admin chat",
         source: "company-verification",
         sourceId: application.uuid,
         priority: 20,
@@ -496,5 +493,5 @@ export async function notifyAdminsAboutCompanyApplication(applicationUuid: strin
     });
   }
 
-  return { sent, admins: admins.length };
+  return { sent, admins: recipients.length };
 }

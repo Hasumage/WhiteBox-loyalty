@@ -32,9 +32,10 @@ import {
   Users,
 } from "lucide-react";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
-import { WhiteBoxLogo } from "@/components/brand/WhiteBoxLogo";
+import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { PageTransition } from "@/components/PageTransition";
 import { clearStoredSession, getStoredUser } from "@/lib/api/auth-client";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 import { cn } from "@/lib/utils";
@@ -94,7 +95,7 @@ const adminMenu: AdminMenuSection[] = [
   },
 ] satisfies AdminMenuSection[];
 
-const companyMenu: NavItem[] = [
+const companyMenuBase: NavItem[] = [
   { href: "/company", label: "Дашборд", icon: LayoutDashboard },
   { href: "/company/clients", label: "Касса и клиенты", icon: QrCode },
   { href: "/company/subscriptions", label: "Подписки", icon: Gift },
@@ -107,6 +108,10 @@ const companyMenu: NavItem[] = [
   { href: "/company/settings", label: "Настройки компании", icon: Settings2 },
   { href: "/company/getting-started", label: "Первый запуск", icon: Rocket },
 ];
+
+const companyMenu: NavItem[] = companyMenuBase.filter(
+  (item) => SUBSCRIPTIONS_ENABLED || item.href !== "/company/subscriptions",
+);
 
 const COMPANY_WORKSPACE_LABEL = "Кабинет компании";
 const COMPANY_PARTNER_LABEL = "Кабинет партнёра";
@@ -218,9 +223,9 @@ export default function PortalLayout({
       <div className="mx-auto grid w-full max-w-[1600px] lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="hidden border-b border-white/10 bg-muted/10 p-4 [scrollbar-width:none] lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col lg:overflow-y-auto lg:border-b-0 lg:border-r [&::-webkit-scrollbar]:hidden">
           <Link href={isAdmin ? "/admin" : "/company"} className="mb-5 flex items-center gap-3">
-            <WhiteBoxLogo />
+            <NearLoyLogo />
             <div>
-              <p className="text-xl font-semibold tracking-tight">WhiteBox</p>
+              <p className="text-xl font-semibold tracking-tight">NearLoy</p>
               <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.workspace") : COMPANY_PARTNER_LABEL}</p>
             </div>
           </Link>
@@ -318,9 +323,9 @@ export default function PortalLayout({
           <div className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-background/88 px-4 py-3 backdrop-blur-xl lg:hidden">
             <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
               <Link href={isAdmin ? "/admin" : "/company"} className="flex min-w-0 items-center gap-3">
-                <WhiteBoxLogo className="h-9 w-9 shrink-0" />
+                <NearLoyLogo className="h-9 w-9 shrink-0" />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">WhiteBox</p>
+                  <p className="truncate text-sm font-semibold">NearLoy</p>
                   <p className="truncate text-xs text-muted-foreground">{currentLabel}</p>
                 </div>
               </Link>
@@ -383,9 +388,9 @@ export default function PortalLayout({
           <div className="absolute inset-x-0 bottom-0 max-h-[86dvh] overflow-y-auto rounded-t-[2rem] border border-white/10 bg-background p-4 shadow-[0_-24px_80px_rgba(0,0,0,0.55)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <WhiteBoxLogo className="h-10 w-10" />
+                <NearLoyLogo className="h-10 w-10" />
                 <div>
-                  <p className="font-semibold">WhiteBox</p>
+                  <p className="font-semibold">NearLoy</p>
                   <p className="text-xs text-muted-foreground">{isAdmin ? t("admin.layout.navigation") : COMPANY_PARTNER_LABEL}</p>
                 </div>
               </div>
@@ -466,3 +471,5 @@ export default function PortalLayout({
     </div>
   );
 }
+
+

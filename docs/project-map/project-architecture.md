@@ -1,4 +1,4 @@
-# WhiteBox - Architecture Overview
+# NearLoy - Architecture Overview
 
 ## Stack
 
@@ -86,7 +86,7 @@ Authorization is layered:
 2. The user can request full identity verification or limited test access.
 3. Passport photos are encrypted at rest in private local storage and referenced from DB metadata.
 4. Admin review can approve/reject and then cleanup passport files and DB file references.
-5. Verification requests notify linked admins through Telegram direct messages using the same DB-backed recipient model.
+5. Verification requests notify the shared admin Telegram chat configured by `TELEGRAM_ADMIN_CHAT_ID`.
 
 ### Localization
 

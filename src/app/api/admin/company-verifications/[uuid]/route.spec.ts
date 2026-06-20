@@ -29,13 +29,19 @@ jest.mock("@/lib/admin/require-admin-session", () => ({
   isAuthResponse: (value: unknown) => value instanceof Response,
 }));
 
+jest.mock("@/lib/company-onboarding/kyc-vault", () => ({
+  persistKycRecordFromApplication: jest.fn(),
+}));
+
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/admin/require-admin-session";
+import { persistKycRecordFromApplication } from "@/lib/company-onboarding/kyc-vault";
 import { PATCH } from "./route";
 
 const mockedRequireAdminSession = jest.mocked(requireAdminSession);
 const mockedPrisma = jest.mocked(prisma, { shallow: false });
+const mockedPersistKycRecordFromApplication = jest.mocked(persistKycRecordFromApplication);
 type MockVerificationTransaction = {
   companyVerificationApplication: { findUnique: jest.Mock; update: jest.Mock };
   company: { update: jest.Mock };
@@ -115,6 +121,11 @@ describe("admin company verification detail route", () => {
         where: expect.objectContaining({ sourceKey: "verification:application-1" }),
         data: expect.objectContaining({ status: "RESOLVED", resolvedById: 1 }),
       }),
+    );
+    expect(mockedPersistKycRecordFromApplication).toHaveBeenCalledWith(
+      "application-1",
+      "APPROVED",
+      expect.objectContaining({ actorUserId: 1 }),
     );
   });
 

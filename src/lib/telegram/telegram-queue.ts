@@ -82,7 +82,7 @@ async function createTelegramFailureIncidentIfNeeded(now = new Date()) {
         `Queued message failures: ${queueFailures}. Landing lead delivery failures: ${leadFailures}.`,
         "Check bot token, proxy, webhook/polling and Telegram API availability.",
       ].join("\n"),
-      actorLabel: "WhiteBox Telegram Queue",
+      actorLabel: "NearLoy Telegram Queue",
       result: "SUCCESS",
       tags: ["TELEGRAM", "TELEGRAM_FIRE", "DEVELOPER"],
     },

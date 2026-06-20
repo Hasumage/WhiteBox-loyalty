@@ -5,7 +5,7 @@ import { ArrayMinSize, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsNumbe
 import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../../subscriptions/subscription-limits";
 
 export class AwardCompanyPointsDto {
-  @ApiProperty({ example: "whitebox-user-uuid" })
+  @ApiProperty({ example: "nearloy-user-uuid" })
   @IsString()
   @MinLength(4)
   userUuid!: string;
@@ -36,7 +36,7 @@ export class AwardCompanyPointsDto {
 }
 
 export class SpendCompanyPointsDto {
-  @ApiProperty({ example: "whitebox-user-uuid" })
+  @ApiProperty({ example: "nearloy-user-uuid" })
   @IsString()
   @MinLength(4)
   userUuid!: string;
@@ -247,7 +247,7 @@ export class UpdateSubscriptionEntitlementDto {
 }
 
 export class RedeemSubscriptionEntitlementDto {
-  @ApiProperty({ example: "whitebox-user-uuid" })
+  @ApiProperty({ example: "nearloy-user-uuid" })
   @IsString()
   @MinLength(4)
   userUuid!: string;
@@ -272,7 +272,7 @@ export class RedeemSubscriptionEntitlementDto {
 }
 
 export class RedeemSubscriptionBundleBenefitDto {
-  @ApiProperty({ example: "whitebox-user-uuid" })
+  @ApiProperty({ example: "nearloy-user-uuid" })
   @IsString()
   @MinLength(4)
   userUuid!: string;

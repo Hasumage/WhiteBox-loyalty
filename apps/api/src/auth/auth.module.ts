@@ -4,6 +4,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { EmailModule } from "../email/email.module";
 import { JwtAuthMiddleware } from "./middleware/jwt-auth.middleware";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { LocalStrategy } from "./strategies/local.strategy";
@@ -11,6 +12,7 @@ import { LocalStrategy } from "./strategies/local.strategy";
 @Module({
   imports: [
     PassportModule.register({}),
+    EmailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

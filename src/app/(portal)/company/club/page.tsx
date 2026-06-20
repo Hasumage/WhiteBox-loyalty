@@ -387,7 +387,7 @@ export default function CompanyClubPage() {
             <Badge variant="outline" className="mb-4 border-cyan-200/30 bg-cyan-300/[0.08] text-cyan-100">
               <Handshake /> ENTREPRENEUR CLUB
             </Badge>
-            <h1 className="text-3xl font-semibold md:text-4xl">Клуб предпринимателей WhiteBox</h1>
+            <h1 className="text-3xl font-semibold md:text-4xl">Клуб предпринимателей NearLoy</h1>
             <p className="mt-3 text-muted-foreground">
               Место, где компании договариваются о совместных продуктах: кофе + фитнес, барбер + одежда,
               книги + образование. Клиент покупает одну подписку, а каждая компания гасит только своё преимущество.
@@ -532,7 +532,7 @@ export default function CompanyClubPage() {
                 </Button>
               ))}
               <span className="ml-auto self-center text-xs text-muted-foreground">
-                Доли дохода должны суммарно давать 100%. WhiteBox автоматически проверит распределение перед отправкой.
+                Доли дохода должны суммарно давать 100%. NearLoy автоматически проверит распределение перед отправкой.
               </span>
             </div>
 

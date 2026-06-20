@@ -1,4 +1,4 @@
-﻿import { BadgeCheck, Coffee, Compass, HandHeart, Heart, MapPinned, Medal, MessageSquareText, Route, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
+import { BadgeCheck, Coffee, Compass, HandHeart, Heart, MapPinned, Medal, MessageSquareText, Route, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConceptPageShell } from "../concept-components";
 
@@ -59,7 +59,7 @@ export default function LeaderboardsConceptPage() {
       </section>
       <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-sm text-emerald-100">
         <Sparkles className="mr-1 inline h-4 w-4" />
-        Правило: лидерборды WhiteBox должны ранжировать вклад и исследование, а не сумму денег.
+        Правило: лидерборды NearLoy должны ранжировать вклад и исследование, а не сумму денег.
       </div>
     </ConceptPageShell>
   );

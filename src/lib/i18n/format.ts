@@ -21,8 +21,9 @@ export function formatPlanPrice(
   price: number | string,
   unit: string | null | undefined,
   t: TranslateFn,
-  currency = "$",
+  currency = "₽",
 ) {
+  if (currency === "₽") return `${price} ${currency}/${unitLabel(unit, 1, t)}`;
   return `${currency}${price}/${unitLabel(unit, 1, t)}`;
 }
 

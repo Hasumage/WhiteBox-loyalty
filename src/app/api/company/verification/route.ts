@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       applicationUuid: result.application.uuid,
       notification,
-      message: "Заявка на верификацию отправлена администраторам WhiteBox.",
+      message: "Заявка на верификацию отправлена администраторам NearLoy.",
     });
   } catch (error) {
     if (passportUpload) {

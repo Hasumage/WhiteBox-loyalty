@@ -37,6 +37,7 @@ import {
   type CompanyClientDetail,
   type EntitlementWindow,
 } from "@/lib/api/company-client";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { cn } from "@/lib/utils";
 
 type BarcodeDetectorLike = {
@@ -66,7 +67,8 @@ type RedeemableItem = {
 
 function extractUserUuid(value: string) {
   const trimmed = value.trim();
-  return trimmed.startsWith("whitebox:user:") ? trimmed.slice("whitebox:user:".length) : trimmed;
+  if (trimmed.startsWith("nearloy:user:")) return trimmed.slice("nearloy:user:".length);
+  return trimmed;
 }
 
 function formatDate(value: string | null | undefined) {
@@ -108,7 +110,7 @@ export default function CompanyClientsPage() {
   const [loading, setLoading] = useState(false);
 
   const redeemableItems = useMemo<RedeemableItem[]>(() => {
-    if (!selected) return [];
+    if (!SUBSCRIPTIONS_ENABLED || !selected) return [];
     const ordinary = selected.activeSubscriptions.flatMap((plan) =>
       plan.subscription.entitlements.map((benefit) => ({
         uuid: benefit.uuid,
@@ -170,7 +172,8 @@ export default function CompanyClientsPage() {
   }
 
   async function searchClients() {
-    if (query.trim().startsWith("whitebox:user:")) {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.startsWith("nearloy:user:")) {
       await openClient(query);
       return;
     }
@@ -364,7 +367,7 @@ export default function CompanyClientsPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && void searchClients()}
-              placeholder="Имя, email, uuid или whitebox:user payload"
+              placeholder="Имя, email, uuid или nearloy:user payload"
               className="h-12 rounded-xl"
             />
             <Button onClick={searchClients} disabled={loading} className="h-12 rounded-xl px-7">
@@ -449,6 +452,7 @@ export default function CompanyClientsPage() {
             </Card>
           </div>
 
+          {SUBSCRIPTIONS_ENABLED && (
           <Card className="glass border-white/10 py-0">
             <CardContent className="p-5">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -491,8 +495,9 @@ export default function CompanyClientsPage() {
               </div>
             </CardContent>
           </Card>
+          )}
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className={cn("grid gap-4", SUBSCRIPTIONS_ENABLED && "lg:grid-cols-2")}>
             <Card className="glass border-white/10 py-0">
               <CardContent className="p-5">
                 <h3 className="mb-4 flex items-center gap-2 font-semibold"><History className="h-4 w-4 text-cyan-100" /> Баллы и покупки</h3>
@@ -529,6 +534,7 @@ export default function CompanyClientsPage() {
               </CardContent>
             </Card>
 
+            {SUBSCRIPTIONS_ENABLED && (
             <Card className="glass border-cyan-300/15 bg-cyan-300/[0.025] py-0">
               <CardContent className="p-5">
                 <h3 className="mb-4 flex items-center gap-2 font-semibold"><TicketCheck className="h-4 w-4 text-cyan-100" /> История погашений</h3>
@@ -551,6 +557,7 @@ export default function CompanyClientsPage() {
                 </div>
               </CardContent>
             </Card>
+            )}
           </div>
         </div>
       ) : (

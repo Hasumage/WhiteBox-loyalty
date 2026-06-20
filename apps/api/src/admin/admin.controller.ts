@@ -30,6 +30,7 @@ import { CreatePairedSubscriptionDto } from "./dto/create-paired-subscription.dt
 import { CreatePromoCodeDto } from "./dto/create-promo-code.dto";
 import { RequestEmailChangeDto } from "./dto/request-email-change.dto";
 import { RestoreBackupDto } from "./dto/restore-backup.dto";
+import { SendEmailDto, AdminEmailTargetType } from "./dto/send-email.dto";
 import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { UpdateCompanySubscriptionDto } from "./dto/update-company-subscription.dto";
 import { UpdateCompanyUserDto } from "./dto/update-company-user.dto";
@@ -135,6 +136,16 @@ export class AdminController {
   ) {
     await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
     return this.adminService.requestEmailChange(uuid, actor.userId, dto.newEmail);
+  }
+
+  @Post("email/send")
+  @ApiOperation({ summary: "Send email to a user, company account or direct email address" })
+  @ApiBody({ type: SendEmailDto })
+  async sendEmail(@Body() dto: SendEmailDto, @CurrentUser() actor: RequestUser) {
+    const scope =
+      dto.targetType === AdminEmailTargetType.COMPANY ? PermissionScope.COMPANIES : PermissionScope.USERS;
+    await this.adminService.assertAdminPermission(actor.userId, scope, "canEdit");
+    return this.adminService.sendEmail(dto, actor.userId);
   }
 
   @Delete("users/:uuid")

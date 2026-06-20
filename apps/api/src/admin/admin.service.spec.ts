@@ -1,8 +1,16 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { AccountStatus, PermissionScope, SubscriptionEntitlementWindow, UserRole } from "@prisma/client";
+import { EmailService } from "../email/email.service";
 import { AdminService } from "./admin.service";
 
 describe("AdminService", () => {
+  const originalSubscriptionsEnabled = process.env.SUBSCRIPTIONS_ENABLED;
   let service: AdminService;
   let prisma: {
     user: {
@@ -85,8 +93,13 @@ describe("AdminService", () => {
   const maintenance = {
     setRestoreStage: jest.fn(),
   };
+  const email = {
+    sendEmailChangeConfirmation: jest.fn(),
+    sendAdminMessage: jest.fn(),
+  };
 
   beforeEach(() => {
+    process.env.SUBSCRIPTIONS_ENABLED = "true";
     prisma = {
       user: {
         findUnique: jest.fn(),
@@ -167,11 +180,19 @@ describe("AdminService", () => {
       },
       referralInvite: { count: jest.fn() },
     };
-    service = new AdminService(prisma as never, config as never, maintenance as never);
+    service = new AdminService(prisma as never, config as never, maintenance as never, email as unknown as EmailService);
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  afterAll(() => {
+    if (originalSubscriptionsEnabled === undefined) {
+      delete process.env.SUBSCRIPTIONS_ENABLED;
+    } else {
+      process.env.SUBSCRIPTIONS_ENABLED = originalSubscriptionsEnabled;
+    }
   });
 
   it("createAccount throws conflict on duplicate email", async () => {
@@ -609,6 +630,30 @@ describe("AdminService", () => {
         ],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("createCompanySubscription is unavailable while subscriptions are disabled", async () => {
+    process.env.SUBSCRIPTIONS_ENABLED = "false";
+
+    await expect(
+      service.createCompanySubscription("c-1", {
+        name: "Monthly",
+        description: "desc value",
+        price: 299,
+        renewalPeriod: "month",
+        entitlements: [
+          {
+            title: "Coffee",
+            allowance: 1,
+            windowValue: 1,
+            windowUnit: SubscriptionEntitlementWindow.DAY,
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.subscription.create).not.toHaveBeenCalled();
   });
 
   it("createCompanySubscription requires at least one service", async () => {

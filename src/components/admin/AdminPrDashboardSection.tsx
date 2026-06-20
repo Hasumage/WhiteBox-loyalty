@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import {
@@ -86,8 +86,8 @@ export function AdminPrDashboardSection({ dashboard, locale }: { dashboard: PrDa
             </CardTitle>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               {locale === "ru"
-                ? "Компании, закреплённые за PR-менеджером, стадия воронки и выплата из доли WhiteBox."
-                : "Companies assigned to PR, funnel stage and payout paid from the WhiteBox share."}
+                ? "Компании, закреплённые за PR-менеджером, стадия воронки и выплата из доли NearLoy."
+                : "Companies assigned to PR, funnel stage and payout paid from the NearLoy share."}
             </p>
           </div>
           <Badge variant="secondary" className="w-fit">
@@ -113,11 +113,11 @@ export function AdminPrDashboardSection({ dashboard, locale }: { dashboard: PrDa
             icon={Handshake}
             label={locale === "ru" ? "PR-выплата" : "PR payout"}
             value={money(dashboard.totals.referralCommission, locale)}
-            hint={locale === "ru" ? "от оборота, из доли WhiteBox" : "from turnover, paid from WhiteBox share"}
+            hint={locale === "ru" ? "от оборота, из доли NearLoy" : "from turnover, paid from NearLoy share"}
           />
           <PrMetricCard
             icon={Landmark}
-            label={locale === "ru" ? "WhiteBox после PR" : "WhiteBox after PR"}
+            label={locale === "ru" ? "NearLoy после PR" : "NearLoy after PR"}
             value={money(dashboard.totals.whiteBoxNetCommission, locale)}
             hint={locale === "ru" ? "чистая комиссия платформы" : "net platform commission"}
           />
@@ -152,7 +152,7 @@ export function AdminPrDashboardSection({ dashboard, locale }: { dashboard: PrDa
                   <div>
                     <p className="text-lg font-semibold">{company.companyName}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {company.referrer.name} · {company.referralPercent}% {locale === "ru" ? "от оборота, из доли WhiteBox" : "of turnover, paid from WhiteBox share"}
+                      {company.referrer.name} · {company.referralPercent}% {locale === "ru" ? "от оборота, из доли NearLoy" : "of turnover, paid from NearLoy share"}
                     </p>
                   </div>
                   <Badge variant={company.pipelineStatus === "REVENUE_ACTIVE" ? "default" : "secondary"}>
@@ -165,7 +165,7 @@ export function AdminPrDashboardSection({ dashboard, locale }: { dashboard: PrDa
                     <p className="mt-1 font-semibold">{money(company.referralCommission, locale)}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">WhiteBox</p>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">NearLoy</p>
                     <p className="mt-1 font-semibold">{money(company.whiteBoxNetCommission, locale)}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
