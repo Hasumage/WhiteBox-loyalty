@@ -2,15 +2,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { CompanyVerificationStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { requireAdminScope } from "@/lib/admin/require-admin-scope";
-import { deletePassportFilesForApplication } from "@/lib/company-onboarding/passport-storage";
+import { persistKycRecordFromApplication } from "@/lib/company-onboarding/kyc-vault";
 import { addUtcDays } from "@/lib/finance/company-billing";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
 const REVIEW_STATUSES = new Set<CompanyVerificationStatus>(["SUBMITTED", "REVIEWING", "APPROVED", "REJECTED"]);
-const TERMINAL_STATUSES = new Set<CompanyVerificationStatus>(["APPROVED", "REJECTED"]);
 const FINAL_DECISION_ERROR = "FINAL_VERIFICATION_DECISION_RECORDED";
+
+function isTerminalStatus(status: CompanyVerificationStatus): status is Extract<CompanyVerificationStatus, "APPROVED" | "REJECTED"> {
+  return status === "APPROVED" || status === "REJECTED";
+}
 
 function readUuid(params: { uuid?: string } | Promise<{ uuid?: string }>) {
   return Promise.resolve(params).then((resolved) => resolved.uuid ?? "");
@@ -46,6 +49,31 @@ async function getApplication(uuid: string) {
           sha256: true,
           uploadedAt: true,
           status: true,
+        },
+      },
+      kycRecord: {
+        select: {
+          uuid: true,
+          status: true,
+          passportLast4: true,
+          passportPhotoMimeType: true,
+          passportPhotoOriginalName: true,
+          passportPhotoSize: true,
+          passportPhotoSha256: true,
+          passportPhotoDeletedAt: true,
+          updatedAt: true,
+          accessLogs: {
+            orderBy: { createdAt: "desc" },
+            take: 20,
+            select: {
+              uuid: true,
+              action: true,
+              reason: true,
+              ipAddress: true,
+              createdAt: true,
+              actor: { select: { name: true, email: true } },
+            },
+          },
         },
       },
     },
@@ -87,15 +115,8 @@ export async function PATCH(
     return NextResponse.json({ message: "Choose a valid review status" }, { status: 400 });
   }
 
-  let existing: {
-    id: number;
-    companyId: number | null;
-    identityVerificationMode: string;
-    status: CompanyVerificationStatus;
-  };
-
   try {
-    existing = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const current = await tx.companyVerificationApplication.findUnique({
         where: { uuid },
         select: { id: true, companyId: true, identityVerificationMode: true, status: true },
@@ -103,7 +124,7 @@ export async function PATCH(
       if (!current) {
         throw new Error("COMPANY_VERIFICATION_NOT_FOUND");
       }
-      if (TERMINAL_STATUSES.has(current.status)) {
+      if (isTerminalStatus(current.status)) {
         throw new Error(FINAL_DECISION_ERROR);
       }
 
@@ -122,7 +143,6 @@ export async function PATCH(
             identityVerificationCompleted: status === "APPROVED" && current.identityVerificationMode === "FULL",
             isActive: status === "APPROVED",
             verificationReviewedAt: status === "APPROVED" || status === "REJECTED" ? reviewedAt : undefined,
-            passportDataDeletedAt: status === "APPROVED" || status === "REJECTED" ? reviewedAt : undefined,
           },
         });
         if (status === "APPROVED") {
@@ -168,8 +188,6 @@ export async function PATCH(
           },
         });
       }
-
-      return current;
     }, { isolationLevel: "Serializable" });
   } catch (error) {
     if (error instanceof Error && error.message === "COMPANY_VERIFICATION_NOT_FOUND") {
@@ -187,11 +205,11 @@ export async function PATCH(
     throw error;
   }
 
-  if (TERMINAL_STATUSES.has(status)) {
-    await deletePassportFilesForApplication(existing.id);
-    await prisma.companyVerificationApplication.update({
-      where: { uuid },
-      data: { passportDataDeletedAt: new Date() },
+  if (isTerminalStatus(status)) {
+    await persistKycRecordFromApplication(uuid, status, {
+      actorUserId: session.userId,
+      request,
+      reason: `Final verification decision: ${status}`,
     });
   }
 

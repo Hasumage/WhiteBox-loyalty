@@ -162,7 +162,7 @@ describe("telegram webhook phone binding", () => {
         replyMarkup: expect.objectContaining({
           keyboard: [
             [expect.objectContaining({ request_contact: true })],
-            [expect.objectContaining({ web_app: { url: "https://whitebox-web-production.up.railway.app/" } })],
+            [expect.objectContaining({ web_app: { url: "https://nearloy.app/" } })],
           ],
         }),
       }),
@@ -236,11 +236,11 @@ describe("telegram webhook phone binding", () => {
     expect(mockedSendTelegramMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         chatId: "1348887499",
-        text: expect.stringContaining("Добро пожаловать в WhiteBox"),
+        text: expect.stringContaining("Добро пожаловать в NearLoy"),
         replyMarkup: {
           inline_keyboard: [
-            [{ text: "Открыть WhiteBox", web_app: { url: "https://whitebox-web-production.up.railway.app/" } }],
-            [{ text: "Помощь", web_app: { url: "https://whitebox-web-production.up.railway.app/help" } }],
+            [{ text: "Открыть NearLoy", web_app: { url: "https://nearloy.app/" } }],
+            [{ text: "Помощь", web_app: { url: "https://nearloy.app/help" } }],
           ],
         },
       }),
@@ -282,14 +282,14 @@ describe("telegram webhook phone binding", () => {
         replyMarkup: expect.objectContaining({
           keyboard: [
             [expect.objectContaining({ request_contact: true })],
-            [expect.objectContaining({ web_app: { url: "https://whitebox-web-production.up.railway.app/" } })],
+            [expect.objectContaining({ web_app: { url: "https://nearloy.app/" } })],
           ],
         }),
       }),
     );
   });
 
-  it("adds a WhiteBox Web App button when the link is expired", async () => {
+  it("adds a NearLoy Web App button when the link is expired", async () => {
     mockedPrisma.telegramLinkToken.findUnique.mockResolvedValue(null);
     mockedSendTelegramMessage.mockResolvedValue({ ok: true, queued: false, result: { ok: true, result: { message_id: 8 } } });
 
@@ -311,9 +311,9 @@ describe("telegram webhook phone binding", () => {
     expect(body).toMatchObject({ ok: false, message: "expired" });
     expect(mockedSendTelegramMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: expect.stringContaining("Ссылка WhiteBox устарела"),
+        text: expect.stringContaining("Ссылка NearLoy устарела"),
         replyMarkup: {
-          inline_keyboard: [[{ text: "Открыть WhiteBox", web_app: { url: "https://whitebox-web-production.up.railway.app/" } }]],
+          inline_keyboard: [[{ text: "Открыть NearLoy", web_app: { url: "https://nearloy.app/" } }]],
         },
       }),
     );
@@ -347,3 +347,4 @@ describe("telegram webhook phone binding", () => {
     );
   });
 });
+

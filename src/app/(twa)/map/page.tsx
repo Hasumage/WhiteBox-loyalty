@@ -4,8 +4,8 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as ReactDOM from "react-dom";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
-import { Bus, Car, ChevronRight, Crosshair, Filter, Footprints, LocateFixed, MapPin, Route, Search, X } from "lucide-react";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
+import { ArrowLeft, Bus, Car, ChevronRight, Crosshair, Filter, Footprints, LocateFixed, MapPin, Maximize2, Route, Search, X } from "lucide-react";
 import { getActiveTwaSubscriptions, getCachedActiveTwaSubscriptions, getCachedTwaCompanies, getTwaCompanies, type TwaCompany, type TwaUserSubscription } from "@/lib/api/twa-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import { categoryName } from "@/lib/i18n/categories";
 import { interpolate } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/format";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 const YANDEX_MAPS_SCRIPT_ID = "yandex-maps-js-api-v3";
 const YANDEX_MAP_CENTER: [number, number] = [37.6176, 55.7558];
@@ -87,6 +88,14 @@ const ROUTE_MODES: Array<{ key: RouteMode; labelKey: TranslationKey; yandex: str
   { key: "pedestrian", labelKey: "client.map.routeWalk", yandex: "pd", icon: Footprints },
   { key: "transit", labelKey: "client.map.routeTransit", yandex: "mt", icon: Bus },
 ];
+
+type FullMapSheetLevel = "peek" | "half" | "expanded";
+
+const FULL_MAP_SHEET_HEIGHT: Record<FullMapSheetLevel, string> = {
+  peek: "58px",
+  half: "42dvh",
+  expanded: "78dvh",
+};
 
 declare global {
   interface Window {
@@ -346,23 +355,27 @@ function PartnerMap({
   selectedId,
   onSelect,
   userLocation,
-  activeCompanyIds,
   onClusterPreview,
   selectedPreview,
+  className,
+  overlay,
+  showFooter = true,
 }: {
   points: PartnerMapPoint[];
   selectedId: string | null;
   onSelect: (point: PartnerMapPoint) => void;
   userLocation: UserMapLocation | null;
-  activeCompanyIds: Set<number>;
   onClusterPreview: (points: PartnerMapPoint[]) => void;
   selectedPreview?: React.ReactNode;
+  className?: string;
+  overlay?: React.ReactNode;
+  showFooter?: boolean;
 }) {
   const { t } = useI18n("ru");
   const markerItems = useMemo(() => buildMarkerItems(points, selectedId, 11), [points, selectedId]);
 
   return (
-    <div className="relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/10 bg-muted/30">
+    <div className={cn("relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/10 bg-muted/30", className)}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.12),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.05),transparent)]" />
       <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.08)_1px,transparent_1px)] [background-size:34px_34px]" />
       {userLocation && points.length > 0 && (
@@ -427,9 +440,12 @@ function PartnerMap({
           </button>
         );
       })}
-      <div className="absolute bottom-2 left-2 right-2 rounded-lg bg-background/80 px-2 py-1.5 text-[10px] text-muted-foreground backdrop-blur">
-        {interpolate(t("client.map.densityPreview"), { count: points.length })}
-      </div>
+      {showFooter && (
+        <div className="absolute bottom-2 left-2 right-2 rounded-lg bg-background/80 px-2 py-1.5 text-[10px] text-muted-foreground backdrop-blur">
+          {interpolate(t("client.map.densityPreview"), { count: points.length })}
+        </div>
+      )}
+      {overlay}
       {selectedPreview && (
         <div className="pointer-events-auto absolute inset-x-3 bottom-10 z-20">
           {selectedPreview}
@@ -444,20 +460,26 @@ function YandexPartnerMap({
   onSelect,
   focusPoint,
   userLocation,
-  activeCompanyIds,
   nearMeFocusKey,
   onClusterPreview,
   selectedPreview,
+  className,
+  overlay,
+  showDiagnostics = true,
+  showFooter = true,
 }: {
   points: PartnerMapPoint[];
   selectedId: string | null;
   onSelect: (point: PartnerMapPoint) => void;
   focusPoint: PartnerMapPoint | null;
   userLocation: UserMapLocation | null;
-  activeCompanyIds: Set<number>;
   nearMeFocusKey: number;
   onClusterPreview: (points: PartnerMapPoint[]) => void;
   selectedPreview?: React.ReactNode;
+  className?: string;
+  overlay?: React.ReactNode;
+  showDiagnostics?: boolean;
+  showFooter?: boolean;
 }) {
   const { t } = useI18n("ru");
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY;
@@ -558,11 +580,13 @@ function YandexPartnerMap({
           selectedId={selectedId}
           onSelect={onSelect}
           userLocation={userLocation}
-          activeCompanyIds={activeCompanyIds}
           onClusterPreview={onClusterPreview}
           selectedPreview={selectedPreview}
+          className={className}
+          overlay={overlay}
+          showFooter={showFooter}
         />
-        <MapDiagnostics status={status} />
+        {showDiagnostics && <MapDiagnostics status={status} />}
       </div>
     );
   }
@@ -572,7 +596,7 @@ function YandexPartnerMap({
 
   return (
     <div className="space-y-2">
-      <div className="relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/10 bg-muted/30">
+      <div className={cn("relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/10 bg-muted/30", className)}>
         <YMap location={location} mode="vector">
           <YMapDefaultSchemeLayer />
           <YMapDefaultFeaturesLayer />
@@ -644,16 +668,19 @@ function YandexPartnerMap({
             );
           })}
         </YMap>
-        <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-background/80 px-2 py-1.5 text-[10px] text-muted-foreground backdrop-blur">
-          {interpolate(t("client.map.yandexFooter"), { count: points.length })}
-        </div>
+        {showFooter && (
+          <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-background/80 px-2 py-1.5 text-[10px] text-muted-foreground backdrop-blur">
+            {interpolate(t("client.map.yandexFooter"), { count: points.length })}
+          </div>
+        )}
+        {overlay}
         {selectedPreview && (
           <div className="pointer-events-auto absolute inset-x-3 bottom-10 z-20">
             {selectedPreview}
           </div>
         )}
       </div>
-      <MapDiagnostics status={status} />
+      {showDiagnostics && <MapDiagnostics status={status} />}
     </div>
   );
 }
@@ -682,7 +709,7 @@ function MapDiagnostics({ status }: { status: MapStatus }) {
     </div>
   );
 }
-function MapPageContent() {
+export function MapPageContent({ full = false }: { full?: boolean } = {}) {
   const { t } = useI18n("ru");
   const searchParams = useSearchParams();
   const requestedCompany = searchParams.get("company");
@@ -700,14 +727,32 @@ function MapPageContent() {
   const [nearMeOnly, setNearMeOnly] = useState(false);
   const [nearMeFocusKey, setNearMeFocusKey] = useState(0);
   const [clusterPreviewPoints, setClusterPreviewPoints] = useState<PartnerMapPoint[]>([]);
+  const [fullSheetLevel, setFullSheetLevel] = useState<FullMapSheetLevel>("peek");
+  const fullSheetDragControls = useDragControls();
+  const fullSheetDraggingRef = useRef(false);
+
+  const settleFullMapSheet = (_: MouseEvent | TouchEvent | PointerEvent, info: { offset: { y: number }; velocity: { y: number } }) => {
+    const shouldExpand = info.offset.y < -38 || info.velocity.y < -420;
+    const shouldCollapse = info.offset.y > 38 || info.velocity.y > 420;
+    if (!shouldExpand && !shouldCollapse) return;
+
+    setFullSheetLevel((current) => {
+      if (shouldExpand) return current === "peek" ? "half" : "expanded";
+      return current === "expanded" ? "half" : "peek";
+    });
+  };
 
   useEffect(() => {
     let ignore = false;
     const cachedCompanies = getCachedTwaCompanies();
     const cachedSubscriptions = getCachedActiveTwaSubscriptions();
     if (cachedCompanies.length) setCompanies(cachedCompanies);
-    if (cachedSubscriptions.length) setActiveSubscriptions(cachedSubscriptions);
-    void Promise.all([getTwaCompanies(), getActiveTwaSubscriptions()]).then(([data, subscriptions]) => {
+    if (SUBSCRIPTIONS_ENABLED && cachedSubscriptions.length) setActiveSubscriptions(cachedSubscriptions);
+    const requests = SUBSCRIPTIONS_ENABLED
+      ? Promise.all([getTwaCompanies(), getActiveTwaSubscriptions()] as const)
+      : Promise.all([getTwaCompanies(), Promise.resolve([] as TwaUserSubscription[])] as const);
+
+    void requests.then(([data, subscriptions]) => {
       if (ignore) return;
       setCompanies(data);
       setActiveSubscriptions(subscriptions);
@@ -838,6 +883,34 @@ function MapPageContent() {
       .sort((a, b) => (a.distance ?? Number.POSITIVE_INFINITY) - (b.distance ?? Number.POSITIVE_INFINITY))
       .slice(0, 3);
   }, [selectedPoint, userLocation]);
+
+  const hasActiveMapFilters =
+    pointMode !== "all" || selectedCategory !== null || nearMeOnly || searchQuery.trim().length > 0;
+
+  function resetMapFilters() {
+    setPointMode("all");
+    setSelectedCategory(null);
+    setNearMeOnly(false);
+    setSearchQuery("");
+    setSelectedPointId("");
+    setClusterPreviewPoints([]);
+  }
+  const mapOverlay = (
+    <div className="pointer-events-auto absolute right-3 top-3 z-30 flex items-center gap-2">
+      {!full && (
+        <Button
+          asChild
+          size="icon"
+          className="h-11 w-11 rounded-full border border-white/15 bg-slate-950/88 text-white shadow-[0_16px_38px_rgba(0,0,0,0.42)] backdrop-blur-xl hover:bg-slate-900"
+          aria-label={t("client.map.expand")}
+        >
+          <Link href="/map/full">
+            <Maximize2 className="h-5 w-5" />
+          </Link>
+        </Button>
+      )}
+    </div>
+  );
   const selectedPreview = selectedPartner && selectedPoint ? (
     <motion.div
       key={selectedPoint.id}
@@ -910,17 +983,313 @@ function MapPageContent() {
     </motion.div>
   ) : null;
 
+  if (full) {
+    const visibleRows = clusterPreviewPoints.length > 0 ? clusterPreviewPoints : locationPoints.slice(0, 8);
+
+    const fullMapOverlay = (
+      <div className="pointer-events-none absolute inset-0 z-30">
+        <div className="pointer-events-auto absolute left-0 right-0 top-0 z-40 bg-gradient-to-b from-black/82 via-black/42 to-transparent px-4 pb-10 pt-[calc(env(safe-area-inset-top)+12px)]">
+          <div className="mx-auto max-w-[560px]">
+            <div className="flex items-start gap-3">
+              <Button asChild size="icon" className="mt-0.5 h-12 w-12 shrink-0 rounded-full bg-black/62 text-white shadow-[0_18px_42px_rgba(0,0,0,0.45)] backdrop-blur-xl hover:bg-black/76">
+                <Link href="/map" aria-label={t("client.map.back")}>
+                  <ArrowLeft className="h-5 w-5" />
+                </Link>
+              </Button>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 pr-1">
+                    <h1 className="text-[1.7rem] font-black leading-none tracking-tight text-white drop-shadow">{t("client.map.fullTitle")}</h1>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-11 w-11 rounded-full border border-white/12 bg-black/62 text-white shadow-[0_14px_34px_rgba(0,0,0,0.38)] backdrop-blur-xl hover:bg-black/76"
+                      onClick={requestGeolocation}
+                      disabled={geoStatus === "requesting"}
+                      aria-label={geoStatus === "requesting" ? t("client.map.locating") : t("client.map.locate")}
+                    >
+                      <Crosshair className="h-4 w-4" />
+                    </Button>
+                    <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+                      <SheetTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-11 w-11 rounded-full border border-white/12 bg-black/62 text-white shadow-[0_14px_34px_rgba(0,0,0,0.38)] backdrop-blur-xl hover:bg-black/76"
+                          aria-label={t("client.common.categories")}
+                        >
+                          <Filter className="h-4 w-4" />
+                        </Button>
+                      </SheetTrigger>
+                    <SheetContent side="bottom" className="rounded-t-3xl pb-[env(safe-area-inset-bottom)]">
+                      <SheetHeader>
+                        <SheetTitle>{t("client.map.filterByCategory")}</SheetTitle>
+                      </SheetHeader>
+                      <ScrollArea className="mt-4 h-[300px] pr-4">
+                        <div className="grid grid-cols-1 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCategory(null);
+                              setFilterOpen(false);
+                            }}
+                            className={cn(
+                              "rounded-2xl px-4 py-3 text-left font-semibold transition-colors",
+                              selectedCategory === null ? "bg-primary text-primary-foreground" : "bg-muted/50 hover:bg-muted",
+                            )}
+                          >
+                            {t("client.common.allCategories")}
+                          </button>
+                          {categories.map((category) => (
+                            <button
+                              key={category.slug}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCategory(category.slug);
+                                setFilterOpen(false);
+                              }}
+                              className={cn(
+                                "rounded-2xl px-4 py-3 text-left font-semibold transition-colors",
+                                selectedCategory === category.slug ? "bg-primary text-primary-foreground" : "bg-muted/50 hover:bg-muted",
+                              )}
+                            >
+                              <span className="inline-flex items-center gap-2">
+                                <CategoryIcon iconName={category.icon ?? "Circle"} className="h-4 w-4" />
+                                {categoryName(category, t)}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </SheetContent>
+                    </Sheet>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="relative mt-3">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/58" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
+                    setClusterPreviewPoints([]);
+                  }}
+                  placeholder={t("client.map.searchPlaceholder")}
+                  className="h-12 rounded-full border-white/14 bg-black/64 pl-11 text-sm text-white shadow-[0_18px_44px_rgba(0,0,0,0.38)] backdrop-blur-xl placeholder:text-white/56"
+                />
+                {searchQuery.trim() && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] overflow-hidden rounded-2xl border border-white/12 bg-slate-950/92 shadow-[0_22px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+                    {searchMatches.slice(0, 5).map((point) => (
+                      <button
+                        key={point.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 border-b border-white/10 px-3 py-2.5 text-left last:border-b-0 hover:bg-white/[0.06]"
+                        onClick={() => {
+                          setSelectedPointId(point.id);
+                          setClusterPreviewPoints([]);
+                          setSearchQuery("");
+                        }}
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-white">
+                          <CategoryIcon iconName={categoryIconName(point)} className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-white">{point.company.name}</span>
+                          <span className="block truncate text-xs text-white/54">{point.location.address}</span>
+                        </span>
+                      </button>
+                    ))}
+                    {searchMatches.length === 0 && <p className="px-3 py-3 text-sm text-white/60">{t("client.map.noMatchingPoints")}</p>}
+                  </div>
+                )}
+            </div>
+          </div>
+        </div>
+
+        <motion.div
+          initial={{ y: 90, opacity: 0, height: FULL_MAP_SHEET_HEIGHT.half }}
+          animate={{ y: 0, opacity: 1, height: FULL_MAP_SHEET_HEIGHT[fullSheetLevel] }}
+          transition={{ type: "spring", bounce: 0.2, duration: 0.46 }}
+          drag="y"
+          dragControls={fullSheetDragControls}
+          dragListener={false}
+          dragConstraints={{ top: 0, bottom: 0 }}
+          dragElastic={0.08}
+          dragMomentum={false}
+          onDragStart={() => {
+            fullSheetDraggingRef.current = true;
+          }}
+          onDragEnd={(event, info) => {
+            settleFullMapSheet(event, info);
+            window.setTimeout(() => {
+              fullSheetDraggingRef.current = false;
+            }, 0);
+          }}
+          className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 overflow-hidden rounded-t-[1.85rem] border border-white/14 bg-slate-950/92 px-4 pb-[calc(env(safe-area-inset-bottom)+14px)] pt-3 text-white shadow-[0_-24px_60px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
+        >
+          <div className="mx-auto flex h-full max-w-[560px] flex-col">
+            <button
+              type="button"
+              className="mx-auto mb-3 flex h-8 w-24 touch-none items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/80"
+              aria-label={t("client.map.pointsTitle")}
+              onPointerDown={(event) => {
+                fullSheetDragControls.start(event);
+              }}
+              onClick={() => {
+                if (fullSheetDraggingRef.current) return;
+                setFullSheetLevel((current) => (current === "expanded" ? "half" : current === "half" ? "peek" : "half"));
+              }}
+            >
+              <span className="h-1.5 w-16 rounded-full bg-white/32 shadow-[0_0_20px_rgba(255,255,255,0.22)]" />
+            </button>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-lg font-black leading-tight">{t("client.map.pointsTitle")}</p>
+                <p className="text-xs text-white/58">
+                  {interpolate(t("client.map.pointsVisible"), { points: locationPoints.length, partners: filteredPartners.length })}
+                </p>
+              </div>
+              <Badge variant="outline" className="border-white/12 bg-white/[0.06] text-white">
+                {nearMeOnly ? t("client.map.near") : selectedCategoryData ? categoryName(selectedCategoryData, t) : t("client.common.all")}
+              </Badge>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[
+                ["all", t("client.map.allPoints")],
+                ["main", t("client.map.mainOnly")],
+                ["open", t("client.map.openNow")],
+                ["visited", t("client.map.myPoints")],
+                ...(SUBSCRIPTIONS_ENABLED ? [["subscriptions", t("client.map.activeSubs")]] : []),
+              ].map(([key, label]) => (
+                <Button
+                  key={key}
+                  size="sm"
+                  variant={pointMode === key ? "default" : "secondary"}
+                  className="h-9 shrink-0 rounded-xl px-3 text-xs"
+                  onClick={() => {
+                    setPointMode(key as typeof pointMode);
+                    setSelectedPointId("");
+                    setClusterPreviewPoints([]);
+                  }}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[
+                ["name", t("client.map.sortName")],
+                ["points", t("client.map.sortPoints")],
+                ["branches", t("client.map.sortBranches")],
+              ].map(([key, label]) => (
+                <Button
+                  key={key}
+                  size="sm"
+                  variant={sortMode === key ? "outline" : "ghost"}
+                  className="h-8 rounded-xl border-white/12 px-3 text-xs text-white hover:bg-white/[0.08]"
+                  onClick={() => setSortMode(key as typeof sortMode)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {selectedPreview ? (
+                <div className="mt-3">{selectedPreview}</div>
+              ) : (
+              <ScrollArea className="mt-3 h-full pr-1">
+                <div className="space-y-2">
+                  {visibleRows.map((point) => (
+                    <button
+                      key={point.id}
+                      type="button"
+                      className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition hover:bg-white/[0.07]"
+                      onClick={() => {
+                        setSelectedPointId(point.id);
+                        setClusterPreviewPoints([]);
+                      }}
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06]">
+                        <CategoryIcon iconName={categoryIconName(point)} className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{point.company.name}</span>
+                        <span className="block truncate text-xs text-white/54">{point.location.address}</span>
+                      </span>
+                      <span className="shrink-0 text-xs text-white/48">{formatDistance(distanceKm(userLocation, point.location), t)}</span>
+                    </button>
+                  ))}
+                  {visibleRows.length === 0 && (
+                    <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-6 text-center">
+                      <p className="text-sm text-white/68">{t("client.map.noSavedLocations")}</p>
+                      {hasActiveMapFilters && (
+                        <Button type="button" size="sm" variant="secondary" className="mt-4 rounded-xl" onClick={resetMapFilters}>
+                          {t("client.common.resetFilters")}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }} className="fixed inset-0 z-[70] h-[100dvh] overflow-hidden bg-black">
+        <YandexPartnerMap
+          points={locationPoints}
+          selectedId={effectiveSelectedPointId}
+          onSelect={(point) => {
+            setSelectedPointId(point.id);
+            setClusterPreviewPoints([]);
+          }}
+          focusPoint={selectedPoint}
+          userLocation={userLocation}
+          nearMeFocusKey={nearMeFocusKey}
+          onClusterPreview={(points) => setClusterPreviewPoints(points)}
+          selectedPreview={null}
+          className="h-[100dvh] min-h-[100dvh] rounded-none border-0"
+          overlay={fullMapOverlay}
+          showDiagnostics={false}
+          showFooter={false}
+        />
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25 }}
-      className="min-h-full px-4 pb-4 pt-6"
+      className={cn("min-h-full px-4 pb-4 pt-6", full && "min-h-[100dvh] px-3 pt-4")}
     >
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold">{t("client.map.title")}</h1>
+          {full ? (
+            <Button asChild size="icon" variant="secondary" className="h-11 w-11 rounded-full">
+              <Link href="/map" aria-label={t("client.map.back")}>
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            </Button>
+          ) : (
+            <MapPin className="h-5 w-5 text-muted-foreground" />
+          )}
+          <div>
+            <h1 className={cn("font-semibold", full ? "text-xl" : "text-lg")}>
+              {full ? t("client.map.fullTitle") : t("client.map.title")}
+            </h1>
+            {full && <p className="text-xs text-muted-foreground">{t("client.map.fullSubtitle")}</p>}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -1077,14 +1446,18 @@ function MapPageContent() {
             ["main", t("client.map.mainOnly")],
             ["open", t("client.map.openNow")],
             ["visited", t("client.map.myPoints")],
-            ["subscriptions", t("client.map.activeSubs")],
+            ...(SUBSCRIPTIONS_ENABLED ? [["subscriptions", t("client.map.activeSubs")]] : []),
           ].map(([key, label]) => (
             <Button
               key={key}
               size="sm"
               variant={pointMode === key ? "default" : "secondary"}
               className="shrink-0"
-              onClick={() => setPointMode(key as typeof pointMode)}
+              onClick={() => {
+                setPointMode(key as typeof pointMode);
+                setSelectedPointId("");
+                setClusterPreviewPoints([]);
+              }}
             >
               {label}
             </Button>
@@ -1118,10 +1491,11 @@ function MapPageContent() {
         }}
         focusPoint={selectedPoint}
         userLocation={userLocation}
-        activeCompanyIds={activeCompanyIds}
         nearMeFocusKey={nearMeFocusKey}
         onClusterPreview={(points) => setClusterPreviewPoints(points)}
         selectedPreview={selectedPreview}
+        className={full ? "h-[calc(100dvh-330px)] min-h-[540px] rounded-[2rem] border-white/15" : undefined}
+        overlay={mapOverlay}
       />
 
       {clusterPreviewPoints.length > 0 && (
@@ -1275,7 +1649,14 @@ function MapPageContent() {
       </AnimatePresence>
 
       {locationPoints.length === 0 && (
-        <p className="mt-4 text-center text-sm text-muted-foreground">{t("client.map.noSavedLocations")}</p>
+        <div className="mt-4 rounded-2xl border border-white/10 bg-muted/10 px-4 py-5 text-center">
+          <p className="text-sm text-muted-foreground">{t("client.map.noSavedLocations")}</p>
+          {hasActiveMapFilters && (
+            <Button type="button" size="sm" variant="secondary" className="mt-4" onClick={resetMapFilters}>
+              {t("client.common.resetFilters")}
+            </Button>
+          )}
+        </div>
       )}
     </motion.div>
   );

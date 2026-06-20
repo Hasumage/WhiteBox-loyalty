@@ -1,9 +1,10 @@
-﻿import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PaymentPurpose, PaymentStatus, Prisma, SubscriptionBundleStatus, SubscriptionStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { PrismaService } from "../prisma/prisma.service";
 import { RegisteredService } from "../registered/registered.service";
+import { assertSubscriptionsEnabled } from "../common/subscriptions-feature";
 import { YooKassaPaymentObject, YooKassaService } from "./yookassa.service";
 
 function money(value: Prisma.Decimal | number | string) {
@@ -41,11 +42,21 @@ export class PaymentsService {
 
   private appReturnUrl(paymentUuid: string) {
     const configured = process.env.YOOKASSA_RETURN_URL || process.env.TELEGRAM_WEB_APP_URL || process.env.FRONTEND_ORIGIN || "http://localhost:3000";
-    const base = configured.replace(/\/$/, "");
+    const normalized = configured.trim().replace(/\/+$/, "");
+    let base = normalized;
+
+    try {
+      const url = new URL(normalized);
+      base = url.origin;
+    } catch {
+      base = normalized.replace(/\/payment\/success(?:\/.*)?$/i, "");
+    }
+
     return `${base}/payment/success?payment=${encodeURIComponent(paymentUuid)}`;
   }
 
   async createUserSubscriptionCheckout(userId: number, planUuid: string) {
+    assertSubscriptionsEnabled();
     if (!this.yookassa.isConfigured()) {
       throw new BadRequestException("YooKassa is not configured. Payment checkout is unavailable.");
     }
@@ -68,7 +79,7 @@ export class PaymentsService {
         user,
         purpose: PaymentPurpose.USER_SUBSCRIPTION,
         amount: subscription.price,
-        description: `WhiteBox subscription: ${subscription.name}`,
+        description: `NearLoy subscription: ${subscription.name}`,
         subscriptionId: subscription.id,
         companyId: subscription.companyId,
         metadata: { planUuid: subscription.uuid, planType: "subscription" },
@@ -97,7 +108,7 @@ export class PaymentsService {
       user,
       purpose: PaymentPurpose.USER_SUBSCRIPTION_BUNDLE,
       amount: bundle.price,
-      description: `WhiteBox paired subscription: ${bundle.name}`,
+      description: `NearLoy paired subscription: ${bundle.name}`,
       subscriptionBundleId: bundle.id,
       companyId: bundle.proposedByCompanyId ?? bundle.participants[0]?.companyId ?? null,
       metadata: { planUuid: bundle.uuid, planType: "bundle" },
@@ -166,8 +177,8 @@ export class PaymentsService {
       idempotenceKey,
       returnUrl,
       metadata: {
-        whiteboxPaymentUuid: created.uuid,
-        whiteboxUserId: String(input.user.id),
+        nearloyPaymentUuid: created.uuid,
+        nearloyUserId: String(input.user.id),
         ...input.metadata,
       },
     });
@@ -281,7 +292,7 @@ export class PaymentsService {
     });
     if (!payment?.user.telegramId) return;
 
-    const planName = payment.subscription?.name ?? payment.subscriptionBundle?.name ?? "подписка WhiteBox";
+    const planName = payment.subscription?.name ?? payment.subscriptionBundle?.name ?? "подписка NearLoy";
     const expiresAt = payment.userSubscription?.expiresAt ?? payment.userSubscriptionBundle?.expiresAt ?? null;
     const text = [
       "Спасибо за покупку!",
@@ -289,7 +300,7 @@ export class PaymentsService {
       `Подписка «${planName}» успешно подключена.`,
       `Действует до: ${formatDateTime(expiresAt)}.`,
       "",
-      "Откройте WhiteBox и покажите QR-код партнёру, когда захотите воспользоваться услугой.",
+      "Откройте NearLoy и покажите QR-код партнёру, когда захотите воспользоваться услугой.",
     ].join("\n");
 
     await this.sendTelegramMessageOrQueue({

@@ -1,14 +1,15 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowRight, CheckCircle2, Clock3, Loader2, QrCode, ReceiptText, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTwaPayment, refreshTwaDashboard, type TwaPaymentCheckout } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 function formatDate(value: string | null, locale: "ru" | "en") {
   if (!value) return locale === "ru" ? "без даты окончания" : "no expiration date";
@@ -30,7 +31,11 @@ function statusCopy(status: TwaPaymentCheckout["status"], locale: "ru" | "en") {
 export function PaymentSuccessClient() {
   const { locale } = useI18n("ru");
   const params = useSearchParams();
-  const paymentUuid = params.get("payment") ?? "";
+  const routeParams = useParams<{ rest?: string[] }>();
+  const paymentFromPath = Array.isArray(routeParams?.rest)
+    ? routeParams.rest.find((part) => /^[0-9a-f-]{16,}$/i.test(part))
+    : null;
+  const paymentUuid = params.get("payment") ?? paymentFromPath ?? "";
   const [payment, setPayment] = useState<TwaPaymentCheckout | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,7 +98,7 @@ export function PaymentSuccessClient() {
           </motion.div>
 
           <p className="mt-5 text-xs font-semibold uppercase tracking-[0.35em] text-cyan-100/70">
-            {locale === "ru" ? "WhiteBox checkout" : "WhiteBox checkout"}
+            {locale === "ru" ? "NearLoy checkout" : "NearLoy checkout"}
           </p>
           <h1 className="mt-3 text-3xl font-bold leading-tight text-white">{title}</h1>
           <p className="mt-3 max-w-md text-sm leading-6 text-white/65">
@@ -102,8 +107,8 @@ export function PaymentSuccessClient() {
                 ? "Подписка активирована и уже доступна в вашем аккаунте. Можно переходить к QR и пользоваться преимуществами."
                 : "Your subscription is active and available on your account. You can open QR and use the benefits."
               : locale === "ru"
-                ? "Если платеж уже списан, нажмите обновить: WhiteBox повторно сверит статус с YooKassa."
-                : "If the payment was charged, refresh the status and WhiteBox will sync it with YooKassa again."}
+                ? "Если платеж уже списан, нажмите обновить: NearLoy повторно сверит статус с YooKassa."
+                : "If the payment was charged, refresh the status and NearLoy will sync it with YooKassa again."}
           </p>
         </div>
       </section>
@@ -158,7 +163,11 @@ export function PaymentSuccessClient() {
           </Button>
         )}
         <Button asChild variant="secondary" className="h-12 rounded-2xl">
-          <Link href="/marketplace">{locale === "ru" ? "Вернуться к подпискам" : "Back to subscriptions"}</Link>
+          <Link href={SUBSCRIPTIONS_ENABLED ? "/marketplace" : "/app"}>
+            {locale === "ru"
+              ? SUBSCRIPTIONS_ENABLED ? "Вернуться к подпискам" : "Вернуться в кошелёк"
+              : SUBSCRIPTIONS_ENABLED ? "Back to subscriptions" : "Back to wallet"}
+          </Link>
         </Button>
       </div>
     </motion.main>

@@ -1,4 +1,4 @@
-# WhiteBox - Core Entities and Types
+# NearLoy - Core Entities and Types
 
 ## Prisma models
 
@@ -94,11 +94,11 @@ Points are not universal. They belong to a company:
 
 ## Telegram admin notifications
 
-Telegram delivery is routed through database users:
+Operational Telegram delivery is routed to one shared admin chat:
 
-- `User.telegramId` stores the linked private Telegram chat id.
-- Active `ADMIN`, `SUPER_ADMIN` and `MANAGER` users receive landing lead and company verification notifications.
-- Environment variables configure the bot and webhooks only; they do not define human notification recipients.
+- `TELEGRAM_ADMIN_CHAT_ID` stores the readable admin chat id. The app normalizes supergroup ids to the Bot API form (`-100...`) before sending.
+- Landing leads, company verification requests and payout requests are sent to the shared admin chat instead of personal admin accounts.
+- `User.telegramId` still stores linked private Telegram chats for personal flows such as account notifications, phone confirmation and mini app entry.
 
 ## Location model
 

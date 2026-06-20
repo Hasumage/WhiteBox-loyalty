@@ -79,15 +79,15 @@ describe("telegram service helpers", () => {
       },
     });
 
-    expect(text).toContain("<b>Новая заявка с лендинга WhiteBox</b>");
+    expect(text).toContain("<b>Новая заявка с лендинга NearLoy</b>");
     expect(text).toContain("Max &lt;script&gt;");
     expect(text).toContain("Coffee &amp; loyalty");
   });
 
   it("builds lead actions", () => {
-    expect(buildLeadInlineKeyboard({ leadUuid: "lead-1", leadUrl: "https://whitebox.test/admin/leads/1", contact: "@Hasumage" })).toEqual({
+    expect(buildLeadInlineKeyboard({ leadUuid: "lead-1", leadUrl: "https://nearloy.test/admin/leads/1", contact: "@Hasumage" })).toEqual({
       inline_keyboard: [
-        [{ text: "Открыть заявку", url: "https://whitebox.test/admin/leads/1" }],
+        [{ text: "Открыть заявку", url: "https://nearloy.test/admin/leads/1" }],
         [{ text: "Открыть контакт в Telegram", url: "https://t.me/Hasumage" }],
         [
           { text: "В работу", callback_data: "lead:lead-1:in_progress" },

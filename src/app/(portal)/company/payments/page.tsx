@@ -50,7 +50,7 @@ export default function CompanyPaymentsPage() {
       await requestCompanyPayout({ amount: Number(amount), details });
       setAmount("");
       setDetails("");
-      setMessage("Заявка отправлена на подтверждение WhiteBox.");
+      setMessage("Заявка отправлена на подтверждение NearLoy.");
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось отправить заявку.");

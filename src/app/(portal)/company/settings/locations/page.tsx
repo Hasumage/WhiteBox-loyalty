@@ -87,7 +87,7 @@ declare global {
   }
 }
 
-const YANDEX_MAPS_V2_SCRIPT_ID = "whitebox-yandex-maps-v2";
+const YANDEX_MAPS_V2_SCRIPT_ID = "nearloy-yandex-maps-v2";
 const MOSCOW_CENTER: Coordinates = { latitude: 55.751244, longitude: 37.618423 };
 const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5];
 const WEEKDAY_OPTIONS: Array<{ value: number; labelKey: TranslationKey }> = [

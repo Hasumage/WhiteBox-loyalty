@@ -24,7 +24,7 @@ Rules:
 
 - PRs run full verification against a temporary PostgreSQL database.
 - Merges to `main` run the same verification and then apply production Prisma migrations.
-- Railway deploys `whitebox-api` and `whitebox-web` from `main` after checks are green.
+- Railway deploys `nearloy-api` and `nearloy-web` from `main` after checks are green.
 
 ## Local Safety Guard
 

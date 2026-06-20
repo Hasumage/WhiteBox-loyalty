@@ -9,7 +9,7 @@ export class UpsertCompanyReferralDto {
   @Min(1)
   referrerUserId?: number;
 
-  @ApiPropertyOptional({ example: 1, description: "Percent of recognized subscription turnover paid from the WhiteBox share." })
+  @ApiPropertyOptional({ example: 1, description: "Percent of recognized subscription turnover paid from the NearLoy share." })
   @IsOptional()
   @IsNumber()
   @Min(0)

@@ -1,6 +1,6 @@
 # CI/CD
 
-WhiteBox uses GitHub Actions as the production gate.
+NearLoy uses GitHub Actions as the production gate.
 
 ## Pull requests
 
@@ -25,7 +25,7 @@ Every push to `main` runs the same full verification. If it passes, CI applies p
 - `PRODUCTION_DATABASE_URL`
 - `PRODUCTION_DIRECT_URL` optional, falls back to `PRODUCTION_DATABASE_URL`
 
-Railway should be configured to deploy `whitebox-api` and `whitebox-web` from `main` after GitHub checks are green.
+Railway should be configured to deploy `nearloy-api` and `nearloy-web` from `main` after GitHub checks are green.
 
 ## Required GitHub Secrets
 

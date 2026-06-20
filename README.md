@@ -1,4 +1,4 @@
-# WhiteBox - Loyalty Wallet (TWA) + API
+# NearLoy - Loyalty Wallet (TWA) + API
 
 Monorepo: **Next.js** (Telegram Web App UI) + **NestJS** (REST API) + **Prisma** + **PostgreSQL**.
 
@@ -187,8 +187,8 @@ npm run api:build
 
 For the investor demo / production preview, deploy to Railway as two Node services:
 
-- `whitebox-api` - NestJS API
-- `whitebox-web` - Next.js web app
+- `nearloy-api` - NestJS API
+- `nearloy-web` - Next.js web app
 
 See `docs/deployment-railway.md` for build commands, start commands, environment variables, and the post-deploy checklist.
 See `docs/ci-cd.md` for GitHub Actions checks, production migrations, and required GitHub Secrets.

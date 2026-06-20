@@ -1443,7 +1443,7 @@ export class CompanyService {
     await this.prisma.$transaction(async (tx) => {
       const snapshot = await this.financialSnapshot(tx, member.companyId);
       if (snapshot.availableForPayout < amountDue) {
-        throw new BadRequestException(`Недостаточно средств на балансе WhiteBox. Нужно ${amountDue.toFixed(2)} RUB.`);
+        throw new BadRequestException(`Недостаточно средств на балансе NearLoy. Нужно ${amountDue.toFixed(2)} RUB.`);
       }
       await tx.companyBillingInvoice.update({
         where: { id: current.invoice!.id },

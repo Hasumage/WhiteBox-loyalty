@@ -9,6 +9,6 @@ export class HealthController {
   @AllowDuringMaintenance()
   @ApiOperation({ summary: "Health check" })
   ok() {
-    return { status: "ok", service: "whitebox-api" };
+    return { status: "ok", service: "nearloy-api" };
   }
 }

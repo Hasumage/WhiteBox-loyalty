@@ -1,8 +1,8 @@
-# WhiteBox - Services and Data Access
+# NearLoy - Services and Data Access
 
 ## Data strategy
 
-WhiteBox now uses PostgreSQL-backed read models for the TWA. Mock data is legacy/static fallback only.
+NearLoy now uses PostgreSQL-backed read models for the TWA. Mock data is legacy/static fallback only.
 
 Important principles:
 

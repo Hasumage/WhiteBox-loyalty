@@ -12,6 +12,7 @@ import {
 } from "@prisma/client";
 import { createHash, randomInt } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
+import { assertSubscriptionsEnabled, subscriptionsEnabled } from "../common/subscriptions-feature";
 
 const CUSTOMER_LOOKUP_CODE_TTL_MS = 5 * 60 * 1000;
 
@@ -374,7 +375,7 @@ export class RegisteredService {
     });
     if (!user) throw new NotFoundException("User not found.");
 
-    const payload = `whitebox:user:${user.uuid}`;
+    const payload = `nearloy:user:${user.uuid}`;
     return {
       payload,
       generatedAt: new Date(),
@@ -576,6 +577,7 @@ export class RegisteredService {
       }
 
       if (!promo.subscription) throw new BadRequestException("Promo subscription is not available.");
+      assertSubscriptionsEnabled();
       const now = new Date();
       const existing = await tx.userSubscription.findFirst({
         where: {
@@ -715,6 +717,8 @@ export class RegisteredService {
   }
 
   async marketplace(userId: number, categorySlug?: string) {
+    assertSubscriptionsEnabled();
+
     const categories = await this.listMarketplaceCategories(userId);
     const [subscriptions, bundles, activeRows, activeBundleRows] = await Promise.all([
       this.prisma.subscription.findMany({
@@ -910,6 +914,8 @@ export class RegisteredService {
   }
 
   async listActiveSubscriptions(userId: number) {
+    if (!subscriptionsEnabled()) return [];
+
     const now = new Date();
     const [rows, bundleRows] = await Promise.all([
       this.prisma.userSubscription.findMany({
@@ -977,6 +983,8 @@ export class RegisteredService {
   }
 
   async listArchivedSubscriptions(userId: number) {
+    if (!subscriptionsEnabled()) return [];
+
     const now = new Date();
     const [rows, bundleRows] = await Promise.all([
       this.prisma.userSubscription.findMany({
@@ -1052,6 +1060,39 @@ export class RegisteredService {
   }
 
   async history(userId: number) {
+    if (!subscriptionsEnabled()) {
+      const transactions = await this.prisma.loyaltyTransaction.findMany({
+        where: { userId },
+        orderBy: { occurredAt: "desc" },
+        take: 100,
+        include: {
+          company: {
+            select: {
+              id: true,
+              slug: true,
+              name: true,
+              category: { select: { id: true, slug: true, name: true, icon: true } },
+            },
+          },
+        },
+      });
+
+      return {
+        transactions: transactions.map((transaction) => ({
+          uuid: transaction.uuid,
+          type: transaction.type,
+          status: transaction.status,
+          amount: transaction.amount,
+          description: transaction.description,
+          occurredAt: transaction.occurredAt,
+          company: transaction.company,
+        })),
+        redemptions: [],
+        subscriptions: [],
+        archivedSubscriptions: [],
+      };
+    }
+
     const [transactions, activeSubscriptions, archivedSubscriptions, subscriptionRedemptions, bundleRedemptions] = await Promise.all([
       this.prisma.loyaltyTransaction.findMany({
         where: { userId },
@@ -1148,6 +1189,15 @@ export class RegisteredService {
   }
 
   async dashboard(userId: number) {
+    if (!subscriptionsEnabled()) {
+      return {
+        wallet: await this.wallet(userId),
+        activeSubscriptions: [],
+        recommendedSubscriptions: [],
+        favoriteCategories: [],
+      };
+    }
+
     const [wallet, activeSubscriptions, marketplace] = await Promise.all([
       this.wallet(userId),
       this.listActiveSubscriptions(userId),
@@ -1163,6 +1213,8 @@ export class RegisteredService {
   }
 
   async activateSubscription(userId: number, subscriptionUuid: string) {
+    assertSubscriptionsEnabled();
+
     const plan = await this.prisma.subscription.findUnique({
       where: { uuid: subscriptionUuid },
       include: {
@@ -1253,6 +1305,8 @@ export class RegisteredService {
   }
 
   private async activateSubscriptionBundle(userId: number, bundleUuid: string) {
+    assertSubscriptionsEnabled();
+
     const bundle = await this.prisma.subscriptionBundle.findUnique({
       where: { uuid: bundleUuid },
       include: {

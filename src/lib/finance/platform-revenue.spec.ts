@@ -140,7 +140,7 @@ describe("platform revenue summary", () => {
     });
   });
 
-  it("matches the WhiteBox 12 percent and manager 1 percent model for 56,000 rub turnover", () => {
+  it("matches the NearLoy 12 percent and manager 1 percent model for 56,000 rub turnover", () => {
     const summary = calculatePlatformRevenueSummary(
       [
         {

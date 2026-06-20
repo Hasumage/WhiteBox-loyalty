@@ -137,6 +137,52 @@ export async function register(body: {
   }
 }
 
+export async function requestRegistrationCode(body: {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}): Promise<{ success: true; email: string; expiresAt: string } | { message: string | string[] }> {
+  try {
+    const res = await fetch(`${apiBase()}/auth/register/request-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        message: data.message ?? `HTTP ${res.status}`,
+      };
+    }
+    return data as { success: true; email: string; expiresAt: string };
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
+export async function verifyRegistrationCode(body: {
+  email: string;
+  code: string;
+}): Promise<AuthTokensResponse | { message: string | string[] }> {
+  try {
+    const res = await fetch(`${apiBase()}/auth/register/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        message: data.message ?? `HTTP ${res.status}`,
+      };
+    }
+    return data as AuthTokensResponse;
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
 export async function login(body: {
   email: string;
   password: string;

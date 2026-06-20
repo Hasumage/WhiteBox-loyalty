@@ -1,4 +1,4 @@
-﻿import {
+import {
   ArrowRight,
   BadgeCheck,
   BriefcaseBusiness,
@@ -79,7 +79,7 @@ const feed = [
   {
     tag: "deal",
     title: "Барбершоп готов дать 10 мест для теста подписки",
-    text: "Нужна компания с мужской аудиторией: спорт, авто, одежда. WhiteBox посчитает retention и cashback без ручных таблиц.",
+    text: "Нужна компания с мужской аудиторией: спорт, авто, одежда. NearLoy посчитает retention и cashback без ручных таблиц.",
     cta: "Собрать бандл",
   },
   {
@@ -94,7 +94,7 @@ const journeys = [
   [Search, "Найти подходящего партнёра", "Фильтр по сфере, городу, аудитории, среднему чеку, категориям и готовности делать совместный продукт."],
   [MessageCircle, "Отправить структурированное интро", "Вместо свободного чата: цель, что даю, что прошу, срок пилота, кто принимает решение."],
   [Handshake, "Согласовать условия", "Стороны видят вклад каждой компании, цену, правила баллов, ответственность и статус согласования."],
-  [WalletCards, "Выпустить совместную подписку", "Два разных предложения объединяются в одну карточку, QR и историю клиента внутри WhiteBox."],
+  [WalletCards, "Выпустить совместную подписку", "Два разных предложения объединяются в одну карточку, QR и историю клиента внутри NearLoy."],
 ];
 
 const collaborationIdeas = [
@@ -102,7 +102,7 @@ const collaborationIdeas = [
     icon: MessageCircle,
     title: "Интро-заявка",
     problem: "Сейчас предприниматели пишут друг другу хаотично и получают игнор.",
-    solution: "WhiteBox превращает сообщение в мини-бриф: кто я, какая аудитория, что предлагаю, какой пилот и что нужно от партнёра.",
+    solution: "NearLoy превращает сообщение в мини-бриф: кто я, какая аудитория, что предлагаю, какой пилот и что нужно от партнёра.",
     result: "Получатель за 20 секунд понимает, стоит ли отвечать.",
   },
   {
@@ -132,7 +132,7 @@ const clubRules = [
   "В клуб попадают только верифицированные владельцы или уполномоченные сотрудники компаний.",
   "Нельзя писать холодные массовые предложения. Любое интро должно объяснять пользу для второй стороны.",
   "Репутация растёт за подтверждённые действия: полезные ответы, закрытые интро, аккуратные коллаборации.",
-  "WhiteBox не продаёт доступ к людям. Клуб помогает строить доверие и совместные продукты внутри системы.",
+  "NearLoy не продаёт доступ к людям. Клуб помогает строить доверие и совместные продукты внутри системы.",
 ];
 
 function GlowCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -157,8 +157,8 @@ export default function ClubConceptPage() {
   return (
     <ConceptPageShell
       eyebrow="Private founders club"
-      title="Клуб WhiteBox"
-      description="Прототип закрытого клуба предпринимателей внутри WhiteBox: верифицированные участники, тёплые интро, совместные подписки, карта возможностей и репутация, которая строится на полезных действиях."
+      title="Клуб NearLoy"
+      description="Прототип закрытого клуба предпринимателей внутри NearLoy: верифицированные участники, тёплые интро, совместные подписки, карта возможностей и репутация, которая строится на полезных действиях."
     >
       <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
         <GlowCard className="relative min-h-[420px]">
@@ -168,7 +168,7 @@ export default function ClubConceptPage() {
               <div>
                 <Badge className="mb-3 bg-white text-black"><LockKeyhole className="mr-1 h-3 w-3" /> invite only</Badge>
                 <h2 className="text-2xl font-semibold">Клубный пульт предпринимателя</h2>
-                <p className="mt-2 max-w-xl text-sm leading-6 text-white/60">Один экран для деловых связей: комнаты, запросы, интро, сделки и быстрый переход в инструменты WhiteBox.</p>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-white/60">Один экран для деловых связей: комнаты, запросы, интро, сделки и быстрый переход в инструменты NearLoy.</p>
               </div>
               <MiniButton variant="light"><Crown className="h-4 w-4" /> Founder pass</MiniButton>
             </div>
@@ -280,7 +280,7 @@ export default function ClubConceptPage() {
             <Badge className="mb-3 bg-white text-black"><WalletCards className="mr-1 h-3 w-3" /> co-subscription builder</Badge>
             <h2 className="text-3xl font-semibold tracking-tight">Конструктор совместной подписки</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
-              Практичный интерфейс: две компании заполняют свои части отдельно, WhiteBox проверяет совместимость и плавно собирает одну карточку подписки для клиента.
+              Практичный интерфейс: две компании заполняют свои части отдельно, NearLoy проверяет совместимость и плавно собирает одну карточку подписки для клиента.
             </p>
           </div>
           <MiniButton variant="cyan"><Sparkles className="h-4 w-4" /> preview готов</MiniButton>
@@ -330,7 +330,7 @@ export default function ClubConceptPage() {
               <Handshake className="h-8 w-8" />
             </div>
             <p className="text-center text-xs uppercase tracking-[0.24em] text-cyan-100/55">merge logic</p>
-            <h3 className="mt-2 text-center text-xl font-semibold">WhiteBox собирает общий продукт</h3>
+            <h3 className="mt-2 text-center text-xl font-semibold">NearLoy собирает общий продукт</h3>
             <div className="my-5 h-10 w-px bg-gradient-to-b from-transparent via-white/25 to-transparent" />
             <div className="grid w-full gap-2">
               {[
@@ -434,7 +434,7 @@ export default function ClubConceptPage() {
             <Target className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-2xl font-semibold">Что нужно предпринимателям в WhiteBox</h2>
+            <h2 className="text-2xl font-semibold">Что нужно предпринимателям в NearLoy</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Клуб должен решать практические задачи бизнеса, а не быть ещё одним шумным чатом. Ниже - ядро пользы.</p>
           </div>
         </div>
@@ -534,7 +534,7 @@ export default function ClubConceptPage() {
           <div>
             <h2 className="text-2xl font-semibold">Другие понятные механики взаимодействия</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              Я докрутил идеи так, чтобы каждая начиналась с практической боли предпринимателя и заканчивалась действием в WhiteBox, а не просто “пообщались в клубе”.
+              Я докрутил идеи так, чтобы каждая начиналась с практической боли предпринимателя и заканчивалась действием в NearLoy, а не просто “пообщались в клубе”.
             </p>
           </div>
         </div>

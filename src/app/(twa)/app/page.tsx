@@ -18,6 +18,7 @@ import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { interpolate } from "@/lib/i18n/format";
 import { categoryName } from "@/lib/i18n/categories";
@@ -84,7 +85,10 @@ export default function HomePage() {
     const cachedFavorites = getCachedFavoriteCategorySlugs();
     const cachedDashboard = getCachedTwaDashboard();
     if (cachedFavorites.length > 0) setFavoriteSlugs(cachedFavorites);
-    if (cachedDashboard.wallet.companies.length || cachedDashboard.activeSubscriptions.length || cachedDashboard.recommendedSubscriptions.length) {
+    if (
+      cachedDashboard.wallet.companies.length ||
+      (SUBSCRIPTIONS_ENABLED && (cachedDashboard.activeSubscriptions.length || cachedDashboard.recommendedSubscriptions.length))
+    ) {
       setDashboard(cachedDashboard);
       setLoading(false);
     }
@@ -290,6 +294,7 @@ export default function HomePage() {
       </motion.section>
 
       {/* Active Subscriptions */}
+      {SUBSCRIPTIONS_ENABLED ? (
       <motion.section
         initial={{ y: 8, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -319,9 +324,9 @@ export default function HomePage() {
             const plan = activeSubscription.subscription;
             const category = plan.category;
             return (
-              <Link key={activeSubscription.id} href={`/marketplace/${plan.uuid}`}>
-                <Card className="glass min-w-[160px] border-white/10 transition-all active:scale-[0.98] hover:border-white/20">
-                  <CardContent className="p-3">
+              <Link key={activeSubscription.id} href={`/marketplace/${plan.uuid}`} className="shrink-0">
+                <Card className="glass w-[176px] max-w-[176px] border-white/10 transition-all active:scale-[0.98] hover:border-white/20">
+                  <CardContent className="min-w-0 p-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 mb-2">
                       {category ? (
                         <CategoryIcon iconName={category.icon ?? "Circle"} className="h-4 w-4 text-primary" />
@@ -329,7 +334,7 @@ export default function HomePage() {
                         <CircleDollarSign className="h-4 w-4 text-primary" />
                       )}
                     </div>
-                    <p className="text-sm font-semibold truncate">{plan.name}</p>
+                    <p className="min-w-0 truncate text-sm font-semibold">{plan.name}</p>
                     <SubscriptionProgressBar
                       progress={computeSubscriptionProgress({
                         expiresAt: activeSubscription.expiresAt ?? activeSubscription.updatedAt,
@@ -344,6 +349,7 @@ export default function HomePage() {
           })}
         </div>
       </motion.section>
+      ) : null}
 
       {/* Loyalty Cards — preview only; category filter applies here only */}
       <section>

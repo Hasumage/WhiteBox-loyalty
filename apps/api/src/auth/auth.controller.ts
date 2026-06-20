@@ -10,7 +10,9 @@ import { ConfirmEmailChangeDto } from "./dto/confirm-email-change.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { RequestRegistrationCodeDto } from "./dto/request-registration-code.dto";
 import { TelegramMiniAppLoginDto } from "./dto/telegram-mini-app-login.dto";
+import { VerifyRegistrationCodeDto } from "./dto/verify-registration-code.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 
 function loginContextFromRequest(req: Request): LoginContext {
@@ -50,6 +52,27 @@ export class AuthController {
     return this.auth.register(dto);
   }
 
+  @Post("register/request-code")
+  @ApiBody({ type: RequestRegistrationCodeDto })
+  @ApiOperation({
+    summary: "Request email code before registration",
+    description:
+      "Stores a pending registration request and sends a six-digit code to the email. The user is created only after code verification.",
+  })
+  requestRegistrationCode(@Body() dto: RequestRegistrationCodeDto) {
+    return this.auth.requestRegistrationCode(dto);
+  }
+
+  @Post("register/verify")
+  @ApiBody({ type: VerifyRegistrationCodeDto })
+  @ApiOperation({
+    summary: "Verify registration code and create user",
+    description: "Creates a verified user account and issues regular access + refresh tokens.",
+  })
+  verifyRegistrationCode(@Body() dto: VerifyRegistrationCodeDto) {
+    return this.auth.verifyRegistrationCode(dto);
+  }
+
   @Post("login")
   @ApiBody({ type: LoginDto })
   @UseGuards(AuthGuard("local"))
@@ -65,7 +88,7 @@ export class AuthController {
   @ApiOperation({
     summary: "Login from Telegram Mini App",
     description:
-      "Validates Telegram Mini App initData with the bot token, finds a linked WhiteBox account by telegramId, and issues the regular access + refresh tokens.",
+      "Validates Telegram Mini App initData with the bot token, finds a linked NearLoy account by telegramId, and issues the regular access + refresh tokens.",
   })
   telegramMiniAppLogin(@Req() req: Request, @Body() dto: TelegramMiniAppLoginDto) {
     return this.auth.loginWithTelegramMiniApp(dto.initData, loginContextFromRequest(req));

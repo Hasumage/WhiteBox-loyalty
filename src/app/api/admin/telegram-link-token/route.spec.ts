@@ -22,7 +22,7 @@ const adminRow = { id: 1, role: "ADMIN" } as Awaited<ReturnType<typeof prisma.us
 describe("admin telegram link token route", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.TELEGRAM_BOT_USERNAME = "White_Box_Loyalty_bot";
+    process.env.TELEGRAM_BOT_USERNAME = "NearLoy_Loyalty_bot";
   });
 
   it("creates one-time telegram deep link for existing admin", async () => {
@@ -34,7 +34,7 @@ describe("admin telegram link token route", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.deepLink).toContain("https://t.me/White_Box_Loyalty_bot?start=link_");
+    expect(body.deepLink).toContain("https://t.me/NearLoy_Loyalty_bot?start=link_");
     expect(mockedPrisma.telegramLinkToken.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: 1, token: expect.any(String), expiresAt: expect.any(Date) }),
     });
@@ -49,7 +49,7 @@ describe("admin telegram link token route", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.deepLink).toContain("https://t.me/White_Box_Loyalty_bot?start=link_");
+    expect(body.deepLink).toContain("https://t.me/NearLoy_Loyalty_bot?start=link_");
     expect(mockedPrisma.telegramLinkToken.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: 1 }),
     });

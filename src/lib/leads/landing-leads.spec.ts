@@ -1,7 +1,4 @@
 const mockPrisma = {
-  user: {
-    findMany: jest.fn(),
-  },
 };
 
 jest.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
@@ -9,6 +6,11 @@ jest.mock("@/lib/telegram/telegram-service", () => ({
   buildLeadInlineKeyboard: jest.fn(),
   renderLandingLeadHtmlMessage: jest.fn(() => "message"),
   sendTelegramMessage: jest.fn(),
+}));
+jest.mock("@/lib/telegram/admin-chat", () => ({
+  adminTelegramRecipients: jest.fn(() => [
+    { chatId: "-1003977200071", role: "admin_chat", label: "NearLoy admin chat" },
+  ]),
 }));
 
 import {
@@ -28,11 +30,11 @@ describe("landing lead helpers", () => {
     company: "Urban Retail",
     contact: "maksim@example.com",
     business: "Retail",
-    message: "I want to test WhiteBox pilot",
+    message: "I want to test NearLoy pilot",
   };
 
   it("normalizes fields and parses required payload", () => {
-    expect(normalizeLeadField("  hello   whitebox  ")).toBe("hello whitebox");
+    expect(normalizeLeadField("  hello   nearloy  ")).toBe("hello nearloy");
     expect(parseLandingLeadPayload({ ...lead, name: "  Max  " })).toEqual(lead);
   });
 
@@ -74,51 +76,13 @@ describe("landing lead helpers", () => {
     expect(nextRetryAt(3, now).toISOString()).toBe("2026-05-16T00:15:00.000Z");
   });
 
-  it("builds Telegram recipients from active admins in the database", async () => {
-    mockPrisma.user.findMany.mockResolvedValueOnce([
-      {
-        id: 25,
-        email: "maksimpastuhov77@gmail.com",
-        name: "Max",
-        role: "SUPER_ADMIN",
-        telegramId: BigInt(1348887499),
-      },
-      {
-        id: 30,
-        email: "manager@whitebox.test",
-        name: null,
-        role: "MANAGER",
-        telegramId: BigInt(1000000001),
-      },
-    ]);
-
+  it("routes Telegram notifications to the shared admin chat", async () => {
     await expect(adminTelegramRecipients()).resolves.toEqual([
       {
-        chatId: "1348887499",
-        role: "super_admin",
-        label: "Max",
-      },
-      {
-        chatId: "1000000001",
-        role: "manager",
-        label: "manager@whitebox.test",
+        chatId: "-1003977200071",
+        role: "admin_chat",
+        label: "NearLoy admin chat",
       },
     ]);
-
-    expect(mockPrisma.user.findMany).toHaveBeenCalledWith({
-      where: {
-        role: { in: ["ADMIN", "SUPER_ADMIN", "MANAGER"] },
-        telegramId: { not: null },
-        accountStatus: "ACTIVE",
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        telegramId: true,
-      },
-      orderBy: { id: "asc" },
-    });
   });
 });

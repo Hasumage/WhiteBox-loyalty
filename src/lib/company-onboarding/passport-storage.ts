@@ -66,6 +66,10 @@ export async function readEncryptedPassportFile(file: PassportVerificationFile) 
   return Buffer.concat([decipher.update(encrypted), decipher.final()]);
 }
 
+export async function readEncryptedPassportBlob(file: Pick<PassportVerificationFile, "storageKey">) {
+  return readFile(storagePath(file.storageKey));
+}
+
 export async function deletePassportStorageFile(storageKey: string) {
   await rm(storagePath(storageKey), { force: true });
 }

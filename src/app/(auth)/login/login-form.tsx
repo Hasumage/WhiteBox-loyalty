@@ -4,7 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { WhiteBoxLogo } from "@/components/brand/WhiteBoxLogo";
+import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -54,7 +54,7 @@ export function LoginForm() {
   function enterSession(data: AuthTokensResponse) {
     const destination = authenticatedDestination(data.user, requestedNext);
     setStoredSession(data);
-    window.dispatchEvent(new Event("whitebox:auth-updated"));
+    window.dispatchEvent(new Event("nearloy:auth-updated"));
 
     if (data.user.accountStatus === "FROZEN_PENDING_DELETION") {
       setPendingNext(destination);
@@ -150,9 +150,9 @@ export function LoginForm() {
       <CardHeader>
         <div className="mb-5 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-3">
           <Link href="/" className="flex min-w-0 items-center gap-3">
-            <WhiteBoxLogo className="h-9 w-9 shrink-0" />
+            <NearLoyLogo className="h-9 w-9 shrink-0" />
             <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold text-foreground">WhiteBox</span>
+              <span className="block truncate text-sm font-semibold text-foreground">NearLoy</span>
               <span className="block truncate text-xs text-muted-foreground">{t("client.auth.brandSubtitle")}</span>
             </span>
           </Link>
@@ -197,7 +197,7 @@ export function LoginForm() {
               className="rounded-lg border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-sm text-cyan-100"
               role="status"
             >
-              Восстанавливаем сессию WhiteBox...
+              Восстанавливаем сессию NearLoy...
             </p>
           )}
           <div className="space-y-2">

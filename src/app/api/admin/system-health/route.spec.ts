@@ -111,7 +111,7 @@ describe("admin system health route", () => {
         category: "SYSTEM",
         action: "Telegram delivery fire",
         details: "Failures reached threshold",
-        actorLabel: "WhiteBox Telegram Queue",
+        actorLabel: "NearLoy Telegram Queue",
         targetLabel: null,
         result: "SUCCESS",
         tags: ["TELEGRAM", "TELEGRAM_FIRE"],

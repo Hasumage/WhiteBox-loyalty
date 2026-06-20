@@ -11,11 +11,14 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { User, UserRole, type Prisma } from "@prisma/client";
 import * as bcrypt from "bcrypt";
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes, randomInt } from "crypto";
+import { EmailService } from "../email/email.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { RequestRegistrationCodeDto } from "./dto/request-registration-code.dto";
+import { VerifyRegistrationCodeDto } from "./dto/verify-registration-code.dto";
 import { verifyTelegramMiniAppInitData } from "./telegram-mini-app";
 
 /** Mirrors Prisma `AccountStatus` — string union keeps emitted `.d.ts` stable if Prisma re-exports differ. */
@@ -51,6 +54,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly email: EmailService,
   ) {}
 
   onModuleInit() {
@@ -128,7 +132,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   }
 
   private deletedEmail(uuid: string) {
-    return `deleted+${uuid.toLowerCase()}@deleted.whitebox.local`;
+    return `deleted+${uuid.toLowerCase()}@deleted.nearloy.local`;
   }
 
   private async finalizeExpiredFrozenAccount(
@@ -190,8 +194,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async register(dto: RegisterDto) {
-    const role = dto.role ?? UserRole.CLIENT;
+  private assertPublicRegistrationRole(role: UserRole) {
     const publicRegistrationBlockedRoles = new Set<UserRole>([
       UserRole.ADMIN,
       UserRole.SUPER_ADMIN,
@@ -203,6 +206,40 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
         "Admin workspace accounts cannot be created via public registration",
       );
     }
+  }
+
+  private async grantClientRegistrationRewards(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    role: UserRole,
+  ) {
+    if (role !== UserRole.CLIENT) return;
+    const topStatus = await tx.profileStatus.findUnique({
+      where: { slug: "top-100" },
+      select: { id: true },
+    });
+    const counter = await tx.platformCounter.upsert({
+      where: { key: "top100_client_registrations" },
+      create: { key: "top100_client_registrations", value: 1 },
+      update: { value: { increment: 1 } },
+    });
+
+    if (topStatus && counter.value <= 100) {
+      await tx.userProfileStatusUnlock.upsert({
+        where: { userId_statusId: { userId, statusId: topStatus.id } },
+        create: {
+          userId,
+          statusId: topStatus.id,
+          source: "TOP_100",
+        },
+        update: {},
+      });
+    }
+  }
+
+  async register(dto: RegisterDto) {
+    const role = dto.role ?? UserRole.CLIENT;
+    this.assertPublicRegistrationRole(role);
     const email = dto.email.trim().toLowerCase();
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -218,33 +255,116 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
           role,
         },
       });
-
-      if (role === UserRole.CLIENT) {
-        const topStatus = await tx.profileStatus.findUnique({
-          where: { slug: "top-100" },
-          select: { id: true },
-        });
-        const counter = await tx.platformCounter.upsert({
-          where: { key: "top100_client_registrations" },
-          create: { key: "top100_client_registrations", value: 1 },
-          update: { value: { increment: 1 } },
-        });
-
-        if (topStatus && counter.value <= 100) {
-          await tx.userProfileStatusUnlock.upsert({
-            where: { userId_statusId: { userId: created.id, statusId: topStatus.id } },
-            create: {
-              userId: created.id,
-              statusId: topStatus.id,
-              source: "TOP_100",
-            },
-            update: {},
-          });
-        }
-      }
-
+      await this.grantClientRegistrationRewards(tx, created.id, role);
       return created;
     });
+    return this.issueTokens(user);
+  }
+
+  async requestRegistrationCode(dto: RequestRegistrationCodeDto) {
+    if (dto.password !== dto.confirmPassword) {
+      throw new BadRequestException("Passwords do not match");
+    }
+    const role = dto.role ?? UserRole.CLIENT;
+    this.assertPublicRegistrationRole(role);
+
+    const email = dto.email.trim().toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException("Email is already registered");
+    }
+
+    const code = String(randomInt(100000, 1_000_000));
+    const codeHash = await bcrypt.hash(code, 12);
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const ttlMinutes = Number(this.config.get("REGISTRATION_EMAIL_CODE_TTL_MINUTES") ?? 15);
+    const expiresAt = new Date(Date.now() + Math.max(5, ttlMinutes) * 60_000);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.emailVerificationCode.updateMany({
+        where: { normalizedEmail: email, status: "PENDING", consumedAt: null },
+        data: { status: "EXPIRED" },
+      });
+      await tx.emailVerificationCode.create({
+        data: {
+          email: dto.email.trim(),
+          normalizedEmail: email,
+          name: dto.name.trim(),
+          passwordHash,
+          role,
+          codeHash,
+          expiresAt,
+        },
+      });
+    });
+
+    await this.email.sendRegistrationCode({
+      toEmail: email,
+      toName: dto.name.trim(),
+      code,
+      expiresAt,
+    });
+
+    return {
+      success: true as const,
+      email,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  async verifyRegistrationCode(dto: VerifyRegistrationCodeDto) {
+    const email = dto.email.trim().toLowerCase();
+    const pending = await this.prisma.emailVerificationCode.findFirst({
+      where: {
+        normalizedEmail: email,
+        status: "PENDING",
+        purpose: "REGISTRATION",
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!pending) {
+      throw new BadRequestException("Registration code is invalid or expired");
+    }
+    if (pending.attempts >= 5) {
+      await this.prisma.emailVerificationCode.update({
+        where: { id: pending.id },
+        data: { status: "EXPIRED" },
+      });
+      throw new BadRequestException("Too many attempts. Request a new code.");
+    }
+
+    const ok = await bcrypt.compare(dto.code, pending.codeHash);
+    if (!ok) {
+      await this.prisma.emailVerificationCode.update({
+        where: { id: pending.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new BadRequestException("Registration code is invalid or expired");
+    }
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.user.findUnique({ where: { email } });
+      if (existing) {
+        throw new ConflictException("Email is already registered");
+      }
+      const created = await tx.user.create({
+        data: {
+          name: pending.name,
+          email,
+          passwordHash: pending.passwordHash,
+          role: pending.role,
+          emailVerifiedAt: new Date(),
+        },
+      });
+      await tx.emailVerificationCode.update({
+        where: { id: pending.id },
+        data: { status: "CONSUMED", consumedAt: new Date() },
+      });
+      await this.grantClientRegistrationRewards(tx, created.id, pending.role);
+      return created;
+    });
+
     return this.issueTokens(user);
   }
 
@@ -362,7 +482,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
 
     const user = await this.prisma.user.findUnique({ where: { telegramId } });
     if (!user) {
-      throw new UnauthorizedException("Telegram account is not linked to WhiteBox.");
+      throw new UnauthorizedException("Telegram account is not linked to NearLoy.");
     }
 
     const now = new Date();
@@ -372,7 +492,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       user.deletionScheduledAt <= now
     ) {
       await this.finalizeExpiredFrozenAccount(user.id, now, user.uuid);
-      throw new UnauthorizedException("Telegram account is not linked to an active WhiteBox account.");
+      throw new UnauthorizedException("Telegram account is not linked to an active NearLoy account.");
     }
     if (user.accountStatus === "BLOCKED") {
       throw new UnauthorizedException("Account is blocked.");

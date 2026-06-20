@@ -19,7 +19,7 @@ const { HttpsProxyAgent } = httpsProxyAgentModule as typeof import("https-proxy-
 
 export function renderLandingLeadMessage(lead: LandingLead) {
   return [
-    "Новая заявка с лендинга WhiteBox",
+    "Новая заявка с лендинга NearLoy",
     "",
     `Имя: ${lead.name}`,
     `Компания: ${lead.company || "не указано"}`,
@@ -41,7 +41,7 @@ export function renderLandingLeadHtmlMessage(params: {
   const safe = (value?: string | null) => escapeTelegramHtml(value?.trim() || "не указано");
 
   return [
-    "✨ <b>Новая заявка с лендинга WhiteBox</b>",
+    "✨ <b>Новая заявка с лендинга NearLoy</b>",
     `<code>${escapeTelegramHtml(leadUuid)}</code>`,
     "",
     `👤 <b>Имя:</b> ${safe(lead.name)}`,

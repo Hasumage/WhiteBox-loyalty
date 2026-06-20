@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
       botToken,
       chatId: user.telegramId.toString(),
       text: user.phoneNumber
-        ? "Телефон уже привязан к WhiteBox. Если нужно обновить номер, нажмите кнопку ниже и отправьте актуальный контакт."
-        : "Нажмите на кнопку «Поделиться телефоном», чтобы передать подтверждённый номер в WhiteBox.",
+        ? "Телефон уже привязан к NearLoy. Если нужно обновить номер, нажмите кнопку ниже и отправьте актуальный контакт."
+        : "Нажмите на кнопку «Поделиться телефоном», чтобы передать подтверждённый номер в NearLoy.",
       replyMarkup: PHONE_KEYBOARD,
       proxyUrl: process.env.TELEGRAM_PROXY_URL,
       recipientRole: "client",

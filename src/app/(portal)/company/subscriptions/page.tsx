@@ -33,6 +33,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { OptionSelect } from "@/components/ui/option-select";
+import { SubscriptionsComingSoon } from "@/components/subscriptions/SubscriptionsComingSoon";
 import { Textarea } from "@/components/ui/textarea";
 import {
   companyProfile,
@@ -43,6 +44,7 @@ import {
   type CompanySubscription,
   type EntitlementWindow,
 } from "@/lib/api/company-client";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { cn } from "@/lib/utils";
 
 type RenewalUnit = "week" | "month" | "year";
@@ -293,6 +295,14 @@ function peakChartItem(items: CompanySubscription[], mode: MetricMode) {
 }
 
 export default function CompanySubscriptionsPage() {
+  if (!SUBSCRIPTIONS_ENABLED) {
+    return <SubscriptionsComingSoon mode="company" primaryHref="/company/clients" />;
+  }
+
+  return <CompanySubscriptionsEnabledPage />;
+}
+
+function CompanySubscriptionsEnabledPage() {
   const [items, setItems] = useState<CompanySubscription[]>([]);
   const [canManage, setCanManage] = useState(false);
   const [editingUuid, setEditingUuid] = useState("");
@@ -646,7 +656,7 @@ export default function CompanySubscriptionsPage() {
       )}
 
       <Dialog open={Boolean(editingSubscription)} onOpenChange={(open) => !open && setEditingUuid("")}>
-        <DialogContent className="whitebox-scrollbar max-h-[92vh] max-w-6xl overflow-y-auto rounded-[2rem] border-cyan-300/15 bg-[#070b10] p-0" showClose>
+        <DialogContent className="nearloy-scrollbar max-h-[92vh] max-w-6xl overflow-y-auto rounded-[2rem] border-cyan-300/15 bg-[#070b10] p-0" showClose>
           {editingSubscription && (
             <div>
               <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(103,232,249,0.12),transparent_34%),rgba(255,255,255,0.035)] p-5 md:p-6">

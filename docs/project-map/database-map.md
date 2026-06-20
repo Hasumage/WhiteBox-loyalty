@@ -1,4 +1,4 @@
-# WhiteBox - Database Map
+# NearLoy - Database Map
 
 The admin database map lives at `/admin/database` and is implemented in `src/app/(portal)/admin/database/page.tsx`.
 

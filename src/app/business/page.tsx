@@ -7,8 +7,8 @@ import { LandingLeadForm } from "@/components/landing/LandingLeadForm";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
 
 export const metadata: Metadata = {
-  title: "WhiteBox для бизнеса — подписки, бонусы и возврат клиентов",
-  description: "WhiteBox помогает компаниям запускать подписки, начислять бонусы, управлять клиентами, ролями, финансами и партнёрскими предложениями.",
+  title: "NearLoy для бизнеса — подписки, бонусы и возврат клиентов",
+  description: "NearLoy помогает компаниям запускать подписки, начислять бонусы, управлять клиентами, ролями, финансами и партнёрскими предложениями.",
 };
 
 type IconItem = {
@@ -68,13 +68,13 @@ export default function BusinessLandingPage() {
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-100/18 bg-cyan-100/10 px-4 py-2 text-sm font-semibold text-cyan-100">
             <Store className="h-4 w-4" />
-            WhiteBox для компаний и предпринимателей
+            NearLoy для компаний и предпринимателей
           </div>
           <h1 className="mt-7 max-w-4xl text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
             Запускайте подписки, возвращайте клиентов и управляйте лояльностью как продуктом
           </h1>
           <p className="mt-6 max-w-2xl text-xl leading-9 text-white/62">
-            WhiteBox помогает бизнесу выпускать тарифы, начислять бонусы, контролировать услуги, видеть финансовую картину и работать с клиентами через удобный кабинет.
+            NearLoy помогает бизнесу выпускать тарифы, начислять бонусы, контролировать услуги, видеть финансовую картину и работать с клиентами через удобный кабинет.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link href="/company/register" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-base font-semibold text-[#07101e] shadow-[0_0_34px_rgba(255,255,255,0.18)] transition hover:bg-white/90">

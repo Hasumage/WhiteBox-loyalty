@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -51,6 +51,7 @@ import { useI18n } from "@/lib/i18n/use-i18n";
 import { interpolate } from "@/lib/i18n/format";
 import { categoryName } from "@/lib/i18n/categories";
 import { ProfileStatusBadge } from "@/components/profile-status/profile-status-view";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -115,14 +116,14 @@ export default function SettingsPage() {
     const cachedProfile = getCachedTwaProfile();
     const cachedDashboard = getCachedTwaDashboard();
     if (cachedFavoriteList.length) setFavoriteCategories(cachedFavoriteList);
-    if (cachedProfile.user.uuid || cachedDashboard.wallet.companies.length || cachedDashboard.activeSubscriptions.length) {
+    if (cachedProfile.user.uuid || cachedDashboard.wallet.companies.length || (SUBSCRIPTIONS_ENABLED && cachedDashboard.activeSubscriptions.length)) {
       setProfile({
         ...cachedProfile,
         stats: {
           ...cachedProfile.stats,
           totalBalance: cachedProfile.stats.totalBalance || cachedDashboard.wallet.totalBalance,
           partnerCount: cachedProfile.stats.partnerCount || cachedDashboard.wallet.companies.length,
-          activeSubscriptions: cachedProfile.stats.activeSubscriptions || cachedDashboard.activeSubscriptions.length,
+          activeSubscriptions: SUBSCRIPTIONS_ENABLED ? cachedProfile.stats.activeSubscriptions || cachedDashboard.activeSubscriptions.length : 0,
           favoriteCategories: cachedProfile.stats.favoriteCategories || cachedFavoriteList.length,
         },
       });
@@ -148,9 +149,9 @@ export default function SettingsPage() {
           ...freshProfile.stats,
           totalBalance: freshProfile.stats.totalBalance || dashboard.wallet.totalBalance,
           partnerCount: freshProfile.stats.partnerCount || dashboard.wallet.companies.length,
-          activeSubscriptions: freshProfile.stats.activeSubscriptions || dashboard.activeSubscriptions.length,
+          activeSubscriptions: SUBSCRIPTIONS_ENABLED ? freshProfile.stats.activeSubscriptions || dashboard.activeSubscriptions.length : 0,
           favoriteCategories: freshProfile.stats.favoriteCategories || favoriteList.length,
-          activityScore: freshProfile.stats.activityScore || Math.min(100, Math.round((dashboard.wallet.totalBalance / 5000) * 55 + dashboard.wallet.companies.length * 8 + dashboard.activeSubscriptions.length * 12)),
+          activityScore: freshProfile.stats.activityScore || Math.min(100, Math.round((dashboard.wallet.totalBalance / 5000) * 55 + dashboard.wallet.companies.length * 8 + (SUBSCRIPTIONS_ENABLED ? dashboard.activeSubscriptions.length * 12 : 0))),
         },
       });
       setLoading(false);
@@ -222,13 +223,15 @@ export default function SettingsPage() {
         icon: Store,
         done: profile.stats.partnerCount > 0,
       },
-      {
-        href: "/marketplace",
-        label: t("client.profile.trySubscriptions"),
-        detail: t("client.profile.unlockPerks"),
-        icon: Ticket,
-        done: profile.stats.activeSubscriptions > 0,
-      },
+      ...(SUBSCRIPTIONS_ENABLED
+        ? [{
+            href: "/marketplace",
+            label: t("client.profile.trySubscriptions"),
+            detail: t("client.profile.unlockPerks"),
+            icon: Ticket,
+            done: profile.stats.activeSubscriptions > 0,
+          }]
+        : []),
     ];
     return actions.sort((a, b) => Number(a.done) - Number(b.done));
   }, [profile.stats.activeSubscriptions, profile.stats.favoriteCategories, profile.stats.partnerCount, t]);
@@ -279,7 +282,7 @@ export default function SettingsPage() {
   const newStatusCount = profileStatusState?.summary.new ?? 0;
   const metrics = [
     { label: t("client.profile.partners"), value: profile.stats.partnerCount, icon: Store },
-    { label: t("client.profile.subs"), value: profile.stats.activeSubscriptions, icon: WalletCards },
+    ...(SUBSCRIPTIONS_ENABLED ? [{ label: t("client.profile.subs"), value: profile.stats.activeSubscriptions, icon: WalletCards }] : []),
     { label: t("client.profile.favorites"), value: profile.stats.favoriteCategories, icon: Heart },
   ];
   const quickLinks = [
@@ -318,7 +321,7 @@ export default function SettingsPage() {
     ["/settings/partnership", ShieldCheck, t("client.profile.partnership"), t("client.profile.partnershipSubtitle")],
     ["/settings/business", BriefcaseBusiness, t("client.profile.forBusiness"), t("client.profile.forBusinessSubtitle")],
     ["/settings/company-referrals", Handshake, t("client.profile.companyReferrals"), t("client.profile.companyReferralsSubtitle")],
-    ["/marketplace", Ticket, t("client.profile.trySubscriptions"), t("client.profile.unlockPerks")],
+    ...(SUBSCRIPTIONS_ENABLED ? [["/marketplace", Ticket, t("client.profile.trySubscriptions"), t("client.profile.unlockPerks")] as const] : []),
   ] as const;
 
   return (
@@ -433,7 +436,7 @@ export default function SettingsPage() {
             <div>
               <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
                 <Flame className="h-3.5 w-3.5" />
-                {t("client.profile.whiteboxPulse")}
+                {t("client.profile.nearloyPulse")}
               </p>
               <h2 className="mt-2 text-xl font-semibold tracking-tight">{activityTone}</h2>
               <p className="mt-1 max-w-[15rem] text-xs leading-relaxed text-muted-foreground">

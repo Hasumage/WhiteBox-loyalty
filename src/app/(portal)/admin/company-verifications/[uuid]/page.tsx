@@ -9,6 +9,8 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   Clock3,
+  DatabaseZap,
+  Eye,
   FileBadge2,
   Mail,
   MapPin,
@@ -16,6 +18,7 @@ import {
   Phone,
   ShieldCheck,
   ShieldX,
+  Trash2,
   UserRound,
   XCircle,
 } from "lucide-react";
@@ -24,11 +27,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   adminGetCompanyVerification,
+  adminDeleteCompanyVerificationKycPhoto,
   adminListAuditEvents,
+  adminRevealCompanyVerificationKyc,
   adminUpdateCompanyVerification,
   type AdminAuditRow,
   type AdminCompanyVerificationApplication,
   type AdminCompanyVerificationStatus,
+  type AdminRevealedPassportData,
 } from "@/lib/api/admin-client";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 import type { Locale } from "@/lib/i18n/shared";
@@ -104,7 +110,15 @@ export default function CompanyVerificationDetailPage({
   const [notice, setNotice] = useState("");
   const [auditRows, setAuditRows] = useState<AdminAuditRow[]>([]);
   const [showAudit, setShowAudit] = useState(false);
+  const [kycBusy, setKycBusy] = useState(false);
+  const [revealedPassportData, setRevealedPassportData] = useState<AdminRevealedPassportData | null>(null);
   const passportFile = application?.passportFiles?.[0];
+  const kycRecord = application?.kycRecord;
+  const kycPhotoAvailable = Boolean(
+    kycRecord?.passportPhotoMimeType && !kycRecord.passportPhotoDeletedAt,
+  );
+  const legacyPhotoAvailable = Boolean(passportFile);
+  const photoAvailable = kycPhotoAvailable || legacyPhotoAvailable;
   const decisionFinal = application?.status === "APPROVED" || application?.status === "REJECTED";
 
   const telegramHref = useMemo(() => {
@@ -146,6 +160,42 @@ export default function CompanyVerificationDetailPage({
       setError(result.message);
     }
     setSaving(false);
+  }
+
+  async function refreshApplication() {
+    const result = await adminGetCompanyVerification(uuid);
+    if (result.ok) setApplication(result.data);
+    else setError(result.message);
+  }
+
+  async function revealKycData() {
+    setKycBusy(true);
+    setError("");
+    setNotice("");
+    const result = await adminRevealCompanyVerificationKyc(uuid, "Admin revealed KYC passport data");
+    if (result.ok) {
+      setRevealedPassportData(result.data.passportData);
+      await refreshApplication();
+      setNotice(t("admin.verifications.detail.kycRevealLogged"));
+    } else {
+      setError(result.message);
+    }
+    setKycBusy(false);
+  }
+
+  async function deleteKycPhoto() {
+    if (!window.confirm(t("admin.verifications.detail.deleteKycPhotoConfirm"))) return;
+    setKycBusy(true);
+    setError("");
+    setNotice("");
+    const result = await adminDeleteCompanyVerificationKycPhoto(uuid);
+    if (result.ok) {
+      await refreshApplication();
+      setNotice(t("admin.verifications.detail.kycPhotoDeleted"));
+    } else {
+      setError(result.message);
+    }
+    setKycBusy(false);
   }
 
   if (loading) {
@@ -270,20 +320,15 @@ export default function CompanyVerificationDetailPage({
             <Field
               label={t("admin.verifications.detail.passportPhotoSafety")}
               value={
-                passportFile
-                  ? `${t("admin.verifications.detail.encryptedFileAttached")} · ${Math.round(passportFile.size / 1024)} KB · ${passportFile.mimeType}`
-                  : `${t("admin.verifications.detail.noActivePassportFile")} · ${t("admin.verifications.detail.cleanup")}: ${formatDate(application.passportDataDeletedAt, locale)}`
+                kycRecord
+                  ? `${t("admin.verifications.detail.kycVaultStored")} · ${t("admin.verifications.detail.updated")}: ${formatDate(kycRecord.updatedAt, locale)}`
+                  : passportFile
+                    ? `${t("admin.verifications.detail.encryptedFileAttached")} · ${Math.round(passportFile.size / 1024)} KB · ${passportFile.mimeType}`
+                    : `${t("admin.verifications.detail.noActivePassportFile")} · ${t("admin.verifications.detail.cleanup")}: ${formatDate(application.passportDataDeletedAt, locale)}`
               }
             />
             {application.identityVerificationMode === "DEFERRED" && (
               <Field label={t("admin.verifications.detail.deferralReason")} value={application.verificationDeferralReason} />
-            )}
-            {passportFile && (
-              <Button asChild variant="secondary" className="sm:col-span-2">
-                <a href={`/api/admin/company-verifications/${application.uuid}/passport-photo`} target="_blank" rel="noreferrer">
-                  <ShieldCheck className="h-4 w-4" /> {t("admin.verifications.detail.openPassportPhoto")}
-                </a>
-              </Button>
             )}
           </CardContent>
         </Card>
@@ -303,6 +348,81 @@ export default function CompanyVerificationDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="overflow-hidden border-cyan-200/15 bg-card/70 p-0">
+        <CardHeader className="border-b border-white/10 bg-cyan-200/[0.035] px-8 pb-5 pt-8">
+          <CardTitle className="flex items-center gap-2">
+            <DatabaseZap className="h-5 w-5 text-cyan-100" /> {t("admin.verifications.detail.kycVault")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5 px-8 pb-8 pt-6">
+          <div className="grid gap-4 md:grid-cols-4">
+            <Field label={t("admin.common.status")} value={kycRecord ? t(statusLabelKey(kycRecord.status)) : t("admin.verifications.detail.notStored")} icon={ShieldCheck} />
+            <Field label={t("admin.verifications.detail.passportLast4")} value={kycRecord?.passportLast4 ?? application.passportLast4} icon={FileBadge2} />
+            <Field
+              label={t("admin.verifications.detail.photo")}
+              value={
+                kycPhotoAvailable
+                  ? `${t("admin.verifications.detail.stored")} · ${Math.round((kycRecord?.passportPhotoSize ?? 0) / 1024)} KB`
+                  : kycRecord?.passportPhotoDeletedAt
+                    ? `${t("admin.verifications.detail.deleted")} · ${formatDate(kycRecord.passportPhotoDeletedAt, locale)}`
+                    : legacyPhotoAvailable
+                      ? t("admin.verifications.detail.legacyFileAvailable")
+                      : t("admin.verifications.detail.no")
+              }
+              icon={ShieldCheck}
+            />
+            <Field label={t("admin.verifications.detail.lastUpdated")} value={formatDate(kycRecord?.updatedAt, locale)} icon={Clock3} />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" disabled={!kycRecord || kycBusy} onClick={revealKycData}>
+              <Eye className="h-4 w-4" /> {t("admin.verifications.detail.revealKycData")}
+            </Button>
+            {photoAvailable && (
+              <Button asChild variant="secondary">
+                <a href={`/api/admin/company-verifications/${application.uuid}/passport-photo`} target="_blank" rel="noreferrer">
+                  <ShieldCheck className="h-4 w-4" /> {t("admin.verifications.detail.openPassportPhoto")}
+                </a>
+              </Button>
+            )}
+            <Button variant="destructive" disabled={!kycPhotoAvailable || kycBusy} onClick={deleteKycPhoto}>
+              <Trash2 className="h-4 w-4" /> {t("admin.verifications.detail.deleteKycPhoto")}
+            </Button>
+          </div>
+
+          {revealedPassportData && (
+            <div className="grid gap-4 rounded-3xl border border-cyan-200/15 bg-cyan-200/[0.035] p-4 sm:grid-cols-2 lg:grid-cols-5">
+              <Field label={t("admin.verifications.detail.passportSeries")} value={revealedPassportData.series} />
+              <Field label={t("admin.verifications.detail.passportNumber")} value={revealedPassportData.number} />
+              <Field label={t("admin.verifications.detail.passportIssuedAt")} value={revealedPassportData.issuedAt} />
+              <Field label={t("admin.verifications.detail.passportDepartmentCode")} value={revealedPassportData.departmentCode} />
+              <Field label={t("admin.verifications.detail.passportIssuedBy")} value={revealedPassportData.issuedBy} />
+            </div>
+          )}
+
+          <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-semibold">{t("admin.verifications.detail.kycAccessLog")}</h3>
+              <Badge variant="outline">{kycRecord?.accessLogs.length ?? 0}</Badge>
+            </div>
+            <div className="mt-3 space-y-2">
+              {!kycRecord || kycRecord.accessLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("admin.verifications.detail.noKycAccessLog")}</p>
+              ) : (
+                kycRecord.accessLogs.map((row) => (
+                  <div key={row.uuid} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm">
+                    <span className="font-semibold">{t(`admin.verifications.detail.kycAction.${row.action}` as TranslationKey)}</span>
+                    <span className="text-muted-foreground">
+                      {formatDate(row.createdAt, locale)} · {row.actor?.email ?? t("admin.verifications.detail.system")}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="overflow-hidden border-white/10 bg-card/70 p-0">
         <CardHeader className="cursor-pointer border-b border-white/10 bg-white/[0.035] px-8 pb-5 pt-8" onClick={() => setShowAudit((value) => !value)}>

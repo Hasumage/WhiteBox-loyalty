@@ -1,4 +1,4 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { CompanyReferralStatus, FinanceOperationStatus, Prisma } from "@prisma/client";
 import { supportManagerSharePercent } from "./support-manager";
 import { calculatePlatformRevenueSummary, type PlatformRevenueSubscription } from "@/lib/finance/platform-revenue";
@@ -269,7 +269,7 @@ export async function createCompanyReferralPayoutRequest(userId: number, amount:
         amount,
         currency: "RUB",
         title: `${COMPANY_REFERRAL_PAYOUT_TITLE}: ${amount} RUB`,
-        details: "Public company referral payout request. Source: invited companies and recognized subscription turnover, paid from the WhiteBox share.",
+        details: "Public company referral payout request. Source: invited companies and recognized subscription turnover, paid from the NearLoy share.",
         requestedById: userId,
         requestedAt: new Date(),
       },

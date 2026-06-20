@@ -1,4 +1,4 @@
-﻿jest.mock("@/lib/prisma", () => ({
+jest.mock("@/lib/prisma", () => ({
   prisma: {
     telegramLinkToken: {
       findMany: jest.fn(),
@@ -114,7 +114,7 @@ describe("telegram admin link webhook", () => {
     expect(mockedPrisma.user.update).not.toHaveBeenCalled();
     expect(mockedSend).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: expect.stringContaining("Добро пожаловать в WhiteBox"),
+        text: expect.stringContaining("Добро пожаловать в NearLoy"),
       }),
     );
   });

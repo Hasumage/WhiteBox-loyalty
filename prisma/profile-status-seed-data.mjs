@@ -1,8 +1,8 @@
-﻿export const PROFILE_STATUS_SEEDS = [
+export const PROFILE_STATUS_SEEDS = [
   {
     slug: "top-100",
     title: "Топ 100",
-    description: "Один из первых 100 реальных пользователей WhiteBox. Ранний знак доверия и веры в проект.",
+    description: "Один из первых 100 реальных пользователей NearLoy. Ранний знак доверия и веры в проект.",
     rarity: "LEGENDARY",
     icon: "Trophy",
     isSystem: true,
@@ -134,8 +134,8 @@
     icon: "Diamond",
   },
   {
-    slug: "whitebox-insider",
-    title: "Инсайдер WhiteBox",
+    slug: "nearloy-insider",
+    title: "Инсайдер NearLoy",
     description: "Понимает механику платформы и пользуется ей как своим инструментом.",
     rarity: "EPIC",
     icon: "Boxes",
@@ -150,7 +150,7 @@
   {
     slug: "district-legend",
     title: "Легенда района",
-    description: "В его районе партнёры WhiteBox будто отмечены на внутренней карте.",
+    description: "В его районе партнёры NearLoy будто отмечены на внутренней карте.",
     rarity: "LEGENDARY",
     icon: "Crown",
   },
@@ -204,8 +204,8 @@
     icon: "ShieldCheck",
   },
   {
-    slug: "whitebox-myth",
-    title: "Миф WhiteBox",
+    slug: "nearloy-myth",
+    title: "Миф NearLoy",
     description: "Статус, который хочется показывать не ради хвастовства, а ради истории.",
     rarity: "LEGENDARY",
     icon: "Stars",

@@ -36,14 +36,14 @@ type TelegramUpdate = { update_id?: number; callback_query?: TelegramCallbackQue
 const PHONE_KEYBOARD = {
   keyboard: [
     [{ text: "Поделиться телефоном", request_contact: true }],
-    [{ text: "Открыть WhiteBox", web_app: { url: whiteboxWebAppUrl() } }],
+    [{ text: "Открыть NearLoy", web_app: { url: nearloyWebAppUrl() } }],
   ],
   resize_keyboard: true,
   one_time_keyboard: true,
 };
 
-function whiteboxWebAppUrl(path = "") {
-  const base = process.env.TELEGRAM_WEB_APP_URL || "https://whitebox-web-production.up.railway.app/";
+function nearloyWebAppUrl(path = "") {
+  const base = process.env.TELEGRAM_WEB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://nearloy.app/";
   if (!path) return base;
   try {
     return new URL(path.replace(/^\//, ""), base.endsWith("/") ? base : `${base}/`).toString();
@@ -52,17 +52,17 @@ function whiteboxWebAppUrl(path = "") {
   }
 }
 
-function whiteboxInlineKeyboard() {
+function nearloyInlineKeyboard() {
   return {
-    inline_keyboard: [[{ text: "Открыть WhiteBox", web_app: { url: whiteboxWebAppUrl() } }]],
+    inline_keyboard: [[{ text: "Открыть NearLoy", web_app: { url: nearloyWebAppUrl() } }]],
   };
 }
 
-function whiteboxStartKeyboard() {
+function nearloyStartKeyboard() {
   return {
     inline_keyboard: [
-      [{ text: "Открыть WhiteBox", web_app: { url: whiteboxWebAppUrl() } }],
-      [{ text: "Помощь", web_app: { url: whiteboxWebAppUrl("/help") } }],
+      [{ text: "Открыть NearLoy", web_app: { url: nearloyWebAppUrl() } }],
+      [{ text: "Помощь", web_app: { url: nearloyWebAppUrl("/help") } }],
     ],
   };
 }
@@ -165,7 +165,7 @@ async function updateUserTelegramPhone(userId: number, phoneNumber: string) {
 async function replyTelegramAlreadyConnected(chatId: string | number | undefined) {
   await reply(
     chatId,
-    "Telegram уже подключён к аккаунту WhiteBox. Если телефон ещё не привязан, нажмите кнопку «Поделиться телефоном».",
+    "Telegram уже подключён к аккаунту NearLoy. Если телефон ещё не привязан, нажмите кнопку «Поделиться телефоном».",
     PHONE_KEYBOARD,
   );
 }
@@ -174,14 +174,14 @@ async function replyTelegramWelcome(chatId: string | number | undefined) {
   await reply(
     chatId,
     [
-      "Добро пожаловать в WhiteBox.",
+      "Добро пожаловать в NearLoy.",
       "",
-      "WhiteBox — приложение для подписок, QR-карт, бонусов и партнёрских программ.",
+      "NearLoy — приложение для подписок, QR-карт, бонусов и партнёрских программ.",
       "Здесь можно копить баллы, управлять подписками, находить компании рядом и открывать Mini App прямо из Telegram.",
       "",
-      "Если аккаунт уже привязан к Telegram, WhiteBox откроется без ввода пароля.",
+      "Если аккаунт уже привязан к Telegram, NearLoy откроется без ввода пароля.",
     ].join("\n"),
-    whiteboxStartKeyboard(),
+    nearloyStartKeyboard(),
   );
 }
 
@@ -197,7 +197,7 @@ async function handleTelegramContact(message: TelegramMessage) {
   if (!message.from?.id) return { ok: false, message: "missing_sender" };
 
   if (message.chat?.type && message.chat.type !== "private") {
-    await reply(message.chat?.id, "Телефон можно привязать только в личном чате с ботом WhiteBox.");
+    await reply(message.chat?.id, "Телефон можно привязать только в личном чате с ботом NearLoy.");
     return { ok: false, message: "private_chat_required" };
   }
 
@@ -215,23 +215,23 @@ async function handleTelegramContact(message: TelegramMessage) {
   const telegramId = BigInt(message.from.id);
   const user = await findUserByTelegramId(telegramId);
   if (!user) {
-    await reply(message.chat?.id, "Сначала подключите Telegram к аккаунту WhiteBox, а потом отправьте телефон.", whiteboxInlineKeyboard());
+    await reply(message.chat?.id, "Сначала подключите Telegram к аккаунту NearLoy, а потом отправьте телефон.", nearloyInlineKeyboard());
     return { ok: false, message: "telegram_not_linked" };
   }
   if (user.accountStatus !== "ACTIVE") {
-    await reply(message.chat?.id, "Этот аккаунт WhiteBox сейчас не активен. Привязка телефона недоступна.");
+    await reply(message.chat?.id, "Этот аккаунт NearLoy сейчас не активен. Привязка телефона недоступна.");
     return { ok: false, message: "account_not_active" };
   }
 
   const linkedToAnotherUser = await findUserLinkedToPhone(phoneNumber, user.id);
   if (linkedToAnotherUser) {
-    await reply(message.chat?.id, "Этот телефон уже привязан к другому аккаунту WhiteBox.");
+    await reply(message.chat?.id, "Этот телефон уже привязан к другому аккаунту NearLoy.");
     return { ok: false, message: "phone_already_linked" };
   }
 
   await updateUserTelegramPhone(user.id, phoneNumber);
-  await reply(message.chat?.id, "Телефон подтверждён и привязан к аккаунту WhiteBox.", { remove_keyboard: true });
-  await reply(message.chat?.id, "Можно открыть WhiteBox и продолжить работу.", whiteboxInlineKeyboard());
+  await reply(message.chat?.id, "Телефон подтверждён и привязан к аккаунту NearLoy.", { remove_keyboard: true });
+  await reply(message.chat?.id, "Можно открыть NearLoy и продолжить работу.", nearloyInlineKeyboard());
   return { ok: true, phoneLinked: true };
 }
 
@@ -242,7 +242,7 @@ async function handleTelegramLink(message: TelegramMessage) {
   if (!match) return { skipped: "not_link_start" };
 
   if (message.chat?.type && message.chat.type !== "private") {
-    await reply(message.chat?.id, "Откройте ссылку подключения в личном чате с ботом WhiteBox.");
+    await reply(message.chat?.id, "Откройте ссылку подключения в личном чате с ботом NearLoy.");
     return { ok: false, message: "private_chat_required" };
   }
 
@@ -265,7 +265,7 @@ async function handleTelegramLink(message: TelegramMessage) {
   }
 
   if (!token) {
-    await reply(message.chat?.id, "Ссылка WhiteBox устарела. Создайте новую ссылку в приложении.", whiteboxInlineKeyboard());
+    await reply(message.chat?.id, "Ссылка NearLoy устарела. Создайте новую ссылку в приложении.", nearloyInlineKeyboard());
     return { ok: false, message: "expired" };
   }
 
@@ -275,7 +275,7 @@ async function handleTelegramLink(message: TelegramMessage) {
       await replyTelegramAlreadyConnected(message.chat?.id);
       return { ok: true, alreadyLinked: true, linkedUserId: token.userId };
     }
-    await reply(message.chat?.id, "Ссылка WhiteBox устарела. Создайте новую ссылку в приложении.", whiteboxInlineKeyboard());
+    await reply(message.chat?.id, "Ссылка NearLoy устарела. Создайте новую ссылку в приложении.", nearloyInlineKeyboard());
     return { ok: false, message: "expired" };
   }
 
@@ -284,12 +284,12 @@ async function handleTelegramLink(message: TelegramMessage) {
     select: { id: true },
   });
   if (linkedToAnotherUser) {
-    await reply(message.chat?.id, "Этот Telegram уже привязан к другому аккаунту WhiteBox. Один Telegram можно подключить только к одному аккаунту.");
+    await reply(message.chat?.id, "Этот Telegram уже привязан к другому аккаунту NearLoy. Один Telegram можно подключить только к одному аккаунту.");
     return { ok: false, message: "telegram_already_linked" };
   }
 
   if ("accountStatus" in token.user && token.user.accountStatus !== "ACTIVE") {
-    await reply(message.chat?.id, "Этот аккаунт WhiteBox сейчас не активен. Подключение Telegram недоступно.");
+    await reply(message.chat?.id, "Этот аккаунт NearLoy сейчас не активен. Подключение Telegram недоступно.");
     return { ok: false, message: "account_not_active" };
   }
 
@@ -300,7 +300,7 @@ async function handleTelegramLink(message: TelegramMessage) {
     ]);
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") {
-      await reply(message.chat?.id, "Этот Telegram уже привязан к другому аккаунту WhiteBox. Один Telegram можно подключить только к одному аккаунту.");
+      await reply(message.chat?.id, "Этот Telegram уже привязан к другому аккаунту NearLoy. Один Telegram можно подключить только к одному аккаунту.");
       return { ok: false, message: "telegram_already_linked" };
     }
     throw error;
@@ -308,7 +308,7 @@ async function handleTelegramLink(message: TelegramMessage) {
 
   await reply(
     message.chat?.id,
-    "Готово: Telegram успешно привязан к аккаунту WhiteBox. Теперь нажмите кнопку «Поделиться телефоном», чтобы подтвердить номер.",
+    "Готово: Telegram успешно привязан к аккаунту NearLoy. Теперь нажмите кнопку «Поделиться телефоном», чтобы подтвердить номер.",
     PHONE_KEYBOARD,
   );
   return { ok: true, linkedUserId: token.userId };
@@ -327,7 +327,7 @@ export async function POST(request: NextRequest) {
     } catch {
       await safeReply(
         update.message.chat?.id,
-        "Не удалось обработать привязку Telegram. Создайте новую ссылку в WhiteBox и попробуйте ещё раз.",
+        "Не удалось обработать привязку Telegram. Создайте новую ссылку в NearLoy и попробуйте ещё раз.",
       );
       return NextResponse.json({ ok: false, message: "telegram_message_processing_failed" }, { status: 500 });
     }
@@ -338,7 +338,7 @@ export async function POST(request: NextRequest) {
 
   const parsed = parseLeadCallbackData(callback.data);
   if (!parsed) {
-    await answer(callback.id, "Неизвестное действие WhiteBox", true);
+    await answer(callback.id, "Неизвестное действие NearLoy", true);
     return NextResponse.json({ ok: true, skipped: "unknown_callback" });
   }
 

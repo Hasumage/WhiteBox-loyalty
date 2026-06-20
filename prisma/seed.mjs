@@ -104,27 +104,27 @@ async function main() {
     const categoryBySlug = new Map(categories.map((x) => [x.slug, x]));
 
     const peopleSeeds = [
-      { name: "Alice Admin", email: "alice.admin@whitebox.test", role: UserRole.ADMIN },
-      { name: "Priya Growth", email: "priya.growth@whitebox.test", role: UserRole.MANAGER },
-      { name: "Martin Coffee", email: "martin.coffee@whitebox.test", role: UserRole.COMPANY },
-      { name: "Nina Fit", email: "nina.fit@whitebox.test", role: UserRole.COMPANY },
-      { name: "Oleg Beauty", email: "oleg.beauty@whitebox.test", role: UserRole.COMPANY },
-      { name: "Paula Food", email: "paula.food@whitebox.test", role: UserRole.COMPANY },
-      { name: "Roman Retail", email: "roman.retail@whitebox.test", role: UserRole.COMPANY },
-      { name: "Emma Clark", email: "emma.clark@whitebox.test", role: UserRole.CLIENT },
-      { name: "Liam Scott", email: "liam.scott@whitebox.test", role: UserRole.CLIENT },
-      { name: "Olivia Reed", email: "olivia.reed@whitebox.test", role: UserRole.CLIENT },
-      { name: "Noah Adams", email: "noah.adams@whitebox.test", role: UserRole.CLIENT },
-      { name: "Ava Turner", email: "ava.turner@whitebox.test", role: UserRole.CLIENT },
-      { name: "Mason Hall", email: "mason.hall@whitebox.test", role: UserRole.CLIENT },
-      { name: "Sophia Gray", email: "sophia.gray@whitebox.test", role: UserRole.CLIENT },
-      { name: "Ethan Lee", email: "ethan.lee@whitebox.test", role: UserRole.CLIENT },
-      { name: "Mia Carter", email: "mia.carter@whitebox.test", role: UserRole.CLIENT },
-      { name: "Lucas Young", email: "lucas.young@whitebox.test", role: UserRole.CLIENT },
-      { name: "Isabella King", email: "isabella.king@whitebox.test", role: UserRole.CLIENT },
-      { name: "James Wright", email: "james.wright@whitebox.test", role: UserRole.CLIENT },
-      { name: "Amelia Baker", email: "amelia.baker@whitebox.test", role: UserRole.CLIENT },
-      { name: "Benjamin Green", email: "benjamin.green@whitebox.test", role: UserRole.CLIENT },
+      { name: "Alice Admin", email: "alice.admin@nearloy.test", role: UserRole.ADMIN },
+      { name: "Priya Growth", email: "priya.growth@nearloy.test", role: UserRole.MANAGER },
+      { name: "Martin Coffee", email: "martin.coffee@nearloy.test", role: UserRole.COMPANY },
+      { name: "Nina Fit", email: "nina.fit@nearloy.test", role: UserRole.COMPANY },
+      { name: "Oleg Beauty", email: "oleg.beauty@nearloy.test", role: UserRole.COMPANY },
+      { name: "Paula Food", email: "paula.food@nearloy.test", role: UserRole.COMPANY },
+      { name: "Roman Retail", email: "roman.retail@nearloy.test", role: UserRole.COMPANY },
+      { name: "Emma Clark", email: "emma.clark@nearloy.test", role: UserRole.CLIENT },
+      { name: "Liam Scott", email: "liam.scott@nearloy.test", role: UserRole.CLIENT },
+      { name: "Olivia Reed", email: "olivia.reed@nearloy.test", role: UserRole.CLIENT },
+      { name: "Noah Adams", email: "noah.adams@nearloy.test", role: UserRole.CLIENT },
+      { name: "Ava Turner", email: "ava.turner@nearloy.test", role: UserRole.CLIENT },
+      { name: "Mason Hall", email: "mason.hall@nearloy.test", role: UserRole.CLIENT },
+      { name: "Sophia Gray", email: "sophia.gray@nearloy.test", role: UserRole.CLIENT },
+      { name: "Ethan Lee", email: "ethan.lee@nearloy.test", role: UserRole.CLIENT },
+      { name: "Mia Carter", email: "mia.carter@nearloy.test", role: UserRole.CLIENT },
+      { name: "Lucas Young", email: "lucas.young@nearloy.test", role: UserRole.CLIENT },
+      { name: "Isabella King", email: "isabella.king@nearloy.test", role: UserRole.CLIENT },
+      { name: "James Wright", email: "james.wright@nearloy.test", role: UserRole.CLIENT },
+      { name: "Amelia Baker", email: "amelia.baker@nearloy.test", role: UserRole.CLIENT },
+      { name: "Benjamin Green", email: "benjamin.green@nearloy.test", role: UserRole.CLIENT },
     ];
 
     const users = [];
@@ -150,7 +150,7 @@ async function main() {
     const owners = users.filter((u) => u.role === UserRole.COMPANY);
     const clients = users.filter((u) => u.role === UserRole.CLIENT);
     const admin = users.find((u) => u.role === UserRole.ADMIN);
-    const prManager = users.find((u) => u.email === "priya.growth@whitebox.test");
+    const prManager = users.find((u) => u.email === "priya.growth@nearloy.test");
 
     if (prManager) {
       await prisma.adminUserPermission.createMany({
@@ -589,7 +589,7 @@ async function main() {
           userId: targetUser.id,
           requestedByUserId: admin.id,
           oldEmail: targetUser.email,
-          newEmail: "emma.clark.new@whitebox.test",
+          newEmail: "emma.clark.new@nearloy.test",
           expiresAt: daysFromNow(2),
           usedAt: daysAgo(1),
           createdAt: daysAgo(3),
@@ -601,7 +601,7 @@ async function main() {
           userId: clients[1].id,
           requestedByUserId: admin.id,
           oldEmail: clients[1].email,
-          newEmail: "liam.scott.new@whitebox.test",
+          newEmail: "liam.scott.new@nearloy.test",
           expiresAt: daysFromNow(2),
           revokedAt: daysAgo(1),
           createdAt: daysAgo(2),

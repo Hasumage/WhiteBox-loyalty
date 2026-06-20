@@ -17,10 +17,12 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
+import { SubscriptionsComingSoon } from "@/components/subscriptions/SubscriptionsComingSoon";
 import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { getCachedTwaMarketplace, getTwaMarketplace, type TwaMarketplace, type TwaSubscriptionPlan } from "@/lib/api/twa-client";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { categoryName } from "@/lib/i18n/categories";
 import { formatPlanPrice as formatLocalizedPlanPrice } from "@/lib/i18n/format";
@@ -38,6 +40,14 @@ function planPrice(plan: TwaSubscriptionPlan) {
 }
 
 export default function MarketplacePage() {
+  if (!SUBSCRIPTIONS_ENABLED) {
+    return <SubscriptionsComingSoon mode="client" backHref="/app" primaryHref="/map" />;
+  }
+
+  return <MarketplaceEnabledPage />;
+}
+
+function MarketplaceEnabledPage() {
   const { t } = useI18n("ru");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [marketplace, setMarketplace] = useState<TwaMarketplace>({ categories: [], subscriptions: [] });

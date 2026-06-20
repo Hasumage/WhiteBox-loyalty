@@ -1,4 +1,4 @@
-﻿import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConceptPageShell } from "../concept-components";
@@ -8,7 +8,7 @@ export default function MascotConceptPage() {
   return (
     <ConceptPageShell
       eyebrow="Mascot experiment"
-      title="WhiteBox mascot"
+      title="NearLoy mascot"
       description="Проба дружелюбного персонажа в духе Duolingo: эмоциональные подсказки, мягкие nudges, реакции на достижения и onboarding. Нарисовано CSS/SVG прямо на странице, без ассетов."
     >
       <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
@@ -31,7 +31,7 @@ export default function MascotConceptPage() {
             <div className="absolute left-1/2 bottom-0 -z-0 h-8 w-44 -translate-x-1/2 rounded-full bg-black/40 blur-xl" />
           </div>
           <h2 className="relative mt-2 text-2xl font-semibold">Boxie</h2>
-          <p className="relative mx-auto mt-2 max-w-sm text-sm text-muted-foreground">Не сова и не зверёк, а маленький живой WhiteBox-спутник: помогает, радуется прогрессу и не стыдит пользователя.</p>
+          <p className="relative mx-auto mt-2 max-w-sm text-sm text-muted-foreground">Не сова и не зверёк, а маленький живой NearLoy-спутник: помогает, радуется прогрессу и не стыдит пользователя.</p>
         </div>
 
         <div className="grid gap-4">

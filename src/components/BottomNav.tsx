@@ -22,7 +22,8 @@ export function BottomNav() {
   const { t } = useI18n("ru");
   const isWallet = pathname.startsWith("/wallet/");
   const isSubscriptionDetail = pathname.startsWith("/marketplace/") && pathname !== "/marketplace";
-  const hideNav = isWallet || isSubscriptionDetail;
+  const isFullMap = pathname === "/map/full";
+  const hideNav = isWallet || isSubscriptionDetail || isFullMap;
   const hideFab = pathname === "/onboarding" || pathname === "/settings" || pathname.startsWith("/settings/");
 
   if (hideNav) return null;
