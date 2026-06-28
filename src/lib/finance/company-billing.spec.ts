@@ -1,33 +1,29 @@
-import { addUtcDays, calculateCompanyBilling } from "./company-billing";
+import { addUtcDays, calculateCompanyBilling, calculateMonthlyAccessSplit } from "./company-billing";
 
 describe("company billing", () => {
-  it("makes the monthly fee free once generated commission covers it", () => {
+  it("keeps monthly access billing separate from subscription commission", () => {
     expect(
       calculateCompanyBilling({
         baseFee: 4990,
-        recognizedSubscriptionRevenue: 50_000,
-        commissionPercent: 12,
       }),
     ).toMatchObject({
-      generatedCommission: 6000,
-      commissionCreditAmount: 4990,
-      amountDue: 0,
+      generatedCommission: 0,
+      commissionCreditAmount: 0,
+      amountDue: 4990,
     });
   });
 
-  it("applies promo discount before commission credit", () => {
+  it("applies promo discount to the monthly access fee", () => {
     expect(
       calculateCompanyBilling({
         baseFee: 4990,
         promoDiscountPercent: 50,
-        recognizedSubscriptionRevenue: 10_000,
-        commissionPercent: 12,
       }),
     ).toMatchObject({
       promoDiscountAmount: 2495,
       discountedFee: 2495,
-      commissionCreditAmount: 1200,
-      amountDue: 1295,
+      commissionCreditAmount: 0,
+      amountDue: 2495,
     });
   });
 
@@ -36,10 +32,24 @@ describe("company billing", () => {
       calculateCompanyBilling({
         baseFee: 4990,
         promoDiscountPercent: 100,
-        recognizedSubscriptionRevenue: 0,
-        commissionPercent: 12,
       }).amountDue,
     ).toBe(0);
+  });
+
+  it("splits paid monthly access 70/30 when a PR manager is attached", () => {
+    expect(calculateMonthlyAccessSplit(4990, true)).toEqual({
+      referralPercent: 30,
+      referralAmount: 1497,
+      platformAmount: 3493,
+    });
+  });
+
+  it("keeps all monthly access revenue in NearLoy when there is no PR manager", () => {
+    expect(calculateMonthlyAccessSplit(4990, false)).toEqual({
+      referralPercent: 0,
+      referralAmount: 0,
+      platformAmount: 4990,
+    });
   });
 
   it("creates a 30 day verification trial", () => {

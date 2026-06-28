@@ -54,6 +54,7 @@ describe("CompanyService", () => {
     companyBillingAccount: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     companyBillingPromoCode: { findUnique: jest.Mock; update: jest.Mock };
     companyBillingPromoRedemption: { findUnique: jest.Mock; create: jest.Mock };
+    companyReferral: { findUnique: jest.Mock };
     userSubscription: { findMany: jest.Mock };
     subscriptionBundle: { findUnique: jest.Mock; findUniqueOrThrow: jest.Mock; update: jest.Mock };
     subscriptionBundleParticipant: { update: jest.Mock };
@@ -73,6 +74,7 @@ describe("CompanyService", () => {
     companyBillingAccount: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     companyBillingPromoCode: { findUnique: jest.Mock; update: jest.Mock };
     companyBillingPromoRedemption: { findUnique: jest.Mock; create: jest.Mock };
+    companyReferral: { findUnique: jest.Mock };
     userSubscription: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     subscription: { findMany: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     userSubscriptionBundle: { findFirst: jest.Mock; findMany: jest.Mock; create: jest.Mock };
@@ -97,6 +99,15 @@ describe("CompanyService", () => {
   let service: CompanyService;
 
   beforeEach(() => {
+    const trialNow = new Date();
+    const activeTrialBillingAccount = {
+      companyId: 7,
+      status: "TRIAL",
+      trialEndsAt: new Date(trialNow.getTime() + DAY_MS * 7),
+      currentPeriodStartsAt: trialNow,
+      currentPeriodEndsAt: new Date(trialNow.getTime() + DAY_MS * 7),
+      appliedPromoCode: null,
+    };
     tx = {
       companyPurchase: { aggregate: jest.fn(), create: jest.fn() },
       userCompany: { upsert: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
@@ -114,9 +125,10 @@ describe("CompanyService", () => {
         upsert: jest.fn(),
         update: jest.fn(),
       },
-      companyBillingAccount: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+      companyBillingAccount: { findUnique: jest.fn().mockResolvedValue(activeTrialBillingAccount), create: jest.fn(), update: jest.fn() },
       companyBillingPromoCode: { findUnique: jest.fn(), update: jest.fn() },
       companyBillingPromoRedemption: { findUnique: jest.fn(), create: jest.fn() },
+      companyReferral: { findUnique: jest.fn().mockResolvedValue(null) },
       userSubscription: { findMany: jest.fn().mockResolvedValue([]) },
       subscriptionBundle: {
         findUnique: jest.fn(),
@@ -157,6 +169,7 @@ describe("CompanyService", () => {
       companyBillingAccount: tx.companyBillingAccount,
       companyBillingPromoCode: tx.companyBillingPromoCode,
       companyBillingPromoRedemption: tx.companyBillingPromoRedemption,
+      companyReferral: tx.companyReferral,
       userSubscription: { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn().mockResolvedValue(0) },
       subscription: {
         findMany: jest.fn(),
@@ -1175,6 +1188,180 @@ describe("CompanyService", () => {
     expect(prisma.companyBillingAccount.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { companyId: 7 }, data: { status: "PAST_DUE" } }),
     );
+  });
+
+  it("keeps an open company billing invoice in the 3 day grace window", async () => {
+    const now = new Date();
+    const account = {
+      companyId: 7,
+      status: "ACTIVE",
+      trialEndsAt: new Date(now.getTime() - DAY_MS * 31),
+      currentPeriodStartsAt: new Date(now.getTime() - DAY_MS * 31),
+      currentPeriodEndsAt: new Date(now.getTime() - DAY_MS),
+      appliedPromoCode: null,
+    };
+    const graceInvoice = {
+      uuid: "grace-invoice",
+      status: "OPEN",
+      periodStartsAt: account.currentPeriodStartsAt,
+      periodEndsAt: account.currentPeriodEndsAt,
+      baseFee: 4990,
+      promoDiscountPercent: 0,
+      promoDiscountAmount: 0,
+      commissionCreditAmount: 0,
+      amountDue: 4990,
+      paidAmount: 0,
+    };
+    prisma.companyBillingAccount.findUnique.mockResolvedValue(account);
+    prisma.companyBillingInvoice.findFirst.mockResolvedValue(graceInvoice);
+    prisma.companyBillingInvoice.findMany.mockResolvedValue([graceInvoice]);
+    prisma.userSubscription.findMany.mockResolvedValue([]);
+
+    const result = await service.billing(50);
+
+    expect(result.invoice).toEqual(graceInvoice);
+    expect(result.access).toEqual(expect.objectContaining({ status: "GRACE", daysLeft: 2 }));
+    expect(prisma.companyBillingAccount.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "PAST_DUE" } }),
+    );
+  });
+
+  it("blocks company workspace actions after the 3 day grace window but keeps billing payable", async () => {
+    const now = new Date();
+    const account = {
+      companyId: 7,
+      status: "ACTIVE",
+      trialEndsAt: new Date(now.getTime() - DAY_MS * 40),
+      currentPeriodStartsAt: new Date(now.getTime() - DAY_MS * 40),
+      currentPeriodEndsAt: new Date(now.getTime() + DAY_MS),
+      appliedPromoCode: null,
+    };
+    const overdueInvoice = {
+      uuid: "past-due-invoice",
+      status: "OPEN",
+      periodStartsAt: new Date(now.getTime() - DAY_MS * 40),
+      periodEndsAt: new Date(now.getTime() - DAY_MS * 4),
+      baseFee: 4990,
+      promoDiscountPercent: 0,
+      promoDiscountAmount: 0,
+      commissionCreditAmount: 0,
+      amountDue: 4990,
+      paidAmount: 0,
+    };
+    prisma.companyBillingAccount.findUnique.mockResolvedValue(account);
+    prisma.companyBillingAccount.update.mockResolvedValue({ ...account, status: "PAST_DUE" });
+    prisma.companyBillingInvoice.findFirst.mockResolvedValue(overdueInvoice);
+    prisma.companyBillingInvoice.findMany.mockResolvedValue([overdueInvoice]);
+    prisma.userSubscription.findMany.mockResolvedValue([]);
+
+    await expect(service.profile(50)).rejects.toBeInstanceOf(ForbiddenException);
+
+    const billing = await service.billing(50);
+    expect(billing.access).toEqual(expect.objectContaining({ status: "PAST_DUE", daysLeft: 0 }));
+    expect(billing.invoice).toEqual(overdueInvoice);
+  });
+
+  it("creates a monthly access invoice from the base fee without consuming sales commission", async () => {
+    const now = new Date();
+    const account = {
+      companyId: 7,
+      status: "ACTIVE",
+      trialEndsAt: new Date(now.getTime() - DAY_MS * 31),
+      currentPeriodStartsAt: now,
+      currentPeriodEndsAt: new Date(now.getTime() + DAY_MS * 30),
+      appliedPromoCode: null,
+    };
+    const invoice = {
+      id: 91,
+      uuid: "current-invoice",
+      status: "OPEN",
+      periodStartsAt: account.currentPeriodStartsAt,
+      periodEndsAt: account.currentPeriodEndsAt,
+      baseFee: 4990,
+      promoDiscountPercent: 0,
+      promoDiscountAmount: 0,
+      commissionCreditAmount: 0,
+      amountDue: 4990,
+      paidAmount: 0,
+    };
+    prisma.companyBillingAccount.findUnique.mockResolvedValue(account);
+    prisma.companyBillingInvoice.findFirst.mockResolvedValue(null);
+    prisma.company.findUniqueOrThrow.mockResolvedValue({
+      platformMonthlyFee: 4990,
+      monthlyFeeOverride: null,
+      monthlyFeeOverrideEndsAt: null,
+      currentReferral: null,
+    });
+    prisma.companyBillingInvoice.findUnique.mockResolvedValue(null);
+    prisma.companyBillingInvoice.upsert.mockResolvedValue(invoice);
+    prisma.companyBillingInvoice.findMany.mockResolvedValue([invoice]);
+    prisma.userSubscription.findMany.mockResolvedValue([
+      {
+        status: SubscriptionStatus.EXPIRED,
+        activatedAt: new Date(now.getTime() - DAY_MS * 40),
+        expiresAt: new Date(now.getTime() - DAY_MS * 10),
+        subscription: { price: 56000 },
+      },
+    ]);
+
+    const result = await service.billing(50);
+    const createData = prisma.companyBillingInvoice.upsert.mock.calls[0][0].create;
+
+    expect(result.invoice).toEqual(invoice);
+    expect(createData.amountDue.toString()).toBe("4990");
+    expect(createData.commissionCreditAmount.toString()).toBe("0");
+  });
+
+  it("splits monthly access revenue 30/70 when a PR manager is attached to the company", async () => {
+    const now = new Date();
+    const account = {
+      companyId: 7,
+      status: "ACTIVE",
+      trialEndsAt: new Date(now.getTime() - DAY_MS * 31),
+      currentPeriodStartsAt: now,
+      currentPeriodEndsAt: new Date(now.getTime() + DAY_MS * 30),
+      appliedPromoCode: null,
+    };
+    const invoice = {
+      uuid: "current-invoice",
+      status: "OPEN",
+      periodStartsAt: account.currentPeriodStartsAt,
+      periodEndsAt: account.currentPeriodEndsAt,
+      baseFee: 4990,
+      promoDiscountPercent: 0,
+      promoDiscountAmount: 0,
+      commissionCreditAmount: 0,
+      amountDue: 4990,
+      paidAmount: 0,
+    };
+    prisma.companyBillingAccount.findUnique.mockResolvedValue(account);
+    prisma.companyBillingInvoice.findFirst.mockResolvedValue(null);
+    prisma.company.findUniqueOrThrow.mockResolvedValue({
+      platformMonthlyFee: 4990,
+      monthlyFeeOverride: null,
+      monthlyFeeOverrideEndsAt: null,
+      currentReferral: {
+        status: "ACTIVE",
+        referrer: { id: 2, uuid: "pr-manager", name: "PR Manager", email: "pr@nearloy.test" },
+      },
+    });
+    prisma.companyBillingInvoice.findUnique.mockResolvedValue(null);
+    prisma.companyBillingInvoice.upsert.mockResolvedValue(invoice);
+    prisma.companyBillingInvoice.findMany.mockResolvedValue([invoice]);
+    prisma.companyReferral.findUnique.mockResolvedValue({
+      status: "ACTIVE",
+      referrer: { id: 2, uuid: "pr-manager", name: "PR Manager", email: "pr@nearloy.test" },
+    });
+    prisma.userSubscription.findMany.mockResolvedValue([]);
+
+    const result = await service.billing(50);
+
+    expect(result.referralManager).toEqual(expect.objectContaining({ uuid: "pr-manager" }));
+    expect(result.monthlyRevenueSplit).toEqual({
+      referralPercent: 30,
+      referralAmount: 1497,
+      platformAmount: 3493,
+    });
   });
 
   it("rejects a payout above the earned unreserved balance", async () => {

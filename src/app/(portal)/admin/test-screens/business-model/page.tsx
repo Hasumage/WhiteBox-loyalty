@@ -217,7 +217,7 @@ export default function BusinessModelConceptPage() {
             <Badge className="mb-3 bg-cyan-100 text-cyan-950"><Sparkles className="mr-1 h-3 w-3" /> Главная формула</Badge>
             <h2 className="text-2xl font-semibold">Счёт партнёру = max(999 ₽, GMV подписок × ставка)</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
-              Так компания без подписок платит понятную абонентку, а компания с оборотом фактически получает доступ бесплатно: платит только комиссию, которая уже доказала ценность NearLoy.
+              Так компания без подписок платит понятную подписку, а компания с оборотом фактически получает доступ бесплатно: платит только комиссию, которая уже доказала ценность NearLoy.
             </p>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-5 py-4 text-sm text-white/65">

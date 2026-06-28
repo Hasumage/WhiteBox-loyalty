@@ -12,6 +12,15 @@ Rules:
 - Repository owner performs merge manually after review.
 - Owner may leave a final merge comment in PR before/at merge.
 
+## Agent Git Safety Rule
+
+Automation and coding agents must follow an explicit publish gate:
+
+- Nothing is pushed to GitHub without a direct user command for that specific push.
+- Every GitHub-bound change must go through a Pull Request; direct pushes to `main` are forbidden.
+- After opening the Pull Request, the agent must give the owner the PR link for confirmation/review.
+- The repository owner decides when to merge; agents must not merge PRs unless explicitly instructed.
+
 ## Standard Steps
 
 1. Create/update your working branch.

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Banknote, BookOpen, CircleAlert, Coins, QrCode, ReceiptText, Sparkles, Users, WalletCards, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Banknote, BookOpen, CircleAlert, Coins, QrCode, ReceiptText, Sparkles, Users, WalletCards, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { companyDashboard, type CompanyDashboard } from "@/lib/api/company-client";
+import { companyBilling, companyDashboard, type CompanyBillingData, type CompanyDashboard } from "@/lib/api/company-client";
+import { getCompanyBillingWarning } from "@/lib/company-billing-warning";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 function money(value: number) {
@@ -17,6 +18,7 @@ const roleNames = { OWNER: "Владелец", MANAGER: "Руководител�
 
 export default function CompanyPortalPage() {
   const [dashboard, setDashboard] = useState<CompanyDashboard | null>(null);
+  const [billing, setBilling] = useState<CompanyBillingData | null>(null);
   const [error, setError] = useState("");
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
@@ -29,6 +31,11 @@ export default function CompanyPortalPage() {
         setTutorialOpen(window.localStorage.getItem(tutorialKey) !== "complete");
       })
       .catch((reason: Error) => setError(reason.message));
+    companyBilling()
+      .then(setBilling)
+      .catch(() => {
+        // Billing status is a helpful warning, but the dashboard should stay usable without it.
+      });
   }, []);
 
   const metrics = dashboard?.metrics;
@@ -44,6 +51,7 @@ export default function CompanyPortalPage() {
   const tutorialSteps = SUBSCRIPTIONS_ENABLED ? tutorial : tutorial.filter((step) => step.icon !== WalletCards);
   const safeTutorialStep = Math.min(tutorialStep, tutorialSteps.length - 1);
   const TutorialIcon = tutorialSteps[safeTutorialStep].icon;
+  const billingWarning = getCompanyBillingWarning(billing);
 
   function closeTutorial() {
     if (dashboard) window.localStorage.setItem(`nearloy:company-tutorial:${dashboard.company.name}`, "complete");
@@ -80,6 +88,39 @@ export default function CompanyPortalPage() {
         <div className="flex items-center gap-3 rounded-2xl border border-red-300/20 bg-red-400/10 p-4 text-sm text-red-100">
           <CircleAlert className="h-5 w-5 shrink-0" /> {error}
         </div>
+      )}
+
+      {billingWarning && (
+        <Card
+          className={`overflow-hidden py-0 ${
+            billingWarning.tone === "danger"
+              ? "border-red-300/25 bg-[linear-gradient(110deg,rgba(248,113,113,0.14),rgba(255,255,255,0.025))]"
+              : "border-amber-300/25 bg-[linear-gradient(110deg,rgba(251,191,36,0.13),rgba(255,255,255,0.025))]"
+          }`}
+        >
+          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-3">
+              <span
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${
+                  billingWarning.tone === "danger"
+                    ? "border-red-200/25 bg-red-300/10 text-red-100"
+                    : "border-amber-200/25 bg-amber-300/10 text-amber-100"
+                }`}
+              >
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-base font-semibold">{billingWarning.title}</p>
+                <p className="mt-1 text-sm leading-5 text-muted-foreground">{billingWarning.description}</p>
+              </div>
+            </div>
+            <Button asChild className="shrink-0 rounded-xl">
+              <Link href="/company/billing">
+                {billingWarning.cta} <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {tutorialOpen && (

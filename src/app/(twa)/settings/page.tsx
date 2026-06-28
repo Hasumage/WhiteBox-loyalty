@@ -53,6 +53,9 @@ import { categoryName } from "@/lib/i18n/categories";
 import { ProfileStatusBadge } from "@/components/profile-status/profile-status-view";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
+const SHOW_LAUNCH_REFERRALS = false;
+const SHOW_LAUNCH_REVIEWS = false;
+
 function initials(name: string) {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -317,10 +320,10 @@ export default function SettingsPage() {
     },
   ];
   const moreLinks = [
-    ["/settings/reviews", MessageSquareText, t("client.profile.myReviews"), t("client.profile.myReviewsSubtitle")],
+    ...(SHOW_LAUNCH_REVIEWS ? [["/settings/reviews", MessageSquareText, t("client.profile.myReviews"), t("client.profile.myReviewsSubtitle")] as const] : []),
     ["/settings/partnership", ShieldCheck, t("client.profile.partnership"), t("client.profile.partnershipSubtitle")],
     ["/settings/business", BriefcaseBusiness, t("client.profile.forBusiness"), t("client.profile.forBusinessSubtitle")],
-    ["/settings/company-referrals", Handshake, t("client.profile.companyReferrals"), t("client.profile.companyReferralsSubtitle")],
+    ...(SHOW_LAUNCH_REFERRALS ? [["/settings/company-referrals", Handshake, t("client.profile.companyReferrals"), t("client.profile.companyReferralsSubtitle")] as const] : []),
     ...(SUBSCRIPTIONS_ENABLED ? [["/marketplace", Ticket, t("client.profile.trySubscriptions"), t("client.profile.unlockPerks")] as const] : []),
   ] as const;
 
@@ -598,6 +601,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {SHOW_LAUNCH_REFERRALS ? (
           <Card className="glass border-white/10">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -629,6 +633,7 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+          ) : null}
         </div>
       </section>
 

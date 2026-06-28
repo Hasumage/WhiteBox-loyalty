@@ -110,11 +110,20 @@ Registered routes (`/api/registered/*`, CLIENT only):
 - `GET /api/registered/history` - loyalty history and archived subscriptions
 - `GET /api/registered/subscriptions/active` - active subscriptions
 - `GET /api/registered/subscriptions/archive` - expired/canceled subscriptions
-- `POST /api/registered/subscriptions/:uuid/activate` - activate subscription in the current non-payment flow
+- `POST /api/registered/payments/subscriptions/:uuid/checkout` - create YooKassa checkout for a subscription or bundle
+- `GET /api/registered/payments/:uuid` - sync/check current user's payment status and activate after successful payment
+
+Payments:
+
+- `POST /api/payments/yookassa/webhook` - YooKassa webhook; the API verifies the provider payment by status sync
+- `GET /api/admin/payments` - admin payment ledger with status filters and provider identifiers
+- `POST /api/company/billing/checkout` - create YooKassa checkout for company NearLoy billing
+- `GET /api/company/billing/payments/:uuid` - sync/check company billing payment status
 
 Set `NEXT_PUBLIC_API_URL=http://localhost:3001/api` for the Next.js auth and admin API clients.
 Set `NEXT_PUBLIC_YANDEX_MAPS_API_KEY=<key>` to enable the Yandex Maps JS API integration on `/map`.
 Set `YANDEX_GEOCODER_API_KEY=<key>` to let admin company locations resolve addresses into saved coordinates.
+Set `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `YOOKASSA_RETURN_URL` and `YOOKASSA_COMPANY_RETURN_URL` to enable YooKassa checkout payments.
 
 ## Backup and Restore Safety
 
@@ -175,6 +184,7 @@ npm run api:test
 - Subscription benefits can be period-limited or marked `UNLIMITED` for repeatable access such as gym entry while still recording each redemption.
 - Subscription redemptions use configured service allowances and periodic windows; QR replay protection remains a required pre-production enhancement.
 - `AdminTask` turns open verification requests, pending finance approvals and critical audit alerts into one deduplicated resolution queue. Task visibility follows granular admin permissions.
+- Subscription activation is paid: the TWA creates a YooKassa checkout and activates the subscription only after `PaymentStatus.SUCCEEDED`.
 
 ## Build
 
@@ -215,5 +225,6 @@ Key docs:
 - PR-only workflow to `main`.
 - Direct pushes to `main` are not allowed by project policy.
 - Merge to `main` is done manually by repository owner after review.
+- Agents must not push without an explicit user command, and every pushed change must be surfaced through a Pull Request link for owner confirmation.
 
 Details: see `CONTRIBUTING.md`.

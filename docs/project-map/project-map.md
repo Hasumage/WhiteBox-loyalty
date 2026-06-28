@@ -119,4 +119,4 @@ Company portal:
 - Company verification creates a user first and then links/activates company access after admin approval.
 - Passport photos are encrypted in local private storage and removed after approve/reject cleanup.
 - Admin UI uses one global language switcher in the navigation shell; page strings are moving into structured dictionaries.
-- Payment providers are intentionally stubbed; subscription activation is currently a non-payment flow.
+- Subscription and company billing payments use YooKassa checkout. Successful provider payments are stored in `Payment` and activate the subscription or billing invoice after status sync/webhook confirmation.

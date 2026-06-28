@@ -71,7 +71,7 @@ export default function CompanyBillingPromosPage() {
         <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">
           <TicketPercent className="h-4 w-4" /> PR и продажи
         </p>
-        <h1 className="text-3xl font-semibold">Промокоды на абонентскую плату</h1>
+        <h1 className="text-3xl font-semibold">Промокоды на подписку NearLoy</h1>
         <p className="mt-2 text-muted-foreground">Администраторы и PR-менеджеры могут предоставить компании скидку вплоть до 100%.</p>
       </header>
 

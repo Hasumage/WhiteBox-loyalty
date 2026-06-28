@@ -9,7 +9,7 @@ Important principles:
 - Marketplace, partners, wallet, map, history, profile, onboarding, promo codes and referral flows are API-driven.
 - Points are company-scoped and stored in `UserCompany` + `LoyaltyTransaction`.
 - Company branches are stored in `CompanyLocation` with geocoded coordinates and working hours.
-- Subscription payment providers are stubbed for now; activation is a non-payment flow.
+- Subscription and company billing payments are YooKassa-backed. Checkout creates a `Payment`, provider status sync/webhooks update it, and activation happens only after a successful payment.
 - Production migrations are applied by GitHub Actions after `main` verification succeeds.
 
 ## Frontend API clients
@@ -127,7 +127,17 @@ All `/api/registered/*` routes require `CLIENT`.
 | `/api/registered/history` | GET | Points activity and subscription archive |
 | `/api/registered/subscriptions/active` | GET | Active subscriptions |
 | `/api/registered/subscriptions/archive` | GET | Expired/canceled subscriptions |
-| `/api/registered/subscriptions/:uuid/activate` | POST | Activate subscription in payment-stub flow |
+| `/api/registered/payments/subscriptions/:uuid/checkout` | POST | Create YooKassa checkout for a subscription or paired bundle |
+| `/api/registered/payments/:uuid` | GET | Sync/read current user's payment status and activate paid subscription |
+
+## Payments API surface
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/payments/yookassa/webhook` | POST | YooKassa webhook; provider payment is verified by status sync |
+| `/api/admin/payments` | GET | Search and filter provider payment ledger |
+| `/api/company/billing/checkout` | POST | Create YooKassa checkout for company NearLoy billing |
+| `/api/company/billing/payments/:uuid` | GET | Sync/read company billing payment status |
 
 ## Backend responsibilities
 

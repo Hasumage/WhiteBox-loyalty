@@ -80,8 +80,8 @@ export function LandingLeadForm({
         )}
 
         <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-          <a href={`mailto:maksimpastuhov77@gmail.com?subject=${contactSubject}`} className="text-sm font-semibold text-white/64 transition hover:text-white">
-            maksimpastuhov77@gmail.com
+          <a href={`mailto:nearloyalty@gmail.com?subject=${contactSubject}`} className="text-sm font-semibold text-white/64 transition hover:text-white">
+            nearloyalty@gmail.com
           </a>
           <Button disabled={status === "sending"} className="h-12 rounded-2xl bg-white px-6 text-[#07101e] hover:bg-white/88">
             {status === "sending" ? "Отправляем..." : "Отправить заявку"}

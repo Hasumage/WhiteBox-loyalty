@@ -789,7 +789,7 @@ export const adminPagesDictionary = {
     "admin.finance.reservedAfter": "Reserved after request",
     "admin.finance.activeSubscriptions": "Active subscriptions",
     "admin.finance.futureRevenue": "Potential future revenue",
-    "admin.finance.revenueSource": "Source: activated subscriptions, recognized day by day. This is a calculated position until payment collection is connected.",
+    "admin.finance.revenueSource": "Source: YooKassa-backed paid subscriptions, recognized day by day after successful payment.",
     "admin.finance.perDay": "/ day",
     "admin.finance.internalRequest": "Internal operation without a linked company balance.",
 
@@ -1647,7 +1647,7 @@ export const adminPagesDictionary = {
     "admin.finance.reservedAfter": "В резерве после заявки",
     "admin.finance.activeSubscriptions": "Активных подписок",
     "admin.finance.futureRevenue": "Будущий доход",
-    "admin.finance.revenueSource": "Источник: активированные подписки, доход признаётся по дням. До подключения оплаты это расчётная финансовая позиция.",
+    "admin.finance.revenueSource": "Источник: оплаченные через YooKassa подписки, доход признаётся по дням после успешной оплаты.",
     "admin.finance.perDay": "/ день",
     "admin.finance.internalRequest": "Внутренняя операция без привязки к балансу компании.",
 

@@ -72,6 +72,12 @@ Optional variables:
 ```env
 YANDEX_GEOCODER_API_KEY=<key>
 EMAIL_FROM=no-reply@nearloy.local
+YOOKASSA_SHOP_ID=<shop-id>
+YOOKASSA_SECRET_KEY=<secret-key>
+YOOKASSA_RETURN_URL=https://<web-domain>/payment/success
+YOOKASSA_COMPANY_RETURN_URL=https://<web-domain>/company/billing
+YOOKASSA_VAT_CODE=1
+YOOKASSA_MAX_BANK_CARD_PAYMENT_RUB=349999
 ```
 
 The API health endpoint is:
@@ -117,6 +123,7 @@ DIRECT_URL=postgresql://...
 ```
 
 Set the generated web domain as `FRONTEND_ORIGIN` in the API service.
+Set the generated web domain in `YOOKASSA_RETURN_URL` and `YOOKASSA_COMPANY_RETURN_URL` so YooKassa returns users to the TWA/payment and company billing status screens.
 
 ## CI/CD handoff
 

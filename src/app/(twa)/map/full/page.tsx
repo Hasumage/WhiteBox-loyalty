@@ -7,8 +7,10 @@ export default function FullMapPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-[100dvh] px-3 pb-4 pt-4">
-          <div className="h-[calc(100dvh-32px)] rounded-[2rem] border border-white/10 bg-muted/20" />
+        <div className="fixed inset-0 z-[70] flex h-[100dvh] items-center justify-center overflow-hidden bg-black">
+          <div className="rounded-3xl border border-white/10 bg-slate-950/80 px-5 py-4 text-sm text-white/70 shadow-[0_24px_60px_rgba(0,0,0,0.48)]">
+            Loading map...
+          </div>
         </div>
       }
     >

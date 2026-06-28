@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, BadgeCheck, BellRing, Gift, QrCode, Sparkles, TicketCheck, WalletCards } from "lucide-react";
+import { ArrowRight, BadgeCheck, BellRing, Gift, MapPin, QrCode, Sparkles, TicketCheck, WalletCards } from "lucide-react";
 import { LandingLeadForm } from "@/components/landing/LandingLeadForm";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
 import { OpenNearLoyDemo } from "@/components/landing/OpenNearLoyDemo";
@@ -26,10 +26,10 @@ const userHighlights: IconItem[] = [
 ];
 
 const steps = [
-  { title: "Откройте NearLoy", text: "Войдите в приложение или Telegram Mini App и получите доступ к своему кошельку." },
-  { title: "Найдите партнёра", text: "Карта и категории помогают выбрать компанию рядом или онлайн-сервис." },
-  { title: "Покажите QR", text: "Кассир быстро найдёт профиль, начислит баллы или погасит услугу подписки." },
-  { title: "Следите за выгодой", text: "История, статусы и подписки остаются прозрачными и доступны в любой момент." },
+  { icon: WalletCards, title: "Откройте NearLoy", text: "Войдите в приложение или Telegram Mini App и получите доступ к своему кошельку." },
+  { icon: MapPin, title: "Найдите партнёра", text: "Карта и категории помогают выбрать компанию рядом или онлайн-сервис." },
+  { icon: QrCode, title: "Покажите QR", text: "Кассир быстро найдёт профиль, начислит баллы или погасит услугу подписки." },
+  { icon: BadgeCheck, title: "Следите за выгодой", text: "История, статусы и подписки остаются прозрачными и доступны в любой момент." },
 ];
 
 const subscriptionCards = [
@@ -88,7 +88,7 @@ export default function HomePage() {
             Бонусы, подписки и статусы в одном интерфейсе
           </div>
           <h1 className="mt-7 max-w-4xl text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
-            NearLoy для клиентов, которые хотят получать больше от любимых компаний
+            NearLoy: больше от любимых компаний
           </h1>
           <p className="mt-6 max-w-2xl text-xl leading-9 text-white/62">
             Храните бонусы, подписки, уровни и историю операций в телефоне. Показывайте QR на кассе, получайте сервис быстрее и используйте преимущества партнёров без пластиковых карт.
@@ -125,10 +125,25 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">NearLoy внутри</p>
-            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Ваш QR-кошелёк, бонусы и подписки в одном пространстве</h2>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">QR, бонусы и подписки вместе</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
               NearLoy собирает ключевые сценарии клиента: быстрый QR на кассе, бонусы, подписки, уровни и историю действий. Всё выглядит как единый сервис, а не набор разрозненных карт.
             </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {[
+                { icon: QrCode, label: "QR" },
+                { icon: Gift, label: "Бонусы" },
+                { icon: TicketCheck, label: "Тарифы" },
+              ].map((item) => (
+                <span
+                  key={item.label}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-semibold text-white/78"
+                >
+                  <item.icon className="h-4 w-4 text-cyan-100" />
+                  {item.label}
+                </span>
+              ))}
+            </div>
           </div>
           <OpenNearLoyDemo />
         </div>
@@ -166,13 +181,15 @@ export default function HomePage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">Карта партнёров</p>
             <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Компании рядом и онлайн-сервисы в одном поиске</h2>
-            <p className="mt-4 text-lg leading-8 text-white/58">
-              Находите точки на карте, фильтруйте по категориям, смотрите карточку партнёра и выбирайте подписки, которые подходят вашему ритму.
-            </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {steps.map((step, index) => (
                 <div key={step.title} className="rounded-3xl border border-white/10 bg-white/[0.045] p-5">
-                  <span className="text-sm font-semibold text-cyan-100/70">0{index + 1}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-cyan-100/70">0{index + 1}</span>
+                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-100/14 bg-cyan-100/10 text-cyan-100 shadow-[0_0_24px_rgba(103,232,249,0.08)]">
+                      <step.icon className="h-5 w-5" />
+                    </span>
+                  </div>
                   <h3 className="mt-3 font-semibold">{step.title}</h3>
                   <p className="mt-2 text-sm leading-6 text-white/56">{step.text}</p>
                 </div>
@@ -187,16 +204,16 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">Для бизнеса</p>
-            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Если вы компания, у NearLoy есть отдельная страница</h2>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">NearLoy помогает бизнесу возвращать клиентов</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
-              Мы разделили лендинг: клиентская страница объясняет удобство сервиса, а бизнес-страница показывает подписки, финансы, кассу, роли и возврат клиентов.
+              Запускайте бонусы, подписки и уровни лояльности, управляйте кассой и командой, а финансовые показатели держите под контролем в одном рабочем пространстве.
             </p>
           </div>
           <GlowCard className="p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-2xl font-semibold">Страница для компаний</h3>
-                <p className="mt-2 text-sm leading-6 text-white/58">Отдельная структура для предпринимателей, партнёров и команд.</p>
+                <h3 className="text-2xl font-semibold">Кабинет для партнёров</h3>
+                <p className="mt-2 text-sm leading-6 text-white/58">Инструменты для подписок, бонусов, сотрудников, выплат и роста повторных продаж.</p>
               </div>
               <Link href="/business" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-5 text-sm font-semibold text-[#07101e] transition hover:bg-white/90">
                 Перейти

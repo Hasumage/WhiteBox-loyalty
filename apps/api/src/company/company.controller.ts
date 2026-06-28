@@ -7,6 +7,7 @@ import { Roles } from "../auth/roles.decorator";
 import { CreateCompanySubscriptionDto } from "../admin/dto/create-company-subscription.dto";
 import { UpsertCompanyLocationDto } from "../admin/dto/upsert-company-location.dto";
 import { assertSubscriptionsEnabled } from "../common/subscriptions-feature";
+import { PaymentsService } from "../payments/payments.service";
 import { CompanyService } from "./company.service";
 import {
   AwardCompanyPointsDto,
@@ -33,7 +34,10 @@ import {
 @UseGuards(RolesGuard)
 @Roles(UserRole.COMPANY)
 export class CompanyController {
-  constructor(private readonly companyService: CompanyService) {}
+  constructor(
+    private readonly companyService: CompanyService,
+    private readonly paymentsService: PaymentsService,
+  ) {}
 
   @Get("profile")
   profile(@CurrentUser() user: RequestUser) {
@@ -163,6 +167,16 @@ export class CompanyController {
   @Post("billing/pay")
   payBillingInvoice(@CurrentUser() user: RequestUser) {
     return this.companyService.payBillingInvoice(user.userId);
+  }
+
+  @Post("billing/checkout")
+  createBillingCheckout(@CurrentUser() user: RequestUser) {
+    return this.paymentsService.createCompanyBillingCheckout(user.userId);
+  }
+
+  @Get("billing/payments/:uuid")
+  getBillingPayment(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
+    return this.paymentsService.getCompanyBillingPayment(user.userId, uuid);
   }
 
   @Get("subscriptions")
