@@ -47,7 +47,8 @@
 | `/admin/growth` | Promo/referral management | ADMIN |
 | `/admin/database` | Prisma schema visualizer | ADMIN |
 | `/admin/audit`, `/admin/audit/new`, `/admin/audit/backups` | Audit and backups | ADMIN |
-| `/admin/payments`, `/admin/compliance` | Future modules | ADMIN |
+| `/admin/payments` | YooKassa payment ledger, statuses and provider identifiers | ADMIN |
+| `/admin/compliance` | Future compliance module | ADMIN |
 
 ## Layout hierarchy
 

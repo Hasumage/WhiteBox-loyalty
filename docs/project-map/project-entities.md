@@ -26,6 +26,7 @@ Catalog and partners:
 - `Subscription`
 - `SubscriptionEntitlement`
 - `SubscriptionRedemption`
+- `Payment`
 
 Client state and ledger:
 
@@ -52,6 +53,9 @@ Growth:
 - `LoyaltyTransactionType`: `EARN | SPEND`
 - `LoyaltyTransactionStatus`: `ACTIVE | EXPIRED`
 - `SubscriptionSpendPolicy`: `EXCLUDE | INCLUDE_NO_BONUS | INCLUDE_WITH_BONUS`
+- `PaymentProvider`: `YOOKASSA`
+- `PaymentPurpose`: `USER_SUBSCRIPTION | USER_SUBSCRIPTION_BUNDLE | COMPANY_NEARLOY_SUBSCRIPTION`
+- `PaymentStatus`: `PENDING | WAITING_FOR_CAPTURE | SUCCEEDED | CANCELED | FAILED | REFUNDED`
 - `AuditWorkspace`: `MANAGER | DEVELOPER`
 - `AuditLevel`: `INFO | WARN | CRITICAL`
 - `AuditCategory`: `SECURITY | USER | SUBSCRIPTION | BILLING | SYSTEM`
