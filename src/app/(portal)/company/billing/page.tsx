@@ -1,125 +1,298 @@
+
 "use client";
 
-import { useEffect, useState } from "react";
-import { BadgePercent, CalendarClock, CheckCircle2, CreditCard, Gift, ReceiptText, Wallet } from "lucide-react";
+import { Suspense, useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
+import {
+  BadgePercent,
+  CalendarClock,
+  CheckCircle2,
+  CreditCard,
+  ExternalLink,
+  Gift,
+  Loader2,
+  ReceiptText,
+  Wallet,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { applyCompanyBillingPromo, companyBilling, payCompanyBillingInvoice } from "@/lib/api/company-client";
+import {
+  applyCompanyBillingPromo,
+  companyBilling,
+  createCompanyBillingCheckout,
+  getCompanyBillingPayment,
+  payCompanyBillingInvoice,
+} from "@/lib/api/company-client";
 
 type Data = Awaited<ReturnType<typeof companyBilling>>;
-const money = (value: number) => new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB" }).format(value);
+
+function money(value: number | string | null | undefined) {
+  const amount = typeof value === "string" ? Number(value) : value ?? 0;
+  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB" }).format(Number(amount) || 0);
+}
+
+function formatDate(value?: string | Date | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "long", year: "numeric" }).format(date);
+}
 
 export default function CompanyBillingPage() {
-  const [data, setData] = useState<Data | null>(null);
-  const [promo, setPromo] = useState("");
-  const [message, setMessage] = useState("");
-
-  async function load() {
-    try {
-      setData(await companyBilling());
-      setMessage("");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Не удалось загрузить абонентскую плату.");
-    }
-  }
-
-  useEffect(() => { void load(); }, []);
-
-  const invoice = data?.invoice;
-  const trialEndsAt = data?.account.status === "TRIAL" ? data.account.trialEndsAt : null;
-
   return (
-    <div className="space-y-6">
-      <header>
-        <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">
-          <ReceiptText className="h-4 w-4" /> NearLoy Club
-        </p>
-        <h1 className="text-3xl font-semibold">Абонентская плата</h1>
-        <p className="mt-2 text-muted-foreground">
-          Комиссия 12% с продаж подписок автоматически уменьшает ежемесячный платёж NearLoy.
-        </p>
-      </header>
-
-      {message && <div className="rounded-2xl border border-red-300/20 bg-red-300/10 p-4 text-sm text-red-100">{message}</div>}
-
-      {trialEndsAt && (
-        <section className="rounded-[2rem] border border-cyan-200/20 bg-[radial-gradient(circle_at_10%_10%,rgba(103,232,249,0.18),transparent_45%),rgba(255,255,255,0.03)] p-6">
-          <Gift className="h-7 w-7 text-cyan-100" />
-          <h2 className="mt-4 text-2xl font-semibold">30 дней NearLoy бесплатно</h2>
-          <p className="mt-2 text-muted-foreground">Тестовый период действует до {new Date(trialEndsAt).toLocaleDateString("ru-RU")}.</p>
-        </section>
-      )}
-
-      {invoice && (
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric icon={ReceiptText} label="Базовая стоимость" value={money(Number(invoice.baseFee))} />
-          <Metric icon={BadgePercent} label="Скидка по промокоду" value={`-${money(Number(invoice.promoDiscountAmount))}`} />
-          <Metric icon={CheckCircle2} label="Зачтено комиссией" value={`-${money(Number(invoice.commissionCreditAmount))}`} />
-          <Metric icon={CreditCard} label="К оплате" value={money(Number(invoice.amountDue))} accent />
-        </section>
-      )}
-
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-5">
-          <h2 className="flex items-center gap-2 font-semibold"><BadgePercent className="h-4 w-4" /> Промокод</h2>
-          <div className="mt-4 flex gap-2">
-            <Input value={promo} onChange={(event) => setPromo(event.target.value.toUpperCase())} placeholder="Введите промокод" />
-            <Button disabled={!promo.trim()} onClick={async () => {
-              try {
-                setData(await applyCompanyBillingPromo(promo));
-                setPromo("");
-                setMessage("Промокод применён.");
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Промокод недоступен.");
-              }
-            }}>Применить</Button>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-cyan-200/15 bg-cyan-300/[0.035] p-5">
-          <h2 className="flex items-center gap-2 font-semibold"><Wallet className="h-4 w-4" /> Баланс NearLoy</h2>
-          <p className="mt-3 text-3xl font-semibold">{money(data?.availableBalance ?? 0)}</p>
-          <p className="mt-2 text-sm text-muted-foreground">Оплата списывается из заработанного и доступного компании баланса.</p>
-          <Button
-            className="mt-4 w-full"
-            disabled={!invoice || invoice.status !== "OPEN" || Number(invoice.amountDue) > (data?.availableBalance ?? 0)}
-            onClick={async () => {
-              try {
-                setData(await payCompanyBillingInvoice());
-                setMessage("Абонентская плата успешно оплачена.");
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Не удалось оплатить счёт.");
-              }
-            }}
-          >
-            <CreditCard /> Оплатить с баланса
-          </Button>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-white/10 bg-white/[0.025] p-5">
-        <h2 className="mb-4 flex items-center gap-2 font-semibold"><CalendarClock className="h-4 w-4" /> История начислений</h2>
-        <div className="space-y-2">
-          {data?.history.length
-            ? data.history.map((row) => (
-              <div key={row.uuid} className="flex flex-wrap justify-between gap-2 rounded-2xl border border-white/10 p-4 text-sm">
-                <span>{new Date(row.periodStartsAt).toLocaleDateString("ru-RU")} — {new Date(row.periodEndsAt).toLocaleDateString("ru-RU")}</span>
-                <strong>{row.status}: {money(row.amountDue)}</strong>
-              </div>
-            ))
-            : <p className="text-sm text-muted-foreground">История счетов пока пуста.</p>}
-        </div>
-      </section>
-    </div>
+    <Suspense
+      fallback={
+        <main className="space-y-6 p-8 text-foreground">
+          <Loader2 className="h-6 w-6 animate-spin text-cyan-100" />
+          <p className="text-muted-foreground">Загружаю оплату подписки...</p>
+        </main>
+      }
+    >
+      <CompanyBillingContent />
+    </Suspense>
   );
 }
 
-function Metric({ icon: Icon, label, value, accent = false }: { icon: typeof ReceiptText; label: string; value: string; accent?: boolean }) {
+function CompanyBillingContent() {
+  const searchParams = useSearchParams();
+  const paymentUuid = searchParams.get("payment");
+  const [data, setData] = useState<Data | null>(null);
+  const [promo, setPromo] = useState("");
+  const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"info" | "error" | "success">("info");
+  const [loading, setLoading] = useState(true);
+  const [balancePaying, setBalancePaying] = useState(false);
+  const [checkoutPaying, setCheckoutPaying] = useState(false);
+  const [syncingPayment, setSyncingPayment] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const next = await companyBilling();
+      setData(next);
+      setMessage("");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Не удалось загрузить подписку NearLoy.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  useEffect(() => {
+    if (!paymentUuid) return;
+    let cancelled = false;
+
+    async function syncPayment() {
+      setSyncingPayment(true);
+      setMessageTone("info");
+      setMessage("Проверяю оплату YooKassa...");
+      try {
+        const result = await getCompanyBillingPayment(paymentUuid!);
+        if (cancelled) return;
+        if (result.status === "SUCCEEDED") {
+          setMessageTone("success");
+          setMessage("Оплата через YooKassa прошла успешно. Подписка NearLoy продлена.");
+          await load();
+        } else if (result.status === "FAILED" || result.status === "CANCELED") {
+          setMessageTone("error");
+          setMessage("YooKassa не подтвердила оплату. Попробуйте оплатить ещё раз.");
+        } else {
+          setMessageTone("info");
+          setMessage("Оплата создана. Если вы уже оплатили счёт, статус обновится после подтверждения YooKassa.");
+        }
+        window.history.replaceState(null, "", "/company/billing");
+      } catch (error) {
+        if (!cancelled) {
+          setMessageTone("error");
+          setMessage(error instanceof Error ? error.message : "Не удалось проверить оплату YooKassa.");
+        }
+      } finally {
+        if (!cancelled) setSyncingPayment(false);
+      }
+    }
+
+    void syncPayment();
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentUuid]);
+
+  const invoice = data?.invoice;
+  const isTrialActive = data?.account?.status === "TRIAL";
+  const trialEndsAt = formatDate(data?.account?.trialEndsAt);
+  const amountDue = Number(invoice?.amountDue ?? 0);
+  const canPayFromBalance = Boolean(data && amountDue > 0 && Number(data.availableBalance) >= amountDue);
+
+  async function applyPromo() {
+    if (!promo.trim()) return;
+    try {
+      const result = await applyCompanyBillingPromo(promo.trim());
+      setData((current) => current ? { ...current, invoice: result.invoice } : current);
+      setMessageTone("success");
+      setMessage("Промокод применён. Сумма обновлена.");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Промокод не применён.");
+    }
+  }
+
+  async function payFromBalance() {
+    if (!canPayFromBalance) return;
+    setBalancePaying(true);
+    try {
+      await payCompanyBillingInvoice();
+      setMessageTone("success");
+      setMessage("Подписка NearLoy оплачена с баланса компании.");
+      await load();
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Не удалось оплатить счёт с баланса.");
+    } finally {
+      setBalancePaying(false);
+    }
+  }
+
+  async function payViaYooKassa() {
+    setCheckoutPaying(true);
+    try {
+      const checkout = await createCompanyBillingCheckout();
+      if (!checkout.confirmationUrl) throw new Error("YooKassa не вернула ссылку на оплату.");
+      window.location.assign(checkout.confirmationUrl);
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Не удалось создать оплату YooKassa.");
+      setCheckoutPaying(false);
+    }
+  }
+
   return (
-    <div className={`rounded-3xl border p-5 ${accent ? "border-cyan-200/25 bg-cyan-300/10" : "border-white/10 bg-white/[0.035]"}`}>
+    <main className="space-y-8 p-8 text-foreground">
+      <section className="rounded-[2rem] border border-cyan-300/20 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),rgba(10,10,10,0.92)_42%)] p-8 shadow-[0_0_80px_rgba(34,211,238,0.08)]">
+        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.24em] text-cyan-100">
+          <ReceiptText className="h-4 w-4" /> Ближайшая оплата
+        </div>
+        <h1 className="mt-6 text-4xl font-semibold tracking-tight">Подписка NearLoy</h1>
+        <p className="mt-3 max-w-3xl text-lg text-muted-foreground">
+          Оплачивайте доступ компании к NearLoy через YooKassa или с баланса компании. Промокоды, зачёт комиссии и история оплат собраны в одном месте.
+        </p>
+      </section>
+
+      {message ? <StatusMessage tone={messageTone}>{message}</StatusMessage> : null}
+      {syncingPayment ? <StatusMessage tone="info">Проверяю оплату YooKassa...</StatusMessage> : null}
+
+      {loading ? (
+        <div className="rounded-[2rem] border border-border bg-card p-8">
+          <Loader2 className="h-6 w-6 animate-spin text-cyan-100" />
+          <p className="mt-4 text-muted-foreground">Загружаю данные подписки...</p>
+        </div>
+      ) : data ? (
+        <>
+          {isTrialActive ? (
+            <section className="rounded-[2rem] border border-cyan-300/25 bg-cyan-300/10 p-6">
+              <h2 className="flex items-center gap-2 text-xl font-semibold">
+                <Gift className="h-5 w-5" /> Тестовый период активен
+              </h2>
+              <p className="mt-2 text-muted-foreground">Бесплатный период действует до {trialEndsAt}.</p>
+            </section>
+          ) : null}
+
+          <section className="grid gap-4 md:grid-cols-4">
+            <Metric icon={ReceiptText} label="Базовая цена" value={money(invoice?.baseFee ?? 4990)} />
+            <Metric icon={BadgePercent} label="Скидка" value={`-${money(invoice?.promoDiscountAmount ?? 0)}`} />
+            <Metric icon={CheckCircle2} label="Зачёт комиссии" value={`-${money(invoice?.commissionCreditAmount ?? 0)}`} />
+            <Metric icon={CreditCard} label="К оплате" value={money(invoice?.amountDue ?? 0)} accent />
+          </section>
+
+          {amountDue <= 0 ? (
+            <StatusMessage tone="success">Счёт закрыт. Подписка NearLoy уже оплачена.</StatusMessage>
+          ) : null}
+
+          <section className="grid gap-6 lg:grid-cols-2">
+            <div className="rounded-[2rem] border border-border bg-card p-6">
+              <h2 className="flex items-center gap-2 text-xl font-semibold">
+                <BadgePercent className="h-5 w-5 text-cyan-100" /> Промокод
+              </h2>
+              <p className="mt-2 text-muted-foreground">Если менеджер выдал скидку, примените её до оплаты.</p>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <Input value={promo} onChange={(event) => setPromo(event.target.value.toUpperCase())} placeholder="Введите промокод" />
+                <Button type="button" onClick={applyPromo} disabled={!promo.trim()}>Применить</Button>
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-cyan-300/20 bg-cyan-300/10 p-6">
+              <h2 className="flex items-center gap-2 text-xl font-semibold">
+                <Wallet className="h-5 w-5 text-cyan-100" /> Оплата подписки
+              </h2>
+              <p className="mt-2 text-muted-foreground">Баланс компании: {money(data.availableBalance)}</p>
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <Button type="button" disabled={amountDue <= 0 || checkoutPaying} onClick={payViaYooKassa}>
+                  <ActionIcon loading={checkoutPaying} icon={ExternalLink} />
+                  Оплатить через YooKassa
+                </Button>
+                <Button type="button" disabled={!canPayFromBalance || balancePaying} onClick={payFromBalance} variant="secondary">
+                  <ActionIcon loading={balancePaying} icon={CreditCard} />
+                  Оплатить с баланса
+                </Button>
+              </div>
+              {!canPayFromBalance && amountDue > 0 ? (
+                <p className="mt-3 text-sm text-muted-foreground">Для оплаты с баланса не хватает средств. Используйте YooKassa.</p>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-border bg-card p-6">
+            <h2 className="flex items-center gap-2 text-xl font-semibold">
+              <CalendarClock className="h-5 w-5 text-cyan-100" /> История оплат
+            </h2>
+            <div className="mt-5 space-y-3">
+              {data.history?.length ? data.history.map((row) => (
+                <div key={row.uuid} className="flex flex-col gap-2 rounded-2xl border border-border bg-background/60 p-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="font-semibold">{money(row.paidAmount ?? row.amountDue)}</p>
+                    <p className="text-sm text-muted-foreground">Статус: {row.status}</p>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{formatDate(row.createdAt)}</p>
+                </div>
+              )) : <p className="text-muted-foreground">История оплат пока пустая.</p>}
+            </div>
+          </section>
+        </>
+      ) : null}
+    </main>
+  );
+}
+
+function StatusMessage({ tone, children }: { tone: "info" | "error" | "success"; children: ReactNode }) {
+  const toneClass = tone === "error"
+    ? "border-red-400/30 bg-red-500/10 text-red-100"
+    : tone === "success"
+      ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
+      : "border-cyan-300/25 bg-cyan-300/10 text-cyan-50";
+  return <div className={`rounded-[1.5rem] border px-5 py-4 ${toneClass}`}>{children}</div>;
+}
+
+function ActionIcon({ loading, icon: Icon }: { loading: boolean; icon: LucideIcon }) {
+  return (
+    <span className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center">
+      <Icon className={`absolute h-4 w-4 transition-opacity ${loading ? "opacity-0" : "opacity-100"}`} />
+      <Loader2 className={`absolute h-4 w-4 animate-spin transition-opacity ${loading ? "opacity-100" : "opacity-0"}`} />
+    </span>
+  );
+}
+
+function Metric({ icon: Icon, label, value, accent }: { icon: LucideIcon; label: string; value: string; accent?: boolean }) {
+  return (
+    <div className={`rounded-[1.5rem] border p-6 ${accent ? "border-cyan-300/30 bg-cyan-300/10" : "border-border bg-card"}`}>
       <Icon className="h-5 w-5 text-cyan-100" />
-      <p className="mt-4 text-xs uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
+      <p className="mt-5 text-xs uppercase tracking-[0.28em] text-muted-foreground">{label}</p>
+      <p className="mt-3 text-3xl font-semibold">{value}</p>
     </div>
   );
 }

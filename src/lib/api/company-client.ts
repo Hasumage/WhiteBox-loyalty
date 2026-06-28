@@ -599,7 +599,15 @@ export type CompanyBillingData = {
   account: { status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED"; trialEndsAt: string | null; currentPeriodStartsAt: string; currentPeriodEndsAt: string };
   invoice: null | { uuid: string; status: "OPEN" | "PAID" | "WAIVED" | "CANCELED"; periodStartsAt: string; periodEndsAt: string; baseFee: string | number; promoDiscountAmount: string | number; commissionCreditAmount: string | number; amountDue: string | number };
   availableBalance: number;
-  history: Array<{ uuid: string; status: string; periodStartsAt: string; periodEndsAt: string; amountDue: number }>;
+  history: Array<{
+    uuid: string;
+    status: string;
+    periodStartsAt: string;
+    periodEndsAt: string;
+    amountDue: number;
+    paidAmount?: number;
+    createdAt: string;
+  }>;
 };
 
 export function companyBilling() {
@@ -612,6 +620,27 @@ export function applyCompanyBillingPromo(code: string) {
 
 export function payCompanyBillingInvoice() {
   return request<CompanyBillingData>("/company/billing/pay", { method: "POST" });
+}
+
+export type CompanyBillingCheckout = {
+  uuid: string;
+  status: string;
+  amount: string | number;
+  currency: string;
+  confirmationUrl: string | null;
+  providerPaymentId: string | null;
+  providerStatus: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function createCompanyBillingCheckout() {
+  return request<CompanyBillingCheckout>("/company/billing/checkout", { method: "POST" });
+}
+
+export function getCompanyBillingPayment(uuid: string) {
+  return request<CompanyBillingCheckout>(`/company/billing/payments/${encodeURIComponent(uuid)}`);
 }
 
 export async function requestCompanyPayout(body: { amount: number; details?: string }) {

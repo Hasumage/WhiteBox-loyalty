@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { PaymentPurpose, PaymentStatus, Prisma, SubscriptionBundleStatus, SubscriptionStatus } from "@prisma/client";
+import { CompanyMemberRole, PaymentPurpose, PaymentStatus, Prisma, SubscriptionBundleStatus, SubscriptionStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { PrismaService } from "../prisma/prisma.service";
@@ -53,6 +53,94 @@ export class PaymentsService {
     }
 
     return `${base}/payment/success?payment=${encodeURIComponent(paymentUuid)}`;
+  }
+
+  private companyBillingReturnUrl(paymentUuid: string) {
+    const configured = process.env.YOOKASSA_COMPANY_RETURN_URL || process.env.FRONTEND_ORIGIN || process.env.TELEGRAM_WEB_APP_URL || "http://localhost:3000";
+    const normalized = configured.trim().replace(/\/+$/, "");
+    let base = normalized;
+
+    try {
+      const url = new URL(normalized);
+      base = url.origin;
+    } catch {
+      base = normalized
+        .replace(/\/company\/billing(?:\/.*)?$/i, "")
+        .replace(/\/payment\/success(?:\/.*)?$/i, "");
+    }
+
+    return `${base}/company/billing?payment=${encodeURIComponent(paymentUuid)}`;
+  }
+
+  async createCompanyBillingCheckout(userId: number) {
+    if (!this.yookassa.isConfigured()) {
+      throw new BadRequestException("YooKassa is not configured. Payment checkout is unavailable.");
+    }
+
+    const member = await this.prisma.companyMember.findFirst({
+      where: {
+        userId,
+        isActive: true,
+        role: { in: [CompanyMemberRole.OWNER, CompanyMemberRole.MANAGER] },
+      },
+      include: {
+        user: { select: { id: true, email: true, name: true } },
+        company: { select: { id: true, name: true } },
+      },
+    });
+    if (!member) throw new NotFoundException("Company account not found.");
+
+    const invoice = await this.prisma.companyBillingInvoice.findFirst({
+      where: { companyId: member.companyId, status: "OPEN", amountDue: { gt: 0 } },
+      orderBy: { periodStartsAt: "desc" },
+    });
+    if (!invoice) {
+      const latestInvoice = await this.prisma.companyBillingInvoice.findFirst({
+        where: { companyId: member.companyId },
+        orderBy: { periodStartsAt: "desc" },
+      });
+      if (latestInvoice?.status === "PAID" || latestInvoice?.status === "WAIVED") {
+        throw new BadRequestException("Текущая подписка NearLoy уже оплачена.");
+      }
+      throw new BadRequestException("Сейчас нет счёта на оплату подписки NearLoy.");
+    }
+
+    const invoicePayments = await this.prisma.payment.findMany({
+      where: {
+        companyId: member.companyId,
+        purpose: PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION,
+        status: { in: [PaymentStatus.PENDING, PaymentStatus.WAITING_FOR_CAPTURE, PaymentStatus.SUCCEEDED] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    const existingPayment = invoicePayments.find((payment) => {
+      const metadata = payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata)
+        ? payment.metadata as Record<string, unknown>
+        : {};
+      return metadata.invoiceUuid === invoice.uuid;
+    });
+
+    if (existingPayment?.status === PaymentStatus.SUCCEEDED) {
+      throw new BadRequestException("Текущая подписка NearLoy уже оплачена.");
+    }
+    if (existingPayment && existingPayment.confirmationUrl) {
+      return this.serializePayment(existingPayment);
+    }
+
+    return this.createProviderPayment({
+      user: member.user,
+      purpose: PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION,
+      amount: invoice.amountDue,
+      description: `NearLoy company subscription: ${member.company.name}`,
+      companyId: member.companyId,
+      metadata: {
+        companyId: String(member.companyId),
+        invoiceUuid: invoice.uuid,
+        planType: "company-nearloy-subscription",
+      },
+      returnUrlKind: "company",
+    });
   }
 
   async createUserSubscriptionCheckout(userId: number, planUuid: string) {
@@ -150,6 +238,7 @@ export class PaymentsService {
     subscriptionBundleId?: number;
     companyId?: number | null;
     metadata: Record<string, string>;
+    returnUrlKind?: "user" | "company";
   }) {
     const idempotenceKey = randomUUID();
     const created = await this.prisma.payment.create({
@@ -168,7 +257,9 @@ export class PaymentsService {
       },
     });
 
-    const returnUrl = this.appReturnUrl(created.uuid);
+    const returnUrl = input.returnUrlKind === "company"
+      ? this.companyBillingReturnUrl(created.uuid)
+      : this.appReturnUrl(created.uuid);
     const { payment } = await this.yookassa.createPayment({
       amount: money(input.amount),
       currency: "RUB",
@@ -243,9 +334,64 @@ export class PaymentsService {
     });
 
     if (status === PaymentStatus.SUCCEEDED) {
-      await this.activatePaidSubscription(updated.id);
+      if (updated.purpose === PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION) {
+        await this.activatePaidCompanyBilling(updated.id);
+      } else {
+        await this.activatePaidSubscription(updated.id);
+      }
     }
     return updated;
+  }
+
+  private async activatePaidCompanyBilling(paymentId: number) {
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment || payment.status !== PaymentStatus.SUCCEEDED) return null;
+    if (payment.purpose !== PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION) return payment;
+    if (!payment.companyId) return payment;
+
+    const metadata = payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata)
+      ? payment.metadata as Record<string, unknown>
+      : {};
+    const invoiceUuid = typeof metadata.invoiceUuid === "string" ? metadata.invoiceUuid : null;
+
+    return this.prisma.$transaction(async (tx) => {
+      const invoice = invoiceUuid
+        ? await tx.companyBillingInvoice.findFirst({ where: { uuid: invoiceUuid, companyId: payment.companyId! } })
+        : await tx.companyBillingInvoice.findFirst({
+          where: { companyId: payment.companyId!, status: "OPEN" },
+          orderBy: { periodStartsAt: "desc" },
+        });
+
+      if (!invoice || invoice.status === "PAID" || invoice.status === "WAIVED") return payment;
+
+      await tx.companyBillingInvoice.update({
+        where: { id: invoice.id },
+        data: {
+          status: "PAID",
+          paidAmount: payment.amount,
+          paidAt: payment.paidAt ?? new Date(),
+        },
+      });
+
+      await tx.companyBillingAccount.upsert({
+        where: { companyId: invoice.companyId },
+        create: {
+          companyId: invoice.companyId,
+          status: "ACTIVE",
+          trialEndsAt: null,
+          currentPeriodStartsAt: invoice.periodStartsAt,
+          currentPeriodEndsAt: invoice.periodEndsAt,
+        },
+        update: {
+          status: "ACTIVE",
+          trialEndsAt: null,
+          currentPeriodStartsAt: invoice.periodStartsAt,
+          currentPeriodEndsAt: invoice.periodEndsAt,
+        },
+      });
+
+      return payment;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   private async activatePaidSubscription(paymentId: number) {
@@ -385,6 +531,44 @@ export class PaymentsService {
     return this.serializePayment(payment);
   }
 
+  private async findCompanyBillingPayment(userId: number, uuid: string) {
+    const member = await this.prisma.companyMember.findFirst({
+      where: {
+        userId,
+        isActive: true,
+        role: { in: [CompanyMemberRole.OWNER, CompanyMemberRole.MANAGER] },
+      },
+      select: { companyId: true },
+    });
+    if (!member) throw new NotFoundException("Company account not found.");
+
+    const payment = await this.prisma.payment.findFirst({
+      where: {
+        uuid,
+        companyId: member.companyId,
+        purpose: PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION,
+      },
+    });
+    if (!payment) throw new NotFoundException("Payment not found.");
+    return payment;
+  }
+
+  async getCompanyBillingPayment(userId: number, uuid: string) {
+    let payment = await this.findCompanyBillingPayment(userId, uuid);
+
+    if (payment.providerPaymentId && payment.status !== PaymentStatus.SUCCEEDED && payment.status !== PaymentStatus.CANCELED) {
+      await this.syncProviderPayment(payment.providerPaymentId);
+      payment = await this.findCompanyBillingPayment(userId, uuid);
+    }
+
+    if (payment.status === PaymentStatus.SUCCEEDED) {
+      await this.activatePaidCompanyBilling(payment.id);
+      payment = await this.findCompanyBillingPayment(userId, uuid);
+    }
+
+    return this.serializePayment(payment);
+  }
+
   async listAdminPayments(options: { query?: string; status?: PaymentStatus; page?: number; limit?: number }) {
     const page = Math.max(1, Number(options.page) || 1);
     const limit = Math.min(50, Math.max(5, Number(options.limit) || 20));
@@ -518,3 +702,4 @@ export class PaymentsService {
     };
   }
 }
+

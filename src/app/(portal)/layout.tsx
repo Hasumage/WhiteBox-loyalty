@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
+  ArrowRight,
   Building2,
   ChevronDown,
   CreditCard,
@@ -35,6 +37,8 @@ import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { PageTransition } from "@/components/PageTransition";
 import { clearStoredSession, getStoredUser } from "@/lib/api/auth-client";
+import { companyBilling, type CompanyBillingData } from "@/lib/api/company-client";
+import { getCompanyBillingWarning } from "@/lib/company-billing-warning";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
@@ -103,15 +107,17 @@ const companyMenuBase: NavItem[] = [
   { href: "/company/loyalty", label: "Уровни и баллы", icon: Trophy },
   { href: "/company/team", label: "Команда", icon: Users },
   { href: "/company/payments", label: "Финансы", icon: CreditCard },
-  { href: "/company/billing", label: "Абонентская плата", icon: Gift },
+  { href: "/company/billing", label: "Подписка", icon: Gift },
   { href: "/company/compliance", label: "Верификация", icon: FileCheck },
   { href: "/company/settings", label: "Настройки компании", icon: Settings2 },
   { href: "/company/getting-started", label: "Первый запуск", icon: Rocket },
 ];
 
-const companyMenu: NavItem[] = companyMenuBase.filter(
+const companyMenuAvailable: NavItem[] = companyMenuBase.filter(
   (item) => SUBSCRIPTIONS_ENABLED || item.href !== "/company/subscriptions",
 );
+
+const companyMenuLocalOnlyHrefs = new Set(["/company/club", "/company/payments"]);
 
 const COMPANY_WORKSPACE_LABEL = "Кабинет компании";
 const COMPANY_PARTNER_LABEL = "Кабинет партнёра";
@@ -129,6 +135,37 @@ function NotificationBadge({ count }: { count?: number }) {
     <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full border border-cyan-200/35 bg-cyan-300/12 px-1.5 text-[10px] font-semibold leading-none text-cyan-100 shadow-[0_0_10px_rgba(103,232,249,0.12)]">
       {count > 20 ? "20+" : count}
     </span>
+  );
+}
+
+function CompanyBillingSidebarWarning({ warning, onClick }: { warning: ReturnType<typeof getCompanyBillingWarning>; onClick?: () => void }) {
+  if (!warning) return null;
+  const danger = warning.tone === "danger";
+  return (
+    <Link
+      href="/company/billing"
+      onClick={onClick}
+      className={cn(
+        "group flex items-center gap-3 rounded-2xl border p-3 text-sm transition",
+        danger
+          ? "border-red-300/20 bg-red-400/10 text-red-50 hover:border-red-200/35 hover:bg-red-400/15"
+          : "border-amber-300/20 bg-amber-300/10 text-amber-50 hover:border-amber-200/35 hover:bg-amber-300/15",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
+          danger ? "border-red-200/25 bg-red-300/10" : "border-amber-200/25 bg-amber-300/10",
+        )}
+      >
+        <AlertTriangle className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-semibold">{warning.shortLabel}</span>
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{"\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u043f\u0440\u043e\u0434\u043b\u0435\u043d\u0438\u044e"}</span>
+      </span>
+      <ArrowRight className="h-4 w-4 shrink-0 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+    </Link>
   );
 }
 
@@ -155,14 +192,20 @@ export default function PortalLayout({
   const isAdmin = pathname.startsWith("/admin");
   const currentRole = typeof window === "undefined" ? undefined : getStoredUser()?.role;
   const [notifications, setNotifications] = useState<MenuNotifications>({ items: {}, sections: {} });
+  const [companyBillingData, setCompanyBillingData] = useState<CompanyBillingData | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLocalCompanyItems, setShowLocalCompanyItems] = useState(false);
+  const visibleCompanyMenu = companyMenuAvailable.filter(
+    (item) => showLocalCompanyItems || !companyMenuLocalOnlyHrefs.has(item.href),
+  );
   const menu: NavItem[] = isAdmin
     ? adminMenu
         .flatMap((g) => g.items)
         .filter((item) => currentRole !== "SUPPORT" || item.href === "/admin/support")
         .map((item) => ({ ...item, label: t(item.labelKey) }))
-    : companyMenu;
+    : visibleCompanyMenu;
   const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : COMPANY_WORKSPACE_LABEL);
+  const billingWarning = getCompanyBillingWarning(companyBillingData);
 
   const adminSections = useMemo(
     () =>
@@ -174,6 +217,11 @@ export default function PortalLayout({
         .filter((section) => section.items.length > 0),
     [currentRole],
   );
+
+  useEffect(() => {
+    const host = window.location.hostname;
+    setShowLocalCompanyItems(host === "localhost" || host === "127.0.0.1" || host === "[::1]");
+  }, []);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -198,6 +246,26 @@ export default function PortalLayout({
     };
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (isAdmin || !pathname.startsWith("/company")) {
+      setCompanyBillingData(null);
+      return;
+    }
+
+    let active = true;
+    companyBilling()
+      .then((data) => {
+        if (active) setCompanyBillingData(data);
+      })
+      .catch(() => {
+        if (active) setCompanyBillingData(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAdmin, pathname]);
+
   function isItemActive(href: string) {
     if (href === "/admin") return pathname === "/admin";
     return pathname === href || pathname.startsWith(`${href}/`);
@@ -216,7 +284,7 @@ export default function PortalLayout({
         { href: "/admin/companies", label: t("admin.nav.companies"), icon: Building2 },
         { href: "/admin/company-verifications", label: t("admin.layout.mobileVerify"), icon: FileCheck },
       ].filter((item) => currentRole !== "SUPPORT" || item.href === "/admin/support")
-    : companyMenu.slice(0, 4);
+    : visibleCompanyMenu.slice(0, 4);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
@@ -309,14 +377,17 @@ export default function PortalLayout({
               </div>
             </div>
           )}
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="mt-auto inline-flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5 text-sm text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.08] hover:text-foreground"
-          >
-            <LogOut className="h-4 w-4" />
-            {t("admin.layout.logout")}
-          </button>
+          <div className="mt-auto space-y-3">
+            {!isAdmin && <CompanyBillingSidebarWarning warning={billingWarning} />}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5 text-sm text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.08] hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              {t("admin.layout.logout")}
+            </button>
+          </div>
         </aside>
 
         <main className="min-w-0 px-4 pb-24 pt-20 sm:px-6 lg:px-8 lg:py-7">
@@ -438,7 +509,7 @@ export default function PortalLayout({
               </div>
             ) : (
               <div className="grid gap-2 pb-4">
-                {companyMenu.map(({ href, label, icon: Icon }) => {
+                {visibleCompanyMenu.map(({ href, label, icon: Icon }) => {
                   const active = isItemActive(href);
                   return (
                     <Link
@@ -455,6 +526,7 @@ export default function PortalLayout({
                     </Link>
                   );
                 })}
+                <CompanyBillingSidebarWarning warning={billingWarning} onClick={() => setMobileMenuOpen(false)} />
               </div>
             )}
             <button

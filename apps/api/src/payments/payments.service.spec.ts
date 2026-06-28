@@ -1,4 +1,4 @@
-import { PaymentPurpose, PaymentProvider, PaymentStatus, SubscriptionStatus } from "@prisma/client";
+﻿import { PaymentPurpose, PaymentProvider, PaymentStatus, SubscriptionStatus } from "@prisma/client";
 import { fetch as undiciFetch } from "undici";
 import { PaymentsService } from "./payments.service";
 
@@ -218,5 +218,83 @@ describe("PaymentsService", () => {
       }),
     );
     expect(prisma.telegramMessageQueue.create).not.toHaveBeenCalled();
+  });
+  it("reuses an existing pending company subscription payment instead of creating a duplicate", async () => {
+    const invoice = {
+      id: "invoice-id",
+      uuid: "invoice-uuid",
+      companyId: 3,
+      amountDue: "4990.00",
+    };
+    const existingPayment = paymentRecord({
+      id: 31,
+      uuid: "company-pay-1",
+      purpose: PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION,
+      status: PaymentStatus.PENDING,
+      amount: "4990.00",
+      subscriptionId: null,
+      confirmationUrl: "https://yookassa.test/company-pay",
+      metadata: { invoiceUuid: "invoice-uuid" },
+    });
+    const prisma = {
+      companyMember: {
+        findFirst: jest.fn().mockResolvedValue({
+          userId: 7,
+          companyId: 3,
+          user: { id: 7, email: "owner@nearloy.test", name: "Owner" },
+          company: { id: 3, name: "Aurora Coffee" },
+        }),
+      },
+      companyBillingInvoice: { findFirst: jest.fn().mockResolvedValue(invoice) },
+      payment: {
+        findMany: jest.fn().mockResolvedValue([existingPayment]),
+        create: jest.fn(),
+      },
+    };
+    const yookassa = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createPayment: jest.fn(),
+    };
+    const service = new PaymentsService(prisma as never, yookassa as never, {} as never);
+
+    const result = await service.createCompanyBillingCheckout(7);
+
+    expect(result.confirmationUrl).toBe("https://yookassa.test/company-pay");
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+    expect(yookassa.createPayment).not.toHaveBeenCalled();
+  });
+
+  it("rejects company subscription checkout when the latest invoice is already paid", async () => {
+    const prisma = {
+      companyMember: {
+        findFirst: jest.fn().mockResolvedValue({
+          userId: 7,
+          companyId: 3,
+          user: { id: 7, email: "owner@nearloy.test", name: "Owner" },
+          company: { id: 3, name: "Aurora Coffee" },
+        }),
+      },
+      companyBillingInvoice: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ id: "paid-invoice", uuid: "paid-invoice-uuid", companyId: 3, status: "PAID" }),
+      },
+      payment: {
+        findMany: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+    const yookassa = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      createPayment: jest.fn(),
+    };
+    const service = new PaymentsService(prisma as never, yookassa as never, {} as never);
+
+    await expect(service.createCompanyBillingCheckout(7)).rejects.toThrow("уже оплачена");
+
+    expect(prisma.payment.findMany).not.toHaveBeenCalled();
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+    expect(yookassa.createPayment).not.toHaveBeenCalled();
   });
 });

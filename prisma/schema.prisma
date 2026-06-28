@@ -244,6 +244,7 @@ enum PaymentProvider {
 enum PaymentPurpose {
   USER_SUBSCRIPTION
   USER_SUBSCRIPTION_BUNDLE
+  COMPANY_NEARLOY_SUBSCRIPTION
 }
 
 enum PaymentStatus {

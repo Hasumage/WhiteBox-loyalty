@@ -89,11 +89,10 @@ const ROUTE_MODES: Array<{ key: RouteMode; labelKey: TranslationKey; yandex: str
   { key: "transit", labelKey: "client.map.routeTransit", yandex: "mt", icon: Bus },
 ];
 
-type FullMapSheetLevel = "peek" | "half" | "expanded";
+type FullMapSheetLevel = "peek" | "expanded";
 
 const FULL_MAP_SHEET_HEIGHT: Record<FullMapSheetLevel, string> = {
   peek: "58px",
-  half: "42dvh",
   expanded: "78dvh",
 };
 
@@ -492,13 +491,46 @@ function YandexPartnerMap({
   };
   const [maps, setMaps] = useState<YandexReactifiedMaps | null>(null);
   const [mapLocation, setMapLocation] = useState<MapLocationState>(initialLocation);
+  const mapLocationRef = useRef<MapLocationState>(initialLocation);
   const animationFrameRef = useRef<number | null>(null);
+  const passiveMapSyncTimeoutRef = useRef<number | null>(null);
   const [status, setStatus] = useState<MapStatus>(() =>
     apiKey
       ? { state: "loading", message: t("client.map.yandexLoading") }
       : { state: "missing-key", message: t("client.map.yandexMissing") },
   );
   const markerItems = useMemo(() => buildMarkerItems(points, selectedId, mapLocation.zoom), [points, selectedId, mapLocation.zoom]);
+
+  function clearPassiveMapSync() {
+    if (passiveMapSyncTimeoutRef.current == null) return;
+    window.clearTimeout(passiveMapSyncTimeoutRef.current);
+    passiveMapSyncTimeoutRef.current = null;
+  }
+
+  function commitMapLocation(nextLocation: MapLocationState) {
+    clearPassiveMapSync();
+    mapLocationRef.current = nextLocation;
+    setMapLocation(nextLocation);
+  }
+
+  function schedulePassiveMapLocationSync(nextLocation: MapLocationState) {
+    mapLocationRef.current = nextLocation;
+    clearPassiveMapSync();
+    passiveMapSyncTimeoutRef.current = window.setTimeout(() => {
+      passiveMapSyncTimeoutRef.current = null;
+      const latestLocation = mapLocationRef.current;
+      setMapLocation((currentLocation) => {
+        if (
+          Math.abs(currentLocation.zoom - latestLocation.zoom) < 0.01 &&
+          Math.abs(currentLocation.center[0] - latestLocation.center[0]) < 0.000001 &&
+          Math.abs(currentLocation.center[1] - latestLocation.center[1]) < 0.000001
+        ) {
+          return currentLocation;
+        }
+        return latestLocation;
+      });
+    }, 240);
+  }
 
   function stopMapAnimation() {
     if (animationFrameRef.current == null) return;
@@ -508,12 +540,12 @@ function YandexPartnerMap({
 
   function animateMapLocation(target: MapLocationState, duration = 560) {
     stopMapAnimation();
-    const start = mapLocation;
+    const start = mapLocationRef.current;
     const startedAt = performance.now();
 
     const step = (now: number) => {
       const progress = Math.min(1, (now - startedAt) / duration);
-      setMapLocation(interpolateLocation(start, target, easeInOutCubic(progress)));
+      commitMapLocation(interpolateLocation(start, target, easeInOutCubic(progress)));
       if (progress < 1) {
         animationFrameRef.current = window.requestAnimationFrame(step);
         return;
@@ -549,13 +581,14 @@ function YandexPartnerMap({
     return () => {
       disposed = true;
       stopMapAnimation();
+      clearPassiveMapSync();
     };
   }, [apiKey, points.length]);
 
   useEffect(() => {
     stopMapAnimation();
     if (!focusPoint) return;
-    setMapLocation({
+    commitMapLocation({
       center: [focusPoint.location.longitude, focusPoint.location.latitude],
       zoom: 15,
     });
@@ -605,16 +638,7 @@ function YandexPartnerMap({
               const nextCenter = event.location?.center;
               const nextZoom = event.location?.zoom;
               if (!nextCenter || typeof nextZoom !== "number") return;
-              setMapLocation((prev) => {
-                if (
-                  Math.abs(prev.zoom - nextZoom) < 0.01 &&
-                  Math.abs(prev.center[0] - nextCenter[0]) < 0.000001 &&
-                  Math.abs(prev.center[1] - nextCenter[1]) < 0.000001
-                ) {
-                  return prev;
-                }
-                return { center: nextCenter, zoom: nextZoom };
-              });
+              schedulePassiveMapLocationSync({ center: nextCenter, zoom: nextZoom });
             }}
           />
           {userLocation && (
@@ -634,7 +658,7 @@ function YandexPartnerMap({
                       onClusterPreview(item.points);
                       animateMapLocation({
                         center: [item.longitude, item.latitude],
-                        zoom: Math.max(mapLocation.zoom + 2, 14),
+                        zoom: Math.max(mapLocationRef.current.zoom + 2, 14),
                       });
                     }}
                     className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-emerald-300 bg-slate-950 text-sm font-bold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] ring-4 ring-slate-950/25 transition-transform focus:outline-none focus:ring-2 focus:ring-emerald-300 active:scale-95"
@@ -737,8 +761,9 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
     if (!shouldExpand && !shouldCollapse) return;
 
     setFullSheetLevel((current) => {
-      if (shouldExpand) return current === "peek" ? "half" : "expanded";
-      return current === "expanded" ? "half" : "peek";
+      if (shouldExpand) return "expanded";
+      if (shouldCollapse) return "peek";
+      return current;
     });
   };
 
@@ -904,9 +929,9 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
           className="h-11 w-11 rounded-full border border-white/15 bg-slate-950/88 text-white shadow-[0_16px_38px_rgba(0,0,0,0.42)] backdrop-blur-xl hover:bg-slate-900"
           aria-label={t("client.map.expand")}
         >
-          <Link href="/map/full">
+          <a href="/map/full">
             <Maximize2 className="h-5 w-5" />
-          </Link>
+          </a>
         </Button>
       )}
     </div>
@@ -1110,7 +1135,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
         </div>
 
         <motion.div
-          initial={{ y: 90, opacity: 0, height: FULL_MAP_SHEET_HEIGHT.half }}
+          initial={{ y: 90, opacity: 0, height: FULL_MAP_SHEET_HEIGHT.peek }}
           animate={{ y: 0, opacity: 1, height: FULL_MAP_SHEET_HEIGHT[fullSheetLevel] }}
           transition={{ type: "spring", bounce: 0.2, duration: 0.46 }}
           drag="y"
@@ -1140,7 +1165,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
               }}
               onClick={() => {
                 if (fullSheetDraggingRef.current) return;
-                setFullSheetLevel((current) => (current === "expanded" ? "half" : current === "half" ? "peek" : "half"));
+                setFullSheetLevel((current) => (current === "expanded" ? "peek" : "expanded"));
               }}
             >
               <span className="h-1.5 w-16 rounded-full bg-white/32 shadow-[0_0_20px_rgba(255,255,255,0.22)]" />

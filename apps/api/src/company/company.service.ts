@@ -52,6 +52,8 @@ const MANAGEMENT_ROLES = new Set<CompanyMemberRole>([
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINIMUM_PAYOUT_RUB = 5_000;
 const COMPANY_TRIAL_DAYS = 30;
+const COMPANY_BILLING_GRACE_DAYS = 3;
+const COMPANY_MONTHLY_REFERRAL_SHARE_PERCENT = 30;
 
 @Injectable()
 export class CompanyService {
@@ -128,7 +130,7 @@ export class CompanyService {
     return createHash("sha256").update(code).digest("hex");
   }
 
-  private async membership(userId: number) {
+  private async membership(userId: number, options: { allowPastDue?: boolean } = {}) {
     let member = await this.prisma.companyMember.findFirst({
       where: { userId, isActive: true },
       include: {
@@ -182,6 +184,12 @@ export class CompanyService {
 
     if (!member) {
       throw new ForbiddenException("Active company membership is required.");
+    }
+    if (!options.allowPastDue) {
+      const billing = await this.currentBillingInvoice(member.companyId);
+      if ("access" in billing && billing.access?.status === "PAST_DUE") {
+        throw new ForbiddenException("Company access is paused until monthly NearLoy access is renewed.");
+      }
     }
     return member;
   }
@@ -246,21 +254,28 @@ export class CompanyService {
   private billingAmount(input: {
     baseFee: number;
     discountPercent: number;
-    recognizedRevenue: number;
-    commissionPercent: number;
   }) {
     const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
     const promoDiscountAmount = money(input.baseFee * (Math.min(100, Math.max(0, input.discountPercent)) / 100));
     const discountedFee = money(input.baseFee - promoDiscountAmount);
-    const generatedCommission = money(input.recognizedRevenue * (Math.min(100, Math.max(0, input.commissionPercent)) / 100));
-    const commissionCreditAmount = money(Math.min(discountedFee, generatedCommission));
     return {
       baseFee: money(input.baseFee),
       promoDiscountAmount,
       discountedFee,
-      generatedCommission,
-      commissionCreditAmount,
-      amountDue: money(discountedFee - commissionCreditAmount),
+      generatedCommission: 0,
+      commissionCreditAmount: 0,
+      amountDue: money(discountedFee),
+    };
+  }
+
+  private billingRevenueSplit(paidAmount: number, hasReferralManager: boolean) {
+    const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
+    const referralPercent = hasReferralManager ? COMPANY_MONTHLY_REFERRAL_SHARE_PERCENT : 0;
+    const referralAmount = money(paidAmount * (referralPercent / 100));
+    return {
+      referralPercent,
+      referralAmount,
+      platformAmount: money(paidAmount - referralAmount),
     };
   }
 
@@ -1269,6 +1284,10 @@ export class CompanyService {
     }
 
     if (account.currentPeriodEndsAt <= now) {
+      const currentPeriodInvoice = await this.prisma.companyBillingInvoice.findUnique({
+        where: { companyId_periodStartsAt: { companyId, periodStartsAt: account.currentPeriodStartsAt } },
+      });
+      if (!currentPeriodInvoice || currentPeriodInvoice.status === "OPEN") return account;
       let start = account.currentPeriodEndsAt;
       let end = this.addMonths(start);
       while (end <= now) {
@@ -1294,6 +1313,14 @@ export class CompanyService {
       orderBy: { periodStartsAt: "asc" },
     });
     if (overdueInvoice) {
+      const graceEndsAt = this.addDays(overdueInvoice.periodEndsAt, COMPANY_BILLING_GRACE_DAYS);
+      if (graceEndsAt > now) {
+        return {
+          account,
+          invoice: overdueInvoice,
+          access: { status: "GRACE", graceEndsAt, daysLeft: Math.ceil((graceEndsAt.getTime() - now.getTime()) / DAY_MS) },
+        };
+      }
       if (account.status !== "PAST_DUE") {
         account = await this.prisma.companyBillingAccount.update({
           where: { companyId },
@@ -1301,7 +1328,11 @@ export class CompanyService {
           include: { appliedPromoCode: true },
         });
       }
-      return { account, invoice: overdueInvoice };
+      return {
+        account,
+        invoice: overdueInvoice,
+        access: { status: "PAST_DUE", graceEndsAt, daysLeft: 0 },
+      };
     }
     if (account.status === "PAST_DUE") {
       account = await this.prisma.companyBillingAccount.update({
@@ -1312,14 +1343,17 @@ export class CompanyService {
     }
     const company = await this.prisma.company.findUniqueOrThrow({
       where: { id: companyId },
-      select: { platformMonthlyFee: true, monthlyFeeOverride: true, monthlyFeeOverrideEndsAt: true, platformCommissionPercent: true },
-    });
-    const purchases = await this.prisma.userSubscription.findMany({
-      where: {
-        status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED] },
-        subscription: { companyId },
+      select: {
+        platformMonthlyFee: true,
+        monthlyFeeOverride: true,
+        monthlyFeeOverrideEndsAt: true,
+        currentReferral: {
+          select: {
+            status: true,
+            referrer: { select: { id: true, uuid: true, name: true, email: true } },
+          },
+        },
       },
-      select: { activatedAt: true, expiresAt: true, subscription: { select: { price: true } } },
     });
     const promo = account.appliedPromoCode;
     const promoActive = Boolean(
@@ -1331,17 +1365,9 @@ export class CompanyService {
       company.monthlyFeeOverride && (!company.monthlyFeeOverrideEndsAt || company.monthlyFeeOverrideEndsAt > now)
         ? Number(company.monthlyFeeOverride)
         : Number(company.platformMonthlyFee);
-    const recognizedRevenue = this.recognizedRevenueWithinPeriod(
-      purchases,
-      account.currentPeriodStartsAt,
-      account.currentPeriodEndsAt,
-      now,
-    );
     const calculation = this.billingAmount({
       baseFee,
       discountPercent: promoActive ? Number(promo?.discountPercent ?? 0) : 0,
-      recognizedRevenue,
-      commissionPercent: Number(company.platformCommissionPercent),
     });
     const invoiceStatus = calculation.amountDue === 0 ? "WAIVED" : "OPEN";
     const existingInvoice = await this.prisma.companyBillingInvoice.findUnique({
@@ -1371,23 +1397,63 @@ export class CompanyService {
         amountDue: new Prisma.Decimal(calculation.amountDue),
       },
     });
-    return { account, invoice, calculation };
+    const graceEndsAt = this.addDays(invoice.periodEndsAt, COMPANY_BILLING_GRACE_DAYS);
+    if (invoice.status === "OPEN" && invoice.periodEndsAt <= now && graceEndsAt <= now && account.status !== "PAST_DUE") {
+      account = await this.prisma.companyBillingAccount.update({
+        where: { companyId },
+        data: { status: "PAST_DUE" },
+        include: { appliedPromoCode: true },
+      });
+    }
+    return {
+      account,
+      invoice,
+      calculation,
+      access:
+        invoice.status === "OPEN" && invoice.periodEndsAt <= now
+          ? { status: graceEndsAt > now ? "GRACE" : "PAST_DUE", graceEndsAt, daysLeft: Math.max(0, Math.ceil((graceEndsAt.getTime() - now.getTime()) / DAY_MS)) }
+          : { status: account.status, graceEndsAt: null, daysLeft: null },
+      referralManager: company.currentReferral?.status === "ACTIVE" ? company.currentReferral.referrer : null,
+    };
   }
 
   async billing(userId: number) {
-    const member = await this.membership(userId);
+    const member = await this.membership(userId, { allowPastDue: true });
     this.requireManager(member);
     const current = await this.currentBillingInvoice(member.companyId);
     const snapshot = await this.financialSnapshot(this.prisma, member.companyId);
+    const referral = await this.prisma.companyReferral.findUnique({
+      where: { companyId: member.companyId },
+      select: {
+        status: true,
+        referrer: { select: { id: true, uuid: true, name: true, email: true } },
+      },
+    });
+    const hasReferralManager = referral?.status === "ACTIVE" && Boolean(referral.referrer);
     const history = await this.prisma.companyBillingInvoice.findMany({
       where: { companyId: member.companyId },
       orderBy: { periodStartsAt: "desc" },
       take: 12,
     });
+    const access =
+      "access" in current && current.access
+        ? current.access
+        : {
+            status: current.account.status,
+            graceEndsAt:
+              current.invoice?.status === "OPEN" ? this.addDays(current.invoice.periodEndsAt, COMPANY_BILLING_GRACE_DAYS) : null,
+            daysLeft: null,
+          };
     return {
       account: current.account,
       invoice: current.invoice,
+      access,
       availableBalance: snapshot.availableForPayout,
+      referralManager: hasReferralManager ? referral.referrer : null,
+      monthlyRevenueSplit: this.billingRevenueSplit(
+        current.invoice ? Number(current.invoice.status === "PAID" ? current.invoice.paidAmount : current.invoice.amountDue) : 0,
+        hasReferralManager,
+      ),
       history: history.map((row) => ({
         ...row,
         baseFee: Number(row.baseFee),
@@ -1396,12 +1462,13 @@ export class CompanyService {
         commissionCreditAmount: Number(row.commissionCreditAmount),
         amountDue: Number(row.amountDue),
         paidAmount: Number(row.paidAmount),
+        revenueSplit: this.billingRevenueSplit(Number(row.paidAmount), hasReferralManager),
       })),
     };
   }
 
   async applyBillingPromo(userId: number, dto: ApplyCompanyBillingPromoDto) {
-    const member = await this.membership(userId);
+    const member = await this.membership(userId, { allowPastDue: true });
     this.requireManager(member);
     const now = new Date();
     const promo = await this.prisma.companyBillingPromoCode.findUnique({
@@ -1434,10 +1501,10 @@ export class CompanyService {
   }
 
   async payBillingInvoice(userId: number) {
-    const member = await this.membership(userId);
+    const member = await this.membership(userId, { allowPastDue: true });
     this.requireManager(member);
     const current = await this.currentBillingInvoice(member.companyId);
-    if (!current.invoice) throw new BadRequestException("Во время тестового периода оплачивать абонентскую плату не нужно.");
+    if (!current.invoice) throw new BadRequestException("Во время тестового периода оплачивать подписку NearLoy не нужно.");
     if (current.invoice.status === "PAID" || current.invoice.status === "WAIVED") return this.billing(userId);
     const amountDue = Number(current.invoice.amountDue);
     await this.prisma.$transaction(async (tx) => {
