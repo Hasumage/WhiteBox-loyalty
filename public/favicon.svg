@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="NearLoy">
+  <defs>
+    <filter id="mark-shadow" x="-8%" y="-8%" width="116%" height="116%">
+      <feDropShadow dx="8" dy="8" stdDeviation="1.5" flood-color="#6f8080" flood-opacity="0.5"/>
+      <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#ecfeff" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="496" height="496" rx="98" fill="#000000"/>
+  <g fill="none" stroke="#ecfeff" stroke-linecap="round" stroke-linejoin="round" filter="url(#mark-shadow)">
+    <path d="M88 176V88H176" stroke-width="28"/>
+    <path d="M336 88H424V176" stroke-width="28"/>
+    <path d="M424 336V424H336" stroke-width="28"/>
+    <path d="M176 424H88V336" stroke-width="28"/>
+    <path
+      d="M256 32
+         L318 190
+         L490 256
+         L318 322
+         L256 480
+         L194 322
+         L22 256
+         L194 190Z"
+      stroke-width="52"
+    />
+  </g>
+</svg>
