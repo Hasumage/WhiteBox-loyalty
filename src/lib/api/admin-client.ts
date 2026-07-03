@@ -27,12 +27,12 @@ export type AdminUsersResponse = {
   sortDir: "asc" | "desc";
 };
 
-export type AdminPaymentStatus = "PENDING" | "WAITING_FOR_CAPTURE" | "SUCCEEDED" | "CANCELED" | "FAILED" | "REFUNDED";
+export type AdminPaymentStatus = "PENDING" | "WAITING_FOR_CAPTURE" | "SUCCEEDED" | "CANCELED" | "FAILED" | "REFUNDED" | "EXPIRED";
 
 export type AdminPaymentRow = {
   uuid: string;
   provider: "YOOKASSA";
-  purpose: "USER_SUBSCRIPTION" | "USER_SUBSCRIPTION_BUNDLE";
+  purpose: "USER_SUBSCRIPTION" | "USER_SUBSCRIPTION_BUNDLE" | "COMPANY_NEARLOY_SUBSCRIPTION";
   status: AdminPaymentStatus;
   amount: string;
   currency: string;
@@ -63,7 +63,25 @@ export type AdminPaymentsResponse = {
     canceled: number;
     failed: number;
     refunded: number;
+    expired: number;
   };
+};
+
+export type AdminCompanyPaymentsResponse = {
+  company: {
+    owner: { uuid: string; name: string; email: string };
+    profile: { id: number; name: string; slug: string; isActive: boolean; operatesOnline: boolean };
+  };
+  summary: {
+    incomingSucceededAmount: string;
+    outgoingPaidAmount: string;
+    outgoingPendingAmount: string;
+    netAmount: string;
+    incomingCount: number;
+    outgoingCount: number;
+  };
+  incomingPayments: AdminPaymentRow[];
+  outgoingOperations: AdminFinanceOperation[];
 };
 
 export type AdminAuditRow = {
@@ -148,11 +166,15 @@ export type AdminSystemHealthResponse = {
   generatedAt: string;
   summary: {
     openIssues: number;
+    openTasks: number;
+    criticalTasks: number;
+    highTasks: number;
     criticalIncidents: number;
     telegramQueueFailed: number;
     telegramQueueDue: number;
     leadTelegramFailed24h: number;
   };
+  alerts: AdminTaskRow[];
   telegram: {
     botConfigured: boolean;
     proxyConfigured: boolean;
@@ -237,6 +259,23 @@ export type AdminTaskRow = {
   updatedAt: string;
   assignedTo?: { name: string } | null;
   resolvedBy?: { id: number; name: string; email: string } | null;
+};
+
+export type AdminTaskBoardRow = AdminTaskRow & {
+  department: "finance" | "operations" | "system" | "growth";
+  audience: "admin" | "manager" | "pr";
+  criticalKind: string;
+  assignedTo?: { id: number; name: string; email: string; role: string } | null;
+};
+
+export type AdminTasksBoardResponse = {
+  generatedAt: string;
+  role: string;
+  permittedSources: AdminTaskSource[];
+  departments: Array<{ id: AdminTaskBoardRow["department"]; label: string; description: string }>;
+  alertMenus: Array<{ id: AdminTaskBoardRow["audience"]; label: string; description: string; examples: string[]; count: number }>;
+  tasks: AdminTaskBoardRow[];
+  assignees: Array<{ id: number; uuid: string; name: string; email: string; role: string }>;
 };
 
 export type AdminDashboardResponse = {
@@ -445,6 +484,7 @@ export type AdminFinanceOperation = {
   company: { id: number; slug: string; name: string } | null;
   requestedBy: { id: number; uuid: string; email: string; name: string } | null;
   approvedBy: { id: number; uuid: string; email: string; name: string } | null;
+  payoutTarget?: "COMPANY" | "PR_AGENT" | "UNLINKED";
   companySnapshot?: {
     subscriptionGross: number;
     recognizedRevenue: number;
@@ -463,6 +503,18 @@ export type AdminFinanceOperation = {
       recognizedRevenue: number;
       potentialRevenue: number;
     }>;
+  } | null;
+  referralSnapshot?: {
+    companies: number;
+    activeCompanies: number;
+    recognizedGross: number;
+    futureGross: number;
+    referralCommission: number;
+    reserved: number;
+    paid: number;
+    available: number;
+    availableBeforeThisRequest: number;
+    requestCovered: boolean | null;
   } | null;
 };
 
@@ -655,6 +707,110 @@ export type AdminCompanyReferralResponse = {
     referralCommission: number;
     whiteBoxNetCommission: number;
   };
+};
+
+export type AdminCompanyOverview = {
+  company: {
+    owner: { uuid: string; name: string; email: string };
+    profile: { id: number; name: string; slug: string; isActive: boolean };
+  };
+  billing: {
+    account: {
+      status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED";
+      trialStartedAt: string | null;
+      trialEndsAt: string | null;
+      currentPeriodStartsAt: string;
+      currentPeriodEndsAt: string;
+    } | null;
+    invoice: {
+      uuid: string;
+      status: "OPEN" | "PAID" | "WAIVED" | "CANCELED";
+      periodStartsAt: string;
+      periodEndsAt: string;
+      baseFee: string;
+      promoDiscountAmount: string;
+      commissionCreditAmount: string;
+      amountDue: string;
+      paidAmount: string;
+      paidAt: string | null;
+    } | null;
+  };
+  userSubscriptions: {
+    total: number;
+    active: number;
+    expired: number;
+    canceled: number;
+    expiringIn7Days: number;
+  };
+  customers: {
+    total: number;
+    pointsBalance: number;
+    pointsEarned: number;
+    pointsSpent: number;
+  };
+  financial: {
+    subscriptionGross: string;
+    recognizedRevenue: string;
+    companyRecognizedRevenue: string;
+    whiteBoxCommission: string;
+    referralCommission: string;
+    supportManagerCommission: string;
+    reservedPayouts: string;
+    paidPayouts: string;
+    availableForPayout: string;
+    activeSubscriptions: number;
+    sources: Array<{
+      name: string;
+      activeSubscriptions: number;
+      dailyRevenue: number;
+      recognizedRevenue: number;
+      potentialRevenue: number;
+    }>;
+  };
+  recentPayments: Array<{
+    uuid: string;
+    status: AdminPaymentStatus;
+    amount: string;
+    currency: string;
+    purpose: AdminPaymentRow["purpose"];
+    description: string;
+    paidAt: string | null;
+    createdAt: string;
+  }>;
+};
+
+export type AdminCompanySecurity = {
+  company: {
+    owner: { uuid: string; name: string; email: string; accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED"; emailVerifiedAt: string | null };
+    profile: { id: number; name: string; slug: string; isActive: boolean };
+  };
+  summary: {
+    totalMembers: number;
+    activeMembers: number;
+    inactiveMembers: number;
+    blockedMembers: number;
+    verifiedEmails: number;
+    owners: number;
+    managers: number;
+    cashiers: number;
+  };
+  members: Array<{
+    uuid: string;
+    role: "OWNER" | "MANAGER" | "CASHIER";
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+    user: {
+      uuid: string;
+      name: string;
+      email: string;
+      role: AdminRole;
+      accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
+      emailVerifiedAt: string | null;
+      createdAt: string;
+      updatedAt: string;
+    };
+  }>;
 };
 
 export type AdminCompanyUser = {
@@ -1284,6 +1440,58 @@ export async function adminGetCompanyUser(uuid: string) {
   }
 }
 
+export async function adminGetCompanyPayments(uuid: string) {
+  const res = await fetch(`/api/admin/company-users/${uuid}/payments`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, status: res.status, message: data.message ?? "Failed to fetch company payments" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminCompanyPaymentsResponse };
+}
+
+export async function adminGetCompanyOverview(uuid: string) {
+  try {
+    const res = await fetch(`/api/admin/company-users/${uuid}/overview`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { ok: false as const, status: res.status, message: data.message ?? "Failed to fetch company overview" };
+    }
+    return { ok: true as const, data: (await res.json()) as AdminCompanyOverview };
+  } catch (error) {
+    return {
+      ok: false as const,
+      status: 0,
+      message: error instanceof Error ? error.message : "Failed to fetch company overview",
+    };
+  }
+}
+
+export async function adminGetCompanySecurity(uuid: string) {
+  try {
+    const res = await fetch(`/api/admin/company-users/${uuid}/security`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { ok: false as const, status: res.status, message: data.message ?? "Failed to fetch company security" };
+    }
+    return { ok: true as const, data: (await res.json()) as AdminCompanySecurity };
+  } catch (error) {
+    return {
+      ok: false as const,
+      status: 0,
+      message: error instanceof Error ? error.message : "Failed to fetch company security",
+    };
+  }
+}
+
 export async function adminGetCompanyReferral(uuid: string, query?: string) {
   const params = new URLSearchParams();
   if (query) params.set("query", query);
@@ -1601,19 +1809,31 @@ export async function adminListPayments(options?: {
   status?: AdminPaymentStatus | "";
   page?: number;
   limit?: number;
-}): Promise<AdminPaymentsResponse | null> {
+}) {
   const params = new URLSearchParams();
   if (options?.query) params.set("query", options.query);
   if (options?.status) params.set("status", options.status);
   if (options?.page) params.set("page", String(options.page));
   if (options?.limit) params.set("limit", String(options.limit));
   const suffix = params.toString() ? `?${params}` : "";
-  const res = await fetch(`${apiBase()}/admin/payments${suffix}`, {
-    headers: authHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return (await res.json()) as AdminPaymentsResponse;
+  try {
+    const res = await fetch(`/api/admin/payments${suffix}`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+      return { ok: false as const, status: res.status, message: message ?? "Failed to fetch payments" };
+    }
+    return { ok: true as const, data: (await res.json()) as AdminPaymentsResponse };
+  } catch (error) {
+    return {
+      ok: false as const,
+      status: 0,
+      message: error instanceof Error ? error.message : "Failed to fetch payments",
+    };
+  }
 }
 
 export async function adminFindSubscriptionByUuid(uuid: string) {
@@ -2023,17 +2243,50 @@ export async function adminGetTask(uuid: string) {
   return { ok: true as const, data: (await res.json()) as AdminTaskRow };
 }
 
-export async function adminUpdateTask(uuid: string, action: "start" | "resolve" | "reopen") {
+export async function adminGetTasksBoard() {
+  const res = await fetch("/api/admin/tasks", {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to fetch tasks board" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminTasksBoardResponse };
+}
+
+export async function adminUpdateTask(uuid: string, action: "start" | "resolve" | "reopen" | "archive" | "assign", assignedToId?: number | null) {
   const res = await fetch(`/api/admin/tasks/${uuid}`, {
     method: "PATCH",
     headers: authHeaders(),
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, ...(action === "assign" ? { assignedToId } : {}) }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     return { ok: false as const, message: data.message ?? "Failed to update task" };
   }
   return { ok: true as const, data: (await res.json()) as AdminTaskRow };
+}
+
+
+export async function adminCreateTask(input: {
+  title: string;
+  description?: string;
+  priority: AdminTaskPriority;
+  status: Exclude<AdminTaskStatus, "DISMISSED">;
+  source: AdminTaskSource;
+  assignedToId?: number | null;
+}) {
+  const res = await fetch("/api/admin/tasks", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to create task" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminTaskBoardRow };
 }
 
 export async function adminRetryTelegramQueue() {
@@ -2198,24 +2451,6 @@ export async function adminListFinanceOperations() {
     return { ok: false as const, message: data.message ?? "Failed to fetch finance operations" };
   }
   return { ok: true as const, data: (await res.json()) as { items: AdminFinanceOperation[] } };
-}
-
-export async function adminCreateFinanceOperation(input: {
-  title: string;
-  amount: string;
-  currency?: string;
-  details?: string;
-}) {
-  const res = await fetch("/api/admin/finance-operations", {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify(input),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    return { ok: false as const, message: data.message ?? "Failed to create finance operation" };
-  }
-  return { ok: true as const, data: (await res.json()) as AdminFinanceOperation };
 }
 
 export async function adminUpdateFinanceOperation(uuid: string, status: AdminFinanceOperation["status"]) {

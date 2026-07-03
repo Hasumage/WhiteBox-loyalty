@@ -254,6 +254,7 @@ enum PaymentStatus {
   CANCELED
   FAILED
   REFUNDED
+  EXPIRED
 }
 
 enum EmailMessageStatus {
@@ -514,6 +515,15 @@ model CompanyBillingAccount {
   currentPeriodStartsAt DateTime
   currentPeriodEndsAt   DateTime
   appliedPromoCodeId    String?
+  paymentMethodProvider PaymentProvider?
+  paymentMethodEncrypted Bytes?
+  paymentMethodIv       String?
+  paymentMethodTag      String?
+  paymentMethodTitle    String?
+  paymentMethodCardLast4 String?
+  paymentMethodCardType String?
+  paymentMethodSavedAt  DateTime?
+  paymentMethodDeletedAt DateTime?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 

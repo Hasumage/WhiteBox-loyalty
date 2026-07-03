@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   CircleDollarSign,
+  CreditCard,
   Gift,
   Globe2,
   Hash,
@@ -20,6 +21,7 @@ import {
   MapPin,
   Megaphone,
   Plus,
+  ReceiptText,
   RotateCcw,
   Save,
   Search,
@@ -52,6 +54,7 @@ import {
   adminDeleteCompanyUser,
   adminEndCompanyReferral,
   adminGetCompanyReferral,
+  adminGetCompanyOverview,
   adminGetCompanyUser,
   adminListCategories,
   adminSendEmail,
@@ -65,6 +68,7 @@ import {
   type AdminCompanyReferralResponse,
   type AdminCompanyReferralPipelineStatus,
   type AdminCompanyReferralStatus,
+  type AdminCompanyOverview,
   type AdminCompanySubscription,
 } from "@/lib/api/admin-client";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
@@ -246,6 +250,25 @@ function formatPrice(value: string | number) {
   return new Intl.NumberFormat("ru-RU").format(n);
 }
 
+function formatRub(value: string | number) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "-";
+  return new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: "RUB",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
 function normalizeLevelRules(
   rules?: Array<{ levelName: string; minTotalSpend: string | number; cashbackPercent: string | number }>,
 ) {
@@ -300,6 +323,8 @@ export default function AdminCompanyProfilePage() {
   const [locations, setLocations] = useState<AdminCompanyLocation[]>([]);
   const [locationSaving, setLocationSaving] = useState(false);
   const [referral, setReferral] = useState<AdminCompanyReferralResponse | null>(null);
+  const [overview, setOverview] = useState<AdminCompanyOverview | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
   const [referralQuery, setReferralQuery] = useState("");
   const [referralSaving, setReferralSaving] = useState(false);
   const [companyEmailSubject, setCompanyEmailSubject] = useState("");
@@ -406,13 +431,73 @@ export default function AdminCompanyProfilePage() {
     initialSubscriptionsHash && subscriptionsHash !== initialSubscriptionsHash,
   );
   const hasDirty = accountDirty || companyDirty || subscriptionsDirty;
+  const effectiveOverview = useMemo<AdminCompanyOverview | null>(() => {
+    if (overview) return overview;
+    if (!companyForm || !accountForm) return null;
+    const activeSubscriptions = subscriptions.filter((subscription) => subscription.isActive).length;
+    const subscriptionGross = subscriptions
+      .filter((subscription) => subscription.isActive)
+      .reduce((total, subscription) => total + Number(subscription.price || 0), 0);
+    return {
+      company: {
+        owner: { uuid: companyUserUuid, name: accountForm.name, email: "" },
+        profile: { id: 0, name: companyForm.name, slug: companyForm.slug, isActive: companyForm.isActive },
+      },
+      billing: {
+        account: null,
+        invoice: null,
+      },
+      userSubscriptions: {
+        total: 0,
+        active: 0,
+        expired: 0,
+        canceled: 0,
+        expiringIn7Days: 0,
+      },
+      customers: {
+        total: 0,
+        pointsBalance: 0,
+        pointsEarned: 0,
+        pointsSpent: 0,
+      },
+      financial: {
+        subscriptionGross: subscriptionGross.toFixed(2),
+        recognizedRevenue: "0.00",
+        companyRecognizedRevenue: "0.00",
+        whiteBoxCommission: "0.00",
+        referralCommission: "0.00",
+        supportManagerCommission: "0.00",
+        reservedPayouts: "0.00",
+        paidPayouts: "0.00",
+        availableForPayout: "0.00",
+        activeSubscriptions,
+        sources: subscriptions
+          .filter((subscription) => subscription.isActive)
+          .slice(0, 3)
+          .map((subscription) => ({
+            name: subscription.name,
+            activeSubscriptions: 0,
+            dailyRevenue: 0,
+            recognizedRevenue: 0,
+            potentialRevenue: Number(subscription.price || 0),
+          })),
+      },
+      recentPayments: [],
+    };
+  }, [accountForm, companyForm, companyUserUuid, overview, subscriptions]);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [userRes, cats] = await Promise.all([adminGetCompanyUser(companyUserUuid), adminListCategories()]);
+      const [userRes, cats, overviewRes] = await Promise.all([
+        adminGetCompanyUser(companyUserUuid),
+        adminListCategories(),
+        adminGetCompanyOverview(companyUserUuid),
+      ]);
       setCategories(cats);
+      setOverview(overviewRes.ok ? overviewRes.data : null);
+      setOverviewError(overviewRes.ok ? null : `${overviewRes.status}: ${overviewRes.message}`);
       if (!userRes.ok) {
         setError(`${t("admin.companyDetail.loadUserFailed")} (${userRes.status}): ${userRes.message}`);
         setLoading(false);
@@ -1101,9 +1186,21 @@ export default function AdminCompanyProfilePage() {
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="secondary">
+            <Link href={`/admin/users/${companyUserUuid}`}>
+              <UserCheck className="h-4 w-4" />
+              Карточка пользователя
+            </Link>
+          </Button>
+          <Button asChild variant="secondary">
             <Link href={`/admin/companies/${companyUserUuid}/clients`}>
               <Users className="h-4 w-4" />
               {t("admin.companyDetail.companyClients")}
+            </Link>
+          </Button>
+          <Button asChild variant="secondary">
+            <Link href={`/admin/companies/${companyUserUuid}/payments`}>
+              <CreditCard className="h-4 w-4" />
+              Платежи
             </Link>
           </Button>
           <Button variant="destructive" onClick={() => void removeCompanyUser()}>
@@ -1149,16 +1246,188 @@ export default function AdminCompanyProfilePage() {
         </Card>
       </div>
 
+      <Card className="glass overflow-hidden border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_38%),rgba(255,255,255,0.025)] pt-4">
+        <CardHeader className="pb-3 pt-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="inline-flex items-center gap-2 text-base">
+                <ReceiptText className="h-4 w-4 text-cyan-100" />
+                Операционный статус компании
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Подписка NearLoy, пользовательские подписки, баланс и последние платежи.
+              </p>
+            </div>
+            <Button asChild variant="secondary" size="sm">
+              <Link href={`/admin/companies/${companyUserUuid}/payments`}>
+                <CreditCard className="h-4 w-4" />
+                Все платежи
+              </Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {effectiveOverview ? (
+            <>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">NearLoy</p>
+                      <p className="mt-2 text-xl font-semibold">
+                        {effectiveOverview.billing.account?.status ?? "Нет аккаунта"}
+                      </p>
+                    </div>
+                    <Badge variant={effectiveOverview.billing.account?.status === "ACTIVE" ? "default" : "secondary"}>
+                      {effectiveOverview.billing.invoice?.status ?? "NO INVOICE"}
+                    </Badge>
+                  </div>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Период до {formatShortDate(effectiveOverview.billing.account?.currentPeriodEndsAt)}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    К оплате: <span className="font-semibold text-foreground">{formatRub(effectiveOverview.billing.invoice?.amountDue ?? 0)}</span>
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Подписки пользователей</p>
+                  <p className="mt-2 text-xl font-semibold">{effectiveOverview.userSubscriptions.active} активных</p>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Всего: {effectiveOverview.userSubscriptions.total} · Истекли: {effectiveOverview.userSubscriptions.expired} · Отменены: {effectiveOverview.userSubscriptions.canceled}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Истекают за 7 дней: <span className="font-semibold text-foreground">{effectiveOverview.userSubscriptions.expiringIn7Days}</span>
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Баланс компании</p>
+                  <p className="mt-2 text-xl font-semibold">{formatRub(effectiveOverview.financial.availableForPayout)}</p>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Заработано: {formatRub(effectiveOverview.financial.companyRecognizedRevenue)}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Резерв: {formatRub(effectiveOverview.financial.reservedPayouts)} · Выплачено: {formatRub(effectiveOverview.financial.paidPayouts)}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Клиенты и баллы</p>
+                  <p className="mt-2 text-xl font-semibold">{effectiveOverview.customers.total} клиентов</p>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Баланс баллов: <span className="font-semibold text-foreground">{formatPrice(effectiveOverview.customers.pointsBalance)}</span>
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Начислено: {formatPrice(effectiveOverview.customers.pointsEarned)} · Списано: {formatPrice(effectiveOverview.customers.pointsSpent)}
+                  </p>
+                </div>
+              </div>
+
+              {!overview && overviewError ? (
+                <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm text-amber-100">
+                  Показана базовая статистика из профиля компании. Расширенный финансовый снапшот не загрузился: {overviewError}
+                </div>
+              ) : null}
+
+              <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold">Доходность подписок</p>
+                    <Badge variant="outline">{effectiveOverview.financial.sources.length} источников</Badge>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Оборот подписок</p>
+                      <p className="mt-1 font-semibold">{formatRub(effectiveOverview.financial.subscriptionGross)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Признанный оборот</p>
+                      <p className="mt-1 font-semibold">{formatRub(effectiveOverview.financial.recognizedRevenue)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Комиссия NearLoy</p>
+                      <p className="mt-1 font-semibold">{formatRub(effectiveOverview.financial.whiteBoxCommission)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {effectiveOverview.financial.sources.slice(0, 3).map((source) => (
+                      <div key={source.name} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-sm">
+                        <span className="truncate">{source.name}</span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {source.activeSubscriptions} акт. · {formatRub(source.recognizedRevenue)}
+                        </span>
+                      </div>
+                    ))}
+                    {effectiveOverview.financial.sources.length === 0 ? (
+                      <p className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-sm text-muted-foreground">
+                        Активных пользовательских подписок пока нет.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold">Последние платежи</p>
+                    <Badge variant="outline">{effectiveOverview.recentPayments.length}</Badge>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {effectiveOverview.recentPayments.map((payment) => (
+                      <div key={payment.uuid} className="grid grid-cols-[1fr_auto] gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-sm">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{payment.description}</p>
+                          <p className="text-xs text-muted-foreground">{payment.status} · {formatShortDate(payment.paidAt ?? payment.createdAt)}</p>
+                        </div>
+                        <p className="font-semibold">{formatRub(payment.amount)}</p>
+                      </div>
+                    ))}
+                    {effectiveOverview.recentPayments.length === 0 ? (
+                      <p className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-sm text-muted-foreground">
+                        Платежей по компании ещё нет.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-muted-foreground">
+              Статистика компании временно недоступна. {overviewError ? `Причина: ${overviewError}` : "Финансовый снапшот не загрузился."}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
         <Sparkles className="h-3.5 w-3.5 text-primary" />
         {t("admin.companyDetail.proTipStart")} <span className="font-medium text-foreground">{t("admin.companyDetail.saveAll")}</span> {t("admin.companyDetail.proTipEnd")}
       </div>
 
       <Card className="glass border-white/10">
-        <CardContent className="flex flex-wrap gap-2 p-3">
+        <CardContent className="flex flex-wrap justify-end gap-2 p-3">
           {SECTION_META.map((section) => {
             const Icon = section.icon;
             const isOpen = sections[section.key];
+            if (section.key === "referral") {
+              return (
+                <Button
+                  key={section.key}
+                  asChild
+                  type="button"
+                  variant="secondary"
+                  className="h-auto min-w-[150px] justify-start gap-2 px-3 py-2"
+                >
+                  <Link href={`/admin/companies/${companyUserUuid}/referral`}>
+                    <Icon className="h-4 w-4" />
+                    <span className="text-left">
+                      <span className="block text-sm font-semibold">{t(section.titleKey)}</span>
+                      <span className="block text-[11px] opacity-75">{t(section.descriptionKey)}</span>
+                    </span>
+                  </Link>
+                </Button>
+              );
+            }
             return (
               <Button
                 key={section.key}
@@ -1175,10 +1444,24 @@ export default function AdminCompanyProfilePage() {
               </Button>
             );
           })}
+          <Button
+            asChild
+            type="button"
+            variant="secondary"
+            className="h-auto min-w-[170px] justify-start gap-2 px-3 py-2"
+          >
+            <Link href={`/admin/companies/${companyUserUuid}/security`}>
+              <ShieldCheck className="h-4 w-4" />
+              <span className="text-left">
+                <span className="block text-sm font-semibold">Безопасность</span>
+                <span className="block text-[11px] opacity-75">Сотрудники и доступы</span>
+              </span>
+            </Link>
+          </Button>
         </CardContent>
       </Card>
 
-      <Card id="company-section-referral" className="scroll-mt-4 glass border-cyan-300/15 gap-3 py-4">
+      <Card id="company-section-referral" className="hidden scroll-mt-4 glass border-cyan-300/15 gap-3 py-4">
         <CardHeader
           className={cn("pb-2 pt-4", !sections.referral && "cursor-pointer")}
           onClick={() => {
@@ -2775,5 +3058,3 @@ export default function AdminCompanyProfilePage() {
     </div>
   );
 }
-
-

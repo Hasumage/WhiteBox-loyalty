@@ -118,7 +118,7 @@ export type TwaUserSubscription = {
   subscription: TwaSubscriptionPlan;
 };
 
-export type TwaPaymentStatus = "PENDING" | "WAITING_FOR_CAPTURE" | "SUCCEEDED" | "CANCELED" | "FAILED" | "REFUNDED";
+export type TwaPaymentStatus = "PENDING" | "WAITING_FOR_CAPTURE" | "SUCCEEDED" | "CANCELED" | "FAILED" | "REFUNDED" | "EXPIRED";
 
 export type TwaPaymentCheckout = {
   uuid: string;

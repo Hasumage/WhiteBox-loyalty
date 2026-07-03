@@ -2,12 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { FinanceOperationStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { resolveEffectivePermission } from "@/lib/admin/access-control";
+import { calculateCompanyReferralPayoutCoverage, COMPANY_REFERRAL_PAYOUT_TITLE } from "@/lib/company-referrals/company-referrals";
 import { calculateCompanyFinancialSnapshot, evaluatePayoutCoverage } from "@/lib/finance/company-finance";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
 const APPROVAL_STATUSES = new Set<FinanceOperationStatus>(["APPROVED", "REJECTED", "PAID", "CANCELED"]);
+
+function isReferralPayout(item: { companyId: number | null; requestedById: number | null; title: string; type: string }) {
+  return item.type === "PAYOUT_REQUEST" && !item.companyId && Boolean(item.requestedById) && item.title.startsWith(COMPANY_REFERRAL_PAYOUT_TITLE);
+}
 
 async function readUuid(params: { uuid?: string } | Promise<{ uuid?: string }>) {
   return (await Promise.resolve(params)).uuid ?? "";
@@ -95,6 +100,20 @@ export async function PATCH(
           throw new Error(`INSUFFICIENT_COMPANY_BALANCE:${coverage.availableBeforeThisRequest.toFixed(2)}`);
         }
       }
+      if (isReferralPayout(current) && (body.status === "APPROVED" || body.status === "PAID")) {
+        const coverage = await calculateCompanyReferralPayoutCoverage(current.requestedById!, current, tx);
+        if (!coverage.requestCovered) {
+          throw new Error(`INSUFFICIENT_REFERRAL_BALANCE:${coverage.availableBeforeThisRequest.toFixed(2)}`);
+        }
+      }
+      if (
+        current.type === "PAYOUT_REQUEST" &&
+        !current.companyId &&
+        !isReferralPayout(current) &&
+        (body.status === "APPROVED" || body.status === "PAID")
+      ) {
+        throw new Error("UNLINKED_PAYOUT_REQUEST");
+      }
       const updated = await tx.financeOperation.update({
       where: { uuid },
       data: {
@@ -147,6 +166,19 @@ export async function PATCH(
       const available = message.split(":")[1];
       return NextResponse.json(
         { message: `Company payout is not covered by earned balance. Available before this request: ${available} RUB.` },
+        { status: 409 },
+      );
+    }
+    if (message.startsWith("INSUFFICIENT_REFERRAL_BALANCE:")) {
+      const available = message.split(":")[1];
+      return NextResponse.json(
+        { message: `PR payout is not covered by earned referral balance. Available before this request: ${available} RUB.` },
+        { status: 409 },
+      );
+    }
+    if (message === "UNLINKED_PAYOUT_REQUEST") {
+      return NextResponse.json(
+        { message: "Unlinked payout requests cannot be approved. Create payouts from a company balance or PR agent cabinet." },
         { status: 409 },
       );
     }

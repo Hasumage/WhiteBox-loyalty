@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { AdminTaskSource } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { requireAdminScope } from "@/lib/admin/require-admin-scope";
-import { upsertAdminTaskForAuditEvent } from "@/lib/admin/admin-tasks";
+import { resolveEffectivePermissions } from "@/lib/admin/access-control";
+import { ACTIVE_ADMIN_TASK_STATUSES, syncAdminTasksFromSignals, upsertAdminTaskForAuditEvent } from "@/lib/admin/admin-tasks";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -31,6 +33,16 @@ function maskChatId(value: string) {
   return `...${value.slice(-4)}`;
 }
 
+function allowedSourcesFor(role: string, permissions: Array<{ scope: string; canView: boolean; canEdit: boolean; canApprove: boolean }>) {
+  const effective = resolveEffectivePermissions(role, permissions);
+  const can = new Map(effective.map((permission) => [permission.scope, permission.canView]));
+  return [
+    ...(can.get("AUDIT") ? ["AUDIT" as const] : []),
+    ...(can.get("COMPANY_VERIFICATIONS") ? ["COMPANY_VERIFICATION" as const] : []),
+    ...(can.get("FINANCE") ? ["FINANCE" as const] : []),
+  ];
+}
+
 export async function GET(request: NextRequest) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
@@ -38,10 +50,29 @@ export async function GET(request: NextRequest) {
   const access = await requireAdminScope(session, "AUDIT", "canView");
   if (!access.ok) return access.response;
 
+  await syncAdminTasksFromSignals();
+
+  const actor = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: {
+      role: true,
+      permissions: { select: { scope: true, canView: true, canEdit: true, canApprove: true } },
+    },
+  });
+  const sources = allowedSourcesFor(actor?.role ?? session.role, actor?.permissions ?? []);
+  const visibleTaskWhere = {
+    source: { in: sources as AdminTaskSource[] },
+    status: { in: [...ACTIVE_ADMIN_TASK_STATUSES] },
+  };
+
   const now = new Date();
   const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
   const [
+    openTasks,
+    criticalTasks,
+    highTasks,
+    alertTasks,
     queueTotal,
     queueFailed,
     queueDue,
@@ -53,6 +84,15 @@ export async function GET(request: NextRequest) {
     leadRecentFailures,
     developerIncidents,
   ] = await Promise.all([
+    prisma.adminTask.count({ where: visibleTaskWhere }),
+    prisma.adminTask.count({ where: { ...visibleTaskWhere, priority: "CRITICAL" } }),
+    prisma.adminTask.count({ where: { ...visibleTaskWhere, priority: "HIGH" } }),
+    prisma.adminTask.findMany({
+      where: visibleTaskWhere,
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      take: 24,
+      include: { assignedTo: { select: { name: true } } },
+    }),
     prisma.telegramMessageQueue.count(),
     prisma.telegramMessageQueue.count({ where: { status: "FAILED" } }),
     prisma.telegramMessageQueue.count({
@@ -93,7 +133,7 @@ export async function GET(request: NextRequest) {
   ]);
 
   const criticalIncidents = developerIncidents.filter((event) => event.level === "CRITICAL").length;
-  const openIssues = queueFailed + leadTelegramFailed + developerIncidents.length;
+  const openIssues = openTasks + criticalIncidents;
   const incidentTasks = await Promise.all(
     developerIncidents.map((event) => upsertAdminTaskForAuditEvent(event).catch(() => null)),
   );
@@ -107,11 +147,21 @@ export async function GET(request: NextRequest) {
     generatedAt: now.toISOString(),
     summary: {
       openIssues,
+      openTasks,
+      criticalTasks,
+      highTasks,
       criticalIncidents,
       telegramQueueFailed: queueFailed,
       telegramQueueDue: queueDue,
       leadTelegramFailed24h: leadTelegramFailed,
     },
+    alerts: alertTasks.map((task) => ({
+      ...task,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.updatedAt.toISOString(),
+      assignedAt: task.assignedAt?.toISOString() ?? null,
+      resolvedAt: task.resolvedAt?.toISOString() ?? null,
+    })),
     telegram: {
       botConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN),
       proxyConfigured: Boolean(process.env.TELEGRAM_PROXY_URL),

@@ -13,7 +13,12 @@ jest.mock("@/lib/prisma", () => ({
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    user: {
+      findUnique: jest.fn(),
+    },
     adminTask: {
+      count: jest.fn(),
+      findMany: jest.fn(),
       updateMany: jest.fn(),
     },
     $transaction: jest.fn(),
@@ -30,6 +35,8 @@ jest.mock("@/lib/admin/require-admin-scope", () => ({
 }));
 
 jest.mock("@/lib/admin/admin-tasks", () => ({
+  ACTIVE_ADMIN_TASK_STATUSES: ["OPEN", "IN_PROGRESS"],
+  syncAdminTasksFromSignals: jest.fn(),
   upsertAdminTaskForAuditEvent: jest.fn(),
 }));
 
@@ -50,6 +57,7 @@ describe("admin system health route", () => {
     jest.clearAllMocks();
     mockedRequireAdminSession.mockResolvedValue({ userId: 1, email: "admin@test.local", role: "SUPER_ADMIN" });
     mockedRequireAdminScope.mockResolvedValue({ ok: true, actor: {}, permission: {} } as never);
+    mockedPrisma.user.findUnique.mockResolvedValue({ role: "SUPER_ADMIN", permissions: [] } as never);
     mockedUpsertTask.mockResolvedValue({ uuid: "task-1", sourceKey: "audit:audit-1" } as never);
     (mockedPrisma.$transaction as unknown as jest.Mock).mockImplementation(
       async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma),
@@ -57,6 +65,30 @@ describe("admin system health route", () => {
   });
 
   it("returns system health with Telegram queue and developer incidents", async () => {
+    mockedPrisma.adminTask.count
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(1);
+    mockedPrisma.adminTask.findMany.mockResolvedValue([
+      {
+        uuid: "finance-task",
+        source: "FINANCE",
+        sourceKey: "finance:op-1",
+        title: "Finance operation status changed",
+        description: "Status changed to APPROVED. Amount: 111 RUB",
+        priority: "CRITICAL",
+        status: "OPEN",
+        targetUrl: "/admin/finance",
+        targetLabel: "Open finance",
+        assignedToId: null,
+        resolvedById: null,
+        assignedAt: null,
+        resolvedAt: null,
+        createdAt: new Date("2026-05-22T09:00:00.000Z"),
+        updatedAt: new Date("2026-05-22T09:00:00.000Z"),
+        assignedTo: null,
+      },
+    ] as never);
     mockedPrisma.telegramMessageQueue.count
       .mockResolvedValueOnce(3)
       .mockResolvedValueOnce(2)
@@ -131,11 +163,19 @@ describe("admin system health route", () => {
       "canView",
     );
     expect(body.summary).toMatchObject({
-      openIssues: 4,
+      openIssues: 3,
+      openTasks: 2,
+      criticalTasks: 1,
+      highTasks: 1,
       criticalIncidents: 1,
       telegramQueueFailed: 2,
       telegramQueueDue: 1,
       leadTelegramFailed24h: 1,
+    });
+    expect(body.alerts[0]).toMatchObject({
+      uuid: "finance-task",
+      source: "FINANCE",
+      priority: "CRITICAL",
     });
     expect(body.telegram.queue.recent[0]).toMatchObject({
       id: "queue-1",

@@ -247,11 +247,11 @@ export async function buildDailyReportSnapshot(now = new Date()): Promise<DailyR
       _sum: { amount: true },
     }),
     prisma.payment.aggregate({
-      where: { status: "PENDING" },
+      where: { status: { in: ["PENDING", "WAITING_FOR_CAPTURE"] } },
       _count: { _all: true },
       _sum: { amount: true },
     }),
-    prisma.payment.count({ where: { status: { in: ["FAILED", "CANCELED"] }, updatedAt: { gte: dayStart } } }),
+    prisma.payment.count({ where: { status: { in: ["FAILED", "CANCELED", "EXPIRED"] }, updatedAt: { gte: dayStart } } }),
     prisma.financeOperation.aggregate({
       where: { type: "PAYOUT_REQUEST", status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } },
       _count: { _all: true },

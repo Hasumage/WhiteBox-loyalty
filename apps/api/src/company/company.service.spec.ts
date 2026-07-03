@@ -91,6 +91,7 @@ describe("CompanyService", () => {
       delete: jest.Mock;
       findFirst: jest.Mock;
     };
+    payment: { findFirst: jest.Mock };
     subscriptionEntitlement: { findUnique: jest.Mock; update: jest.Mock };
     subscriptionRedemption: { aggregate: jest.Mock; create: jest.Mock };
     customerLookupCode: { findFirst: jest.Mock; updateMany: jest.Mock };
@@ -199,6 +200,7 @@ describe("CompanyService", () => {
         delete: jest.fn(),
         findFirst: jest.fn(),
       },
+      payment: { findFirst: jest.fn().mockResolvedValue(null) },
       subscriptionEntitlement: { findUnique: jest.fn(), update: jest.fn() },
       subscriptionRedemption: tx.subscriptionRedemption,
       customerLookupCode: { findFirst: jest.fn(), updateMany: jest.fn() },

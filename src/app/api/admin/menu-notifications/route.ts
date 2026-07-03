@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     items: {
       "/admin": taskCount,
+      "/admin/tasks": taskCount,
       "/admin/company-verifications": companyVerificationCount,
       "/admin/system-health": systemIssueCount,
     },

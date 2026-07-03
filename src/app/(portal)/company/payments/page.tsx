@@ -128,6 +128,31 @@ export default function CompanyPaymentsPage() {
         Текущий источник средств: активированные клиентами подписки. Доступно к выводу = признанный доход по прошедшим дням - оплаченные выплаты - заявки в резерве. До подключения платёжного провайдера это расчётный баланс, а не подтверждение фактического поступления денег.
       </p>
 
+      <Card className="border-cyan-300/15 bg-cyan-300/[0.035] py-0">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/20 bg-cyan-200/[0.07] text-cyan-100">
+              <CreditCard className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="font-semibold">Сохранённые способы оплаты</h2>
+              {data?.savedPaymentMethod ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {data.savedPaymentMethod.title}
+                  {data.savedPaymentMethod.cardLast4 ? ` · •••• ${data.savedPaymentMethod.cardLast4}` : ""}
+                  {data.savedPaymentMethod.cardType ? ` · ${data.savedPaymentMethod.cardType}` : ""}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground">Сохранённых карт пока нет.</p>
+              )}
+            </div>
+          </div>
+          <p className="max-w-xl text-sm leading-5 text-muted-foreground">
+            NearLoy не хранит данные карт. Способ оплаты безопасно хранится на стороне YooKassa.
+          </p>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 xl:grid-cols-[430px_minmax(0,1fr)]">
         <Card className="border-cyan-300/15 bg-cyan-300/[0.035] py-0">
           <CardContent className="space-y-4 p-5">

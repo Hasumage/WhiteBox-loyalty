@@ -11,6 +11,8 @@ import {
   FinanceOperationStatus,
   FinanceOperationType,
   LoyaltyTransactionType,
+  PaymentPurpose,
+  PaymentStatus,
   Prisma,
   SubscriptionBundleParticipantStatus,
   SubscriptionBundleStatus,
@@ -54,6 +56,7 @@ const MINIMUM_PAYOUT_RUB = 5_000;
 const COMPANY_TRIAL_DAYS = 30;
 const COMPANY_BILLING_GRACE_DAYS = 3;
 const COMPANY_MONTHLY_REFERRAL_SHARE_PERCENT = 30;
+const PAYMENT_CHECKOUT_TTL_MS = 15 * 60 * 1000;
 
 @Injectable()
 export class CompanyService {
@@ -188,7 +191,7 @@ export class CompanyService {
     if (!options.allowPastDue) {
       const billing = await this.currentBillingInvoice(member.companyId);
       if ("access" in billing && billing.access?.status === "PAST_DUE") {
-        throw new ForbiddenException("Company access is paused until monthly NearLoy access is renewed.");
+        throw new ForbiddenException("Доступ компании приостановлен до продления ежемесячной подписки NearLoy.");
       }
     }
     return member;
@@ -1236,14 +1239,35 @@ export class CompanyService {
   async finance(userId: number) {
     const member = await this.membership(userId);
     this.requireManager(member);
-    const [operations, snapshot] = await Promise.all([
+    const [operations, snapshot, billingAccount] = await Promise.all([
       this.prisma.financeOperation.findMany({
         where: { companyId: member.companyId },
         orderBy: { createdAt: "desc" },
         take: 30,
       }),
       this.financialSnapshot(this.prisma, member.companyId),
+      this.prisma.companyBillingAccount.findUnique({
+        where: { companyId: member.companyId },
+        select: {
+          paymentMethodProvider: true,
+          paymentMethodTitle: true,
+          paymentMethodCardLast4: true,
+          paymentMethodCardType: true,
+          paymentMethodSavedAt: true,
+          paymentMethodDeletedAt: true,
+        },
+      }),
     ]);
+    const savedPaymentMethod =
+      billingAccount?.paymentMethodProvider && billingAccount.paymentMethodSavedAt && !billingAccount.paymentMethodDeletedAt
+        ? {
+            provider: billingAccount.paymentMethodProvider,
+            title: billingAccount.paymentMethodTitle ?? "YooKassa",
+            cardLast4: billingAccount.paymentMethodCardLast4,
+            cardType: billingAccount.paymentMethodCardType,
+            savedAt: billingAccount.paymentMethodSavedAt,
+          }
+        : null;
     return {
       subscriptionGross: snapshot.committed,
       recognizedSubscriptionRevenue: snapshot.recognized,
@@ -1254,6 +1278,7 @@ export class CompanyService {
       paidBillingFees: snapshot.paidBillingFees,
       availableForPayout: snapshot.availableForPayout,
       activeSubscribers: snapshot.activeSubscribers,
+      savedPaymentMethod,
       operations: operations.map((operation) => ({ ...operation, amount: Number(operation.amount) })),
     };
   }
@@ -1432,9 +1457,23 @@ export class CompanyService {
     const hasReferralManager = referral?.status === "ACTIVE" && Boolean(referral.referrer);
     const history = await this.prisma.companyBillingInvoice.findMany({
       where: { companyId: member.companyId },
-      orderBy: { periodStartsAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { periodStartsAt: "desc" }],
       take: 12,
     });
+    const checkoutCreatedAfter = new Date(Date.now() - PAYMENT_CHECKOUT_TTL_MS);
+    const activePayment = current.invoice
+      ? await this.prisma.payment.findFirst({
+          where: {
+            companyId: member.companyId,
+            purpose: PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION,
+            status: { in: [PaymentStatus.PENDING, PaymentStatus.WAITING_FOR_CAPTURE] },
+            confirmationUrl: { not: null },
+            createdAt: { gt: checkoutCreatedAfter },
+            metadata: { path: ["invoiceUuid"], equals: current.invoice.uuid },
+          },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
     const access =
       "access" in current && current.access
         ? current.access
@@ -1444,11 +1483,51 @@ export class CompanyService {
               current.invoice?.status === "OPEN" ? this.addDays(current.invoice.periodEndsAt, COMPANY_BILLING_GRACE_DAYS) : null,
             daysLeft: null,
           };
+    const {
+      paymentMethodProvider,
+      paymentMethodEncrypted,
+      paymentMethodIv,
+      paymentMethodTag,
+      paymentMethodTitle,
+      paymentMethodCardLast4,
+      paymentMethodCardType,
+      paymentMethodSavedAt,
+      paymentMethodDeletedAt,
+      ...safeAccount
+    } = current.account;
+    void paymentMethodEncrypted;
+    void paymentMethodIv;
+    void paymentMethodTag;
+    const savedPaymentMethod =
+      paymentMethodProvider && paymentMethodSavedAt && !paymentMethodDeletedAt
+        ? {
+            provider: paymentMethodProvider,
+            title: paymentMethodTitle ?? "YooKassa",
+            cardLast4: paymentMethodCardLast4,
+            cardType: paymentMethodCardType,
+            savedAt: paymentMethodSavedAt,
+          }
+        : null;
     return {
-      account: current.account,
+      account: safeAccount,
       invoice: current.invoice,
       access,
       availableBalance: snapshot.availableForPayout,
+      savedPaymentMethod,
+      activePayment: activePayment
+        ? {
+            uuid: activePayment.uuid,
+            status: activePayment.status,
+            amount: Number(activePayment.amount),
+            currency: activePayment.currency,
+            confirmationUrl: activePayment.confirmationUrl,
+            providerPaymentId: activePayment.providerPaymentId,
+            providerStatus: activePayment.providerStatus,
+            expiresAt: new Date(activePayment.createdAt.getTime() + PAYMENT_CHECKOUT_TTL_MS),
+            createdAt: activePayment.createdAt,
+            updatedAt: activePayment.updatedAt,
+          }
+        : null,
       referralManager: hasReferralManager ? referral.referrer : null,
       monthlyRevenueSplit: this.billingRevenueSplit(
         current.invoice ? Number(current.invoice.status === "PAID" ? current.invoice.paidAmount : current.invoice.amountDue) : 0,

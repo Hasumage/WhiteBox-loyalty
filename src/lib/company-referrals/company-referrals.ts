@@ -4,7 +4,7 @@ import { supportManagerSharePercent } from "./support-manager";
 import { calculatePlatformRevenueSummary, type PlatformRevenueSubscription } from "@/lib/finance/platform-revenue";
 import { prisma } from "@/lib/prisma";
 
-const COMPANY_REFERRAL_PAYOUT_TITLE = "Company referral payout request";
+export const COMPANY_REFERRAL_PAYOUT_TITLE = "Company referral payout request";
 const MIN_REFERRAL_PAYOUT_RUB = 5_000;
 const REFERRAL_PAYOUT_LOCK_NAMESPACE = 79_1337;
 
@@ -292,5 +292,38 @@ export async function createCompanyReferralPayoutRequest(userId: number, amount:
 
     return operation;
   });
+}
+
+export async function calculateCompanyReferralPayoutCoverage(
+  userId: number,
+  operation?: { uuid?: string; amount?: Prisma.Decimal | number | string; status?: FinanceOperationStatus } | null,
+  db: PrismaLike = prisma,
+) {
+  const [referrals, payouts] = await Promise.all([loadReferralRows(userId, db), loadReferralPayouts(userId, db)]);
+  const summary = calculatePlatformRevenueSummary(toRevenueRows(referrals));
+  const reservedStatuses = new Set<FinanceOperationStatus>(["PENDING_APPROVAL", "APPROVED"]);
+  const paidStatuses = new Set<FinanceOperationStatus>(["PAID"]);
+  const reserved = money(
+    payouts.filter((row) => reservedStatuses.has(row.status)).reduce((sum, row) => sum + Number(row.amount), 0),
+  );
+  const paid = money(payouts.filter((row) => paidStatuses.has(row.status)).reduce((sum, row) => sum + Number(row.amount), 0));
+  const available = money(Math.max(0, summary.referralCommission - reserved - paid));
+  const currentAmount = Number(operation?.amount ?? 0);
+  const currentReserved =
+    operation?.status && (reservedStatuses.has(operation.status) || paidStatuses.has(operation.status)) ? currentAmount : 0;
+  const availableBeforeThisRequest = money(available + currentReserved);
+
+  return {
+    companies: referrals.length,
+    activeCompanies: referrals.filter((row) => row.status === "ACTIVE" && row.company.isActive).length,
+    recognizedGross: summary.recognizedGross,
+    futureGross: summary.futureGross,
+    referralCommission: summary.referralCommission,
+    reserved,
+    paid,
+    available,
+    availableBeforeThisRequest,
+    requestCovered: currentAmount > 0 ? availableBeforeThisRequest >= currentAmount : null,
+  };
 }
 

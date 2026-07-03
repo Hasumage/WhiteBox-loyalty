@@ -24,6 +24,7 @@ function formatDate(value: string | null, locale: "ru" | "en") {
 
 function statusCopy(status: TwaPaymentCheckout["status"], locale: "ru" | "en") {
   if (status === "SUCCEEDED") return locale === "ru" ? "Оплата прошла успешно" : "Payment completed";
+  if (status === "EXPIRED") return locale === "ru" ? "Время на оплату истекло" : "Payment time expired";
   if (status === "CANCELED" || status === "FAILED") return locale === "ru" ? "Оплата не завершена" : "Payment was not completed";
   return locale === "ru" ? "Оплата еще обрабатывается" : "Payment is still processing";
 }
@@ -67,7 +68,7 @@ export function PaymentSuccessClient() {
   }, [paymentUuid]);
 
   const isSuccess = payment?.status === "SUCCEEDED";
-  const isFailed = payment?.status === "FAILED" || payment?.status === "CANCELED";
+  const isFailed = payment?.status === "FAILED" || payment?.status === "CANCELED" || payment?.status === "EXPIRED";
   const title = payment ? statusCopy(payment.status, locale) : locale === "ru" ? "Проверяем оплату" : "Checking payment";
   const expiresAt = payment?.activatedSubscription?.expiresAt ?? null;
   const orderLabel = useMemo(() => payment?.providerPaymentId ?? payment?.uuid ?? paymentUuid, [payment, paymentUuid]);

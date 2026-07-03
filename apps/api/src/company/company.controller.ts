@@ -170,8 +170,18 @@ export class CompanyController {
   }
 
   @Post("billing/checkout")
-  createBillingCheckout(@CurrentUser() user: RequestUser) {
-    return this.paymentsService.createCompanyBillingCheckout(user.userId);
+  createBillingCheckout(@CurrentUser() user: RequestUser, @Body() dto: { savePaymentMethod?: boolean }) {
+    return this.paymentsService.createCompanyBillingCheckout(user.userId, { savePaymentMethod: Boolean(dto?.savePaymentMethod) });
+  }
+
+  @Post("billing/payment-method/pay")
+  payBillingWithSavedPaymentMethod(@CurrentUser() user: RequestUser) {
+    return this.paymentsService.createCompanyBillingSavedMethodPayment(user.userId);
+  }
+
+  @Delete("billing/payment-method")
+  deleteBillingPaymentMethod(@CurrentUser() user: RequestUser) {
+    return this.paymentsService.deleteCompanyBillingPaymentMethod(user.userId);
   }
 
   @Get("billing/payments/:uuid")

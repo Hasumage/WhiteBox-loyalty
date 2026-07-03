@@ -44,6 +44,9 @@ import { UpsertCompanyLocationDto } from "./dto/upsert-company-location.dto";
 import { UpsertCompanyProfileDto } from "./dto/upsert-company-profile.dto";
 import { CreateSubscriptionEntitlementDto } from "../company/dto/company-workspace.dto";
 
+const PAYMENT_CHECKOUT_TTL_MS = 15 * 60 * 1000;
+const ACTIVE_PAYMENT_CHECKOUT_STATUSES = [PaymentStatus.PENDING, PaymentStatus.WAITING_FOR_CAPTURE] as const;
+
 @Injectable()
 export class AdminService {
   private static readonly MAX_SLUG_LENGTH = 60;
@@ -107,6 +110,20 @@ export class AdminService {
 
   private paymentMoney(value: Prisma.Decimal | number | string | null | undefined) {
     return Number(value ?? 0).toFixed(2);
+  }
+
+  private async expireStalePayments() {
+    await this.prisma.payment.updateMany({
+      where: {
+        status: { in: [...ACTIVE_PAYMENT_CHECKOUT_STATUSES] },
+        createdAt: { lt: new Date(Date.now() - PAYMENT_CHECKOUT_TTL_MS) },
+      },
+      data: {
+        status: PaymentStatus.EXPIRED,
+        canceledAt: new Date(),
+        cancelReason: "Payment checkout expired after 15 minutes.",
+      },
+    });
   }
 
   private slugify(value: string) {
@@ -3631,6 +3648,8 @@ export class AdminService {
   }
 
   async listPayments(options: { query?: string; status?: PaymentStatus; page?: number; limit?: number }) {
+    await this.expireStalePayments();
+
     const page = Math.max(1, Number(options.page) || 1);
     const limit = Math.min(50, Math.max(5, Number(options.limit) || 20));
     const skip = (page - 1) * limit;
@@ -3714,6 +3733,7 @@ export class AdminService {
         canceled: summary.byStatus[PaymentStatus.CANCELED] ?? 0,
         failed: summary.byStatus[PaymentStatus.FAILED] ?? 0,
         refunded: summary.byStatus[PaymentStatus.REFUNDED] ?? 0,
+        expired: summary.byStatus[PaymentStatus.EXPIRED] ?? 0,
       },
     };
   }

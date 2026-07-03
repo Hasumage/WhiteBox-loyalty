@@ -74,6 +74,59 @@ describe("YooKassaService", () => {
     expect(body.receipt.items[0]).toEqual(expect.objectContaining({ vat_code: 1, payment_mode: "full_payment", payment_subject: "service" }));
   });
 
+  it("asks YooKassa to save a payment method only when the company opted in", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "save-pay", status: "pending" }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const service = serviceWith({ YOOKASSA_SHOP_ID: "shop_123", YOOKASSA_SECRET_KEY: "secret_456" });
+
+    await service.createPayment({
+      amount: "4990.00",
+      currency: "RUB",
+      description: "NearLoy company subscription",
+      returnUrl: "https://nearloy.test/company/billing?payment=abc",
+      customerEmail: "owner@nearloy.test",
+      metadata: { nearloyPaymentUuid: "abc" },
+      savePaymentMethod: true,
+    });
+
+    const [, request] = fetchMock.mock.calls[0];
+    const body = JSON.parse(request.body);
+    expect(body.save_payment_method).toBe(true);
+    expect(body.payment_method_data).toEqual({ type: "bank_card" });
+    expect(body.confirmation).toEqual({ type: "redirect", return_url: "https://nearloy.test/company/billing?payment=abc" });
+  });
+
+  it("charges a saved YooKassa payment method without redirect confirmation", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "auto-pay", status: "succeeded" }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const service = serviceWith({ YOOKASSA_SHOP_ID: "shop_123", YOOKASSA_SECRET_KEY: "secret_456" });
+
+    await service.createPayment({
+      amount: "4990.00",
+      currency: "RUB",
+      description: "NearLoy company subscription",
+      returnUrl: "https://nearloy.test/company/billing?payment=abc",
+      customerEmail: "owner@nearloy.test",
+      metadata: { nearloyPaymentUuid: "abc" },
+      paymentMethodId: "pm_saved_1",
+    });
+
+    const [, request] = fetchMock.mock.calls[0];
+    const body = JSON.parse(request.body);
+    expect(body.payment_method_id).toBe("pm_saved_1");
+    expect(body.payment_method_data).toBeUndefined();
+    expect(body.save_payment_method).toBeUndefined();
+    expect(body.confirmation).toBeUndefined();
+  });
+
 
   it("rejects bank card payments above the configured limit before calling YooKassa", async () => {
     const fetchMock = jest.fn();

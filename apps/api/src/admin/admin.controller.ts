@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -200,7 +201,12 @@ export class AdminController {
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
-    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.FINANCE, "canView");
+    try {
+      await this.adminService.assertAdminPermission(actor.userId, PermissionScope.FINANCE, "canView");
+    } catch (error) {
+      if (!(error instanceof ForbiddenException)) throw error;
+      await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
+    }
     return this.adminService.listPayments({ query, status, page: Number(page), limit: Number(limit) });
   }
 

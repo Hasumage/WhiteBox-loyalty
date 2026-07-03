@@ -43,7 +43,7 @@ const PHONE_KEYBOARD = {
 };
 
 function nearloyWebAppUrl(path = "") {
-  const base = process.env.TELEGRAM_WEB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://nearloy.app/";
+  const base = process.env.TELEGRAM_WEB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://nearloy.up.railway.app/";
   if (!path) return base;
   try {
     return new URL(path.replace(/^\//, ""), base.endsWith("/") ? base : `${base}/`).toString();
