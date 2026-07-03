@@ -97,6 +97,7 @@ describe("PaymentsService", () => {
     const { succeededWithRelations } = paidPaymentFixture();
     const prisma = {
       payment: {
+        updateMany: jest.fn(),
         findFirst: jest.fn().mockResolvedValue(succeededWithRelations),
         findUnique: jest.fn(),
         update: jest.fn(),
@@ -115,10 +116,115 @@ describe("PaymentsService", () => {
     expect(result.activatedSubscription).toEqual(expect.objectContaining({ id: 44, status: SubscriptionStatus.ACTIVE }));
   });
 
+  it("marks stale checkout payments as expired but still checks the provider for late success", async () => {
+    const expired = paymentRecord({
+      status: PaymentStatus.EXPIRED,
+      canceledAt: new Date("2026-06-05T10:16:00.000Z"),
+      cancelReason: "Payment checkout expired after 15 minutes.",
+    });
+    const prisma = {
+      payment: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findFirst: jest.fn().mockResolvedValue(expired),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
+      telegramMessageQueue: { create: jest.fn() },
+    };
+    const yookassa = {
+      getPayment: jest.fn().mockResolvedValue({
+        id: "yk_1",
+        status: "pending",
+        amount: { value: "1000.00", currency: "RUB" },
+      }),
+    };
+    const registeredService = { activateSubscription: jest.fn() };
+    const service = new PaymentsService(prisma as never, yookassa as never, registeredService as never);
+
+    const result = await service.getUserPayment(7, "pay-local-1");
+
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: PaymentStatus.EXPIRED }),
+    }));
+    expect(yookassa.getPayment).toHaveBeenCalledWith("yk_1");
+    expect(registeredService.activateSubscription).not.toHaveBeenCalled();
+    expect(result.status).toBe(PaymentStatus.EXPIRED);
+  });
+
+  it("reconciles a recently expired YooKassa payment and activates it when provider succeeded", async () => {
+    const expired = paymentRecord({
+      status: PaymentStatus.EXPIRED,
+      createdAt: new Date(),
+      canceledAt: new Date(),
+      cancelReason: "Payment checkout expired after 15 minutes.",
+    });
+    const succeeded = paymentRecord({
+      status: PaymentStatus.SUCCEEDED,
+      providerStatus: "succeeded",
+      paidAt: new Date("2026-06-05T10:20:00.000Z"),
+    });
+    const activated = {
+      ...succeeded,
+      userSubscriptionId: 44,
+      subscription: { uuid: "sub-coffee", name: "Coffee", renewalValue: 1, renewalUnit: "MONTH" },
+      subscriptionBundle: null,
+      userSubscription: { id: 44, status: SubscriptionStatus.ACTIVE, activatedAt: succeeded.paidAt, expiresAt: null },
+      userSubscriptionBundle: null,
+    };
+    const prisma = {
+      payment: {
+        findMany: jest.fn().mockResolvedValue([{ id: expired.id, providerPaymentId: expired.providerPaymentId }]),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn((args: { where: { id?: number; providerPaymentId?: string }; include?: { user?: unknown } }) => {
+          if (args.where.providerPaymentId) return Promise.resolve(expired);
+          if (args.include?.user) {
+            return Promise.resolve({
+              ...activated,
+              user: { telegramId: null, name: "Emma Clark" },
+              subscription: { name: "Coffee" },
+              subscriptionBundle: null,
+              userSubscription: { expiresAt: null },
+              userSubscriptionBundle: null,
+            });
+          }
+          return Promise.resolve({
+            ...succeeded,
+            subscription: { uuid: "sub-coffee" },
+            subscriptionBundle: null,
+          });
+        }),
+        update: jest.fn()
+          .mockResolvedValueOnce(succeeded)
+          .mockResolvedValueOnce(activated),
+      },
+      telegramMessageQueue: { create: jest.fn() },
+    };
+    const yookassa = {
+      isConfigured: jest.fn().mockReturnValue(true),
+      getPayment: jest.fn().mockResolvedValue({
+        id: "yk_1",
+        status: "succeeded",
+        amount: { value: "1000.00", currency: "RUB" },
+      }),
+    };
+    const registeredService = { activateSubscription: jest.fn().mockResolvedValue({ id: 44 }) };
+    const service = new PaymentsService(prisma as never, yookassa as never, registeredService as never);
+
+    const result = await service.reconcileYooKassaPayments();
+
+    expect(result).toEqual({ checked: 1, updated: 1, skipped: false });
+    expect(yookassa.getPayment).toHaveBeenCalledWith("yk_1");
+    expect(prisma.payment.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: PaymentStatus.SUCCEEDED, providerStatus: "succeeded" }),
+    }));
+    expect(registeredService.activateSubscription).toHaveBeenCalledWith(7, "sub-coffee");
+  });
+
   it("syncs a successful YooKassa payment and activates the subscription from the return page", async () => {
     const { expiresAt, pending, succeeded, succeededWithRelations } = paidPaymentFixture();
     const prisma = {
       payment: {
+        updateMany: jest.fn(),
         findFirst: jest.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(succeededWithRelations),
         findUnique: jest.fn((args: { where: { id?: number; providerPaymentId?: string }; include?: { user?: unknown } }) => {
           if (args.where.providerPaymentId) return Promise.resolve(pending);
@@ -174,6 +280,7 @@ describe("PaymentsService", () => {
     const { expiresAt, pending, succeeded, succeededWithRelations } = paidPaymentFixture();
     const prisma = {
       payment: {
+        updateMany: jest.fn(),
         findFirst: jest.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(succeededWithRelations),
         findUnique: jest.fn((args: { where: { id?: number; providerPaymentId?: string }; include?: { user?: unknown } }) => {
           if (args.where.providerPaymentId) return Promise.resolve(pending);
@@ -235,6 +342,7 @@ describe("PaymentsService", () => {
       subscriptionId: null,
       confirmationUrl: "https://yookassa.test/company-pay",
       metadata: { invoiceUuid: "invoice-uuid" },
+      createdAt: new Date(),
     });
     const prisma = {
       companyMember: {
@@ -247,6 +355,7 @@ describe("PaymentsService", () => {
       },
       companyBillingInvoice: { findFirst: jest.fn().mockResolvedValue(invoice) },
       payment: {
+        updateMany: jest.fn(),
         findMany: jest.fn().mockResolvedValue([existingPayment]),
         create: jest.fn(),
       },
@@ -260,6 +369,11 @@ describe("PaymentsService", () => {
     const result = await service.createCompanyBillingCheckout(7);
 
     expect(result.confirmationUrl).toBe("https://yookassa.test/company-pay");
+    expect(prisma.payment.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: { in: [PaymentStatus.PENDING, PaymentStatus.WAITING_FOR_CAPTURE] },
+      }),
+    }));
     expect(prisma.payment.create).not.toHaveBeenCalled();
     expect(yookassa.createPayment).not.toHaveBeenCalled();
   });
@@ -281,6 +395,7 @@ describe("PaymentsService", () => {
           .mockResolvedValueOnce({ id: "paid-invoice", uuid: "paid-invoice-uuid", companyId: 3, status: "PAID" }),
       },
       payment: {
+        updateMany: jest.fn(),
         findMany: jest.fn(),
         create: jest.fn(),
       },
@@ -296,5 +411,69 @@ describe("PaymentsService", () => {
     expect(prisma.payment.findMany).not.toHaveBeenCalled();
     expect(prisma.payment.create).not.toHaveBeenCalled();
     expect(yookassa.createPayment).not.toHaveBeenCalled();
+  });
+
+  it("renews overdue company billing from the actual YooKassa payment date", async () => {
+    const paidAt = new Date("2026-06-26T22:19:44.016Z");
+    const invoice = {
+      id: "invoice-old",
+      uuid: "invoice-old-uuid",
+      companyId: 3,
+      status: "OPEN",
+      periodStartsAt: new Date("2026-05-19T06:24:33.240Z"),
+      periodEndsAt: new Date("2026-06-18T06:24:33.240Z"),
+    };
+    const payment = paymentRecord({
+      id: 55,
+      purpose: PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION,
+      status: PaymentStatus.SUCCEEDED,
+      companyId: 3,
+      amount: "4990.00",
+      paidAt,
+      metadata: { invoiceUuid: invoice.uuid },
+    });
+    const tx = {
+      companyBillingInvoice: {
+        findFirst: jest.fn().mockResolvedValue(invoice),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      companyBillingAccount: { upsert: jest.fn() },
+    };
+    const prisma = {
+      payment: { findUnique: jest.fn().mockResolvedValue(payment) },
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+    const service = new PaymentsService(prisma as never, {} as never, {} as never);
+
+    await (service as unknown as { activatePaidCompanyBilling: (paymentId: number) => Promise<unknown> }).activatePaidCompanyBilling(55);
+
+    const expectedPeriodEndsAt = new Date(paidAt);
+    expectedPeriodEndsAt.setUTCMonth(expectedPeriodEndsAt.getUTCMonth() + 1);
+    expect(tx.companyBillingInvoice.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: invoice.id },
+      data: expect.objectContaining({
+        status: "PAID",
+        paidAt,
+        periodStartsAt: paidAt,
+        periodEndsAt: expectedPeriodEndsAt,
+      }),
+    }));
+    expect(tx.companyBillingInvoice.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        companyId: invoice.companyId,
+        id: { not: invoice.id },
+        status: "OPEN",
+        periodStartsAt: { lt: expectedPeriodEndsAt },
+      }),
+      data: { status: "CANCELED" },
+    }));
+    expect(tx.companyBillingAccount.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: expect.objectContaining({
+        status: "ACTIVE",
+        currentPeriodStartsAt: paidAt,
+        currentPeriodEndsAt: expectedPeriodEndsAt,
+      }),
+    }));
   });
 });

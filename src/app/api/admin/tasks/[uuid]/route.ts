@@ -50,8 +50,8 @@ export async function PATCH(
   const access = await authorizeTask(session, task.source, "canEdit");
   if (!access.ok) return access.response;
 
-  const body = (await request.json().catch(() => ({}))) as { action?: "start" | "resolve" | "reopen" };
-  if (!body.action || !["start", "resolve", "reopen"].includes(body.action)) {
+  const body = (await request.json().catch(() => ({}))) as { action?: "start" | "resolve" | "reopen" | "archive" | "assign"; assignedToId?: number | null };
+  if (!body.action || !["start", "resolve", "reopen", "archive", "assign"].includes(body.action)) {
     return NextResponse.json({ message: "Invalid task action." }, { status: 400 });
   }
   if (body.action === "resolve" && task.source !== "AUDIT") {
@@ -59,6 +59,26 @@ export async function PATCH(
   }
 
   const next = await prisma.$transaction(async (tx) => {
+    if (body.action === "assign") {
+      const assignedToId = body.assignedToId ?? null;
+      if (assignedToId) {
+        const assignee = await tx.user.findFirst({
+          where: { id: assignedToId, role: { in: ["SUPER_ADMIN", "ADMIN", "MANAGER", "SUPPORT"] } },
+          select: { id: true },
+        });
+        if (!assignee) throw new Error("ASSIGNEE_NOT_FOUND");
+      }
+      return tx.adminTask.update({
+        where: { uuid },
+        data: { assignedToId, assignedAt: assignedToId ? new Date() : null },
+      });
+    }
+    if (body.action === "archive") {
+      return tx.adminTask.update({
+        where: { uuid },
+        data: { status: "DISMISSED", resolvedById: session.userId, resolvedAt: new Date() },
+      });
+    }
     if (body.action === "resolve") {
       const auditId = task.sourceKey.startsWith("audit:") ? task.sourceKey.slice("audit:".length) : null;
       if (auditId) {

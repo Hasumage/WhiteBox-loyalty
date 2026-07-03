@@ -10,6 +10,13 @@ export type YooKassaPaymentObject = {
   paid?: boolean;
   amount?: { value: string; currency: string };
   confirmation?: { type?: string; confirmation_url?: string };
+  payment_method?: {
+    id?: string;
+    type?: string;
+    saved?: boolean;
+    title?: string;
+    card?: { last4?: string; card_type?: string };
+  };
   cancellation_details?: { party?: string; reason?: string };
   metadata?: Record<string, unknown>;
   created_at?: string;
@@ -24,6 +31,8 @@ type CreatePaymentInput = {
   idempotenceKey?: string;
   customerEmail: string;
   metadata: Record<string, string>;
+  savePaymentMethod?: boolean;
+  paymentMethodId?: string;
 };
 
 @Injectable()
@@ -74,15 +83,9 @@ export class YooKassaService {
     this.assertPaymentAmount(input);
 
     const idempotenceKey = input.idempotenceKey ?? randomUUID();
-    const body = {
+    const body: Record<string, unknown> = {
       amount: { value: input.amount, currency: input.currency },
       capture: true,
-      confirmation: {
-        type: "redirect",
-        return_url: input.returnUrl,
-      },
-      payment_method_data: { type: "bank_card" },
-      save_payment_method: false,
       description: input.description.slice(0, 128),
       metadata: input.metadata,
       receipt: {
@@ -99,6 +102,16 @@ export class YooKassaService {
         ],
       },
     };
+    if (input.paymentMethodId) {
+      body.payment_method_id = input.paymentMethodId;
+    } else {
+      body.confirmation = {
+        type: "redirect",
+        return_url: input.returnUrl,
+      };
+      body.payment_method_data = { type: "bank_card" };
+      body.save_payment_method = Boolean(input.savePaymentMethod);
+    }
 
     const response = await fetch(`${this.apiUrl}/payments`, {
       method: "POST",

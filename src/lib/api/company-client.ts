@@ -245,6 +245,14 @@ function headers(json = false) {
   };
 }
 
+function normalizeCompanyApiMessage(message: unknown) {
+  const text = Array.isArray(message) ? message.join(", ") : typeof message === "string" ? message : "";
+  if (text === "Company access is paused until monthly NearLoy access is renewed.") {
+    return "Доступ компании приостановлен до продления ежемесячной подписки NearLoy.";
+  }
+  return text;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase()}${path}`, {
     cache: "no-store",
@@ -253,7 +261,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = Array.isArray(payload.message) ? payload.message.join(", ") : payload.message;
+    const message = normalizeCompanyApiMessage(payload.message);
     throw new Error(message || `HTTP ${response.status}`);
   }
   return payload as T;
@@ -591,6 +599,13 @@ export function companyFinance() {
     paidBillingFees: number;
     availableForPayout: number;
     activeSubscribers: number;
+    savedPaymentMethod: null | {
+      provider: "YOOKASSA";
+      title: string;
+      cardLast4: string | null;
+      cardType: string | null;
+      savedAt: string;
+    };
     operations: Array<{ uuid: string; amount: number; status: string; title: string; createdAt: string }>;
   }>("/company/finance");
 }
@@ -599,6 +614,14 @@ export type CompanyBillingData = {
   account: { status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED"; trialEndsAt: string | null; currentPeriodStartsAt: string; currentPeriodEndsAt: string };
   invoice: null | { uuid: string; status: "OPEN" | "PAID" | "WAIVED" | "CANCELED"; periodStartsAt: string; periodEndsAt: string; baseFee: string | number; promoDiscountAmount: string | number; commissionCreditAmount: string | number; amountDue: string | number };
   availableBalance: number;
+  activePayment: null | CompanyBillingCheckout;
+  savedPaymentMethod: null | {
+    provider: "YOOKASSA";
+    title: string;
+    cardLast4: string | null;
+    cardType: string | null;
+    savedAt: string;
+  };
   history: Array<{
     uuid: string;
     status: string;
@@ -624,19 +647,31 @@ export function payCompanyBillingInvoice() {
 
 export type CompanyBillingCheckout = {
   uuid: string;
-  status: string;
+  status: "PENDING" | "WAITING_FOR_CAPTURE" | "SUCCEEDED" | "CANCELED" | "FAILED" | "REFUNDED" | "EXPIRED";
   amount: string | number;
   currency: string;
   confirmationUrl: string | null;
   providerPaymentId: string | null;
   providerStatus: string | null;
   paidAt: string | null;
+  expiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-export function createCompanyBillingCheckout() {
-  return request<CompanyBillingCheckout>("/company/billing/checkout", { method: "POST" });
+export function createCompanyBillingCheckout(savePaymentMethod = false) {
+  return request<CompanyBillingCheckout>("/company/billing/checkout", {
+    method: "POST",
+    body: JSON.stringify({ savePaymentMethod }),
+  });
+}
+
+export function payCompanyBillingWithSavedPaymentMethod() {
+  return request<CompanyBillingCheckout>("/company/billing/payment-method/pay", { method: "POST" });
+}
+
+export function deleteCompanyBillingPaymentMethod() {
+  return request<{ success: true }>("/company/billing/payment-method", { method: "DELETE" });
 }
 
 export function getCompanyBillingPayment(uuid: string) {

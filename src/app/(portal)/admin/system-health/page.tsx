@@ -8,7 +8,6 @@ import {
   BellRing,
   Bot,
   CheckCircle2,
-  Clock3,
   Flame,
   RefreshCcw,
   RotateCw,
@@ -33,6 +32,7 @@ import { cn } from "@/lib/utils";
 
 type QueueRow = AdminSystemHealthResponse["telegram"]["queue"]["recent"][number];
 type IncidentRow = AdminSystemHealthResponse["developerIncidents"][number];
+type AlertRow = AdminSystemHealthResponse["alerts"][number];
 type AdminIcon = ComponentType<{ className?: string }>;
 
 function formatDate(value: string | null, locale: Locale) {
@@ -53,6 +53,18 @@ function levelTone(level: IncidentRow["level"]) {
   if (level === "CRITICAL") return "border-red-300/25 bg-red-300/10 text-red-100";
   if (level === "WARN") return "border-amber-300/25 bg-amber-300/10 text-amber-100";
   return "border-cyan-300/25 bg-cyan-300/10 text-cyan-100";
+}
+
+function priorityTone(priority: AlertRow["priority"]) {
+  if (priority === "CRITICAL") return "border-red-300/25 bg-red-300/10 text-red-100";
+  if (priority === "HIGH") return "border-amber-300/25 bg-amber-300/10 text-amber-100";
+  return "border-cyan-300/25 bg-cyan-300/10 text-cyan-100";
+}
+
+function sourceLabel(source: AlertRow["source"]) {
+  if (source === "FINANCE") return "Финансы";
+  if (source === "COMPANY_VERIFICATION") return "Верификация компаний";
+  return "Аудит / система";
 }
 
 function StatCard({
@@ -129,40 +141,39 @@ export default function AdminSystemHealthPage() {
 
   const queue = health?.telegram.queue;
   const delivery = health?.telegram.landingLeadDelivery24h;
-  const hasQueueFailures = (queue?.failed ?? 0) > 0;
 
   const stats = useMemo(
     () => [
       {
         label: t("admin.systemHealth.openIssues"),
         value: health?.summary.openIssues ?? 0,
-        hint: t("admin.systemHealth.openIssuesHint"),
+        hint: "Открытые задачи и критичные системные сигналы",
         icon: ServerCrash,
         tone: (health?.summary.openIssues ?? 0) > 0 ? "red" : "emerald",
       },
       {
-        label: t("admin.systemHealth.criticalIncidents"),
-        value: health?.summary.criticalIncidents ?? 0,
-        hint: t("admin.systemHealth.criticalIncidentsHint"),
+        label: "Критичные задачи",
+        value: health?.summary.criticalTasks ?? 0,
+        hint: "Алерты, которые требуют немедленного решения",
         icon: Flame,
+        tone: (health?.summary.criticalTasks ?? 0) > 0 ? "red" : "emerald",
+      },
+      {
+        label: "Важные задачи",
+        value: health?.summary.highTasks ?? 0,
+        hint: "Высокий приоритет без статуса resolved",
+        icon: ShieldAlert,
+        tone: (health?.summary.highTasks ?? 0) > 0 ? "amber" : "emerald",
+      },
+      {
+        label: "Системные инциденты",
+        value: health?.summary.criticalIncidents ?? 0,
+        hint: "CRITICAL события аудита и интеграций",
+        icon: AlertTriangle,
         tone: (health?.summary.criticalIncidents ?? 0) > 0 ? "red" : "emerald",
       },
-      {
-        label: t("admin.systemHealth.queueFailed"),
-        value: health?.summary.telegramQueueFailed ?? 0,
-        hint: t("admin.systemHealth.queueFailedHint"),
-        icon: BellRing,
-        tone: hasQueueFailures ? "amber" : "emerald",
-      },
-      {
-        label: t("admin.systemHealth.queueDue"),
-        value: health?.summary.telegramQueueDue ?? 0,
-        hint: t("admin.systemHealth.queueDueHint"),
-        icon: Clock3,
-        tone: (health?.summary.telegramQueueDue ?? 0) > 0 ? "cyan" : "emerald",
-      },
     ],
-    [hasQueueFailures, health?.summary, t],
+    [health?.summary, t],
   );
 
   async function load() {
@@ -245,6 +256,66 @@ export default function AdminSystemHealthPage() {
 
       {error && <div className="rounded-2xl border border-red-300/20 bg-red-300/10 p-4 text-sm text-red-100">{error}</div>}
       {notice && <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm text-emerald-100">{notice}</div>}
+
+      <Card className="overflow-hidden border-white/10 bg-card/70">
+        <CardHeader className="border-b border-white/10 bg-white/[0.03] px-6 py-5">
+          <CardTitle className="flex items-center gap-3">
+            <ShieldAlert className="h-5 w-5 text-red-100" /> Критичные алерты и источники
+          </CardTitle>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Здесь собраны активные задачи из главного дашборда: финансы, верификация компаний и системный аудит. Telegram-очередь ниже — только вторичная диагностика доставки.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="p-6 text-muted-foreground">{t("admin.common.loading")}</div>
+          ) : health?.alerts.length ? (
+            <div className="divide-y divide-white/10">
+              {health.alerts.map((alert) => (
+                <div key={alert.uuid} className="grid gap-4 p-5 lg:grid-cols-[180px_1fr_260px] lg:items-start">
+                  <div className="space-y-3">
+                    <Badge variant="outline" className={priorityTone(alert.priority)}>{alert.priority}</Badge>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Источник</p>
+                      <p className="mt-1 font-semibold">{sourceLabel(alert.source)}</p>
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-lg font-semibold">{alert.title}</p>
+                    <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">{alert.description || "Описание не передано."}</p>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Статус: {alert.status} · Создано: {formatDate(alert.createdAt, locale)}
+                      {alert.assignedTo?.name ? ` · Ответственный: ${alert.assignedTo.name}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 lg:items-end">
+                    <Button asChild variant="secondary" size="sm" className="w-full lg:w-auto">
+                      <Link href={`/admin/tasks/${alert.uuid}`}>
+                        <BellRing className="h-4 w-4" />
+                        Открыть задачу
+                      </Link>
+                    </Button>
+                    {alert.targetUrl ? (
+                      <Button asChild size="sm" className="w-full bg-white text-black hover:bg-white/90 lg:w-auto">
+                        <Link href={alert.targetUrl}>{alert.targetLabel || "Открыть источник"}</Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-6">
+              <div className="rounded-3xl border border-emerald-300/20 bg-emerald-300/[0.08] p-6 text-emerald-50">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5" />
+                  <p className="font-semibold">Критичных алертов нет. Активных задач для этой зоны не найдено.</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-[1.45fr_0.9fr]">
         <Card className="overflow-hidden border-white/10 bg-card/70">

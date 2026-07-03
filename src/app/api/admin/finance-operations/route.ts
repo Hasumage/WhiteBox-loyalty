@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
-import { upsertAdminTaskForFinance } from "@/lib/admin/admin-tasks";
 import { resolveEffectivePermission } from "@/lib/admin/access-control";
+import { calculateCompanyReferralPayoutCoverage, COMPANY_REFERRAL_PAYOUT_TITLE } from "@/lib/company-referrals/company-referrals";
 import { calculateCompanyFinancialSnapshot, evaluatePayoutCoverage } from "@/lib/finance/company-finance";
 import { prisma } from "@/lib/prisma";
 
@@ -30,6 +30,10 @@ function financeAccess(actor: Awaited<ReturnType<typeof actorFromSession>>) {
   return resolveEffectivePermission(actor?.role ?? "CLIENT", explicit, "FINANCE");
 }
 
+function isReferralPayout(item: { companyId: number | null; requestedById: number | null; title: string; type: string }) {
+  return item.type === "PAYOUT_REQUEST" && !item.companyId && Boolean(item.requestedById) && item.title.startsWith(COMPANY_REFERRAL_PAYOUT_TITLE);
+}
+
 export async function GET(request: NextRequest) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
@@ -49,14 +53,13 @@ export async function GET(request: NextRequest) {
   });
 
   const companyIds = [...new Set(items.flatMap((item) => (item.companyId ? [item.companyId] : [])))];
-  if (companyIds.length === 0) return NextResponse.json({ items });
 
   const now = new Date();
   const [subscriptions, companyPayouts] = await Promise.all([
     prisma.userSubscription.findMany({
       where: {
         status: { in: ["ACTIVE", "EXPIRED"] },
-        subscription: { companyId: { in: companyIds } },
+        subscription: { companyId: { in: companyIds.length ? companyIds : [-1] } },
       },
       select: {
         status: true,
@@ -67,7 +70,7 @@ export async function GET(request: NextRequest) {
     }),
     prisma.financeOperation.findMany({
       where: {
-        companyId: { in: companyIds },
+        companyId: { in: companyIds.length ? companyIds : [-1] },
         type: "PAYOUT_REQUEST",
         status: { in: ["PENDING_APPROVAL", "APPROVED", "PAID"] },
       },
@@ -88,14 +91,23 @@ export async function GET(request: NextRequest) {
       calculateCompanyFinancialSnapshot(companyId, revenueRows, companyPayouts, now),
     ]),
   );
+  const referralCoverages = new Map(
+    await Promise.all(
+      items
+        .filter(isReferralPayout)
+        .map(async (item) => [item.uuid, await calculateCompanyReferralPayoutCoverage(item.requestedById!, item)] as const),
+    ),
+  );
 
   return NextResponse.json({
     items: items.map((item) => ({
       ...item,
+      payoutTarget: item.companyId ? "COMPANY" : isReferralPayout(item) ? "PR_AGENT" : "UNLINKED",
       companySnapshot:
         item.companyId && snapshots.has(item.companyId)
           ? evaluatePayoutCoverage(snapshots.get(item.companyId)!, item)
           : null,
+      referralSnapshot: referralCoverages.get(item.uuid) ?? null,
     })),
   });
 }
@@ -109,59 +121,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Finance request creation is not allowed" }, { status: 403 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    title?: string;
-    amount?: string;
-    currency?: string;
-    details?: string;
-  };
-
-  const title = body.title?.trim().slice(0, 160);
-  const amount = Number(body.amount);
-  const currency = (body.currency?.trim().toUpperCase() || "RUB").slice(0, 8);
-
-  if (!title || !Number.isFinite(amount) || amount <= 0) {
-    return NextResponse.json({ message: "Enter payout title and positive amount" }, { status: 400 });
-  }
-
-  const operation = await prisma.$transaction(async (tx) => {
-    const created = await tx.financeOperation.create({
-      data: {
-        type: "PAYOUT_REQUEST",
-        status: "PENDING_APPROVAL",
-        title,
-        amount,
-        currency,
-        details: body.details?.trim().slice(0, 2000) || null,
-        requestedById: actor.id,
-        requestedAt: new Date(),
-      },
-      include: {
-        company: { select: { id: true, slug: true, name: true } },
-        requestedBy: { select: { id: true, uuid: true, email: true, name: true } },
-        approvedBy: { select: { id: true, uuid: true, email: true, name: true } },
-      },
-    });
-
-    await tx.auditEvent.create({
-      data: {
-        workspace: "MANAGER",
-        level: "WARN",
-        category: "BILLING",
-        action: "Finance payout request created",
-        actorUserId: actor.id,
-        actorLabel: actor.email,
-        targetUuid: created.uuid,
-        targetLabel: created.title,
-        details: `${created.amount.toString()} ${created.currency}`,
-        tags: ["#BILLING", "#FINANCE"],
-      },
-    });
-
-    return created;
-  });
-
-  // The dashboard reconciliation will recreate a missed task; do not fail a persisted payout request.
-  await upsertAdminTaskForFinance(operation).catch(() => undefined);
-  return NextResponse.json(operation);
+  return NextResponse.json(
+    { message: "Create payouts from a company balance or from the PR agent cabinet. Free-form finance payouts are disabled." },
+    { status: 410 },
+  );
 }

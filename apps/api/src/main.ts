@@ -3,10 +3,34 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
 
+function configuredCorsOrigins() {
+  const configured = process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "";
+  const origins = configured
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+
+  return Array.from(new Set([
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://nearloy.up.railway.app",
+    "https://nearloy.ru",
+    "https://www.nearloy.ru",
+    ...origins,
+  ]));
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const origin = process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
-  app.enableCors({ origin, credentials: true });
+  const allowedOrigins = configuredCorsOrigins();
+  app.enableCors({
+    origin(origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) {
+      if (!origin) return callback(null, true);
+      const normalizedOrigin = origin.replace(/\/$/, "");
+      return callback(null, allowedOrigins.includes(normalizedOrigin));
+    },
+    credentials: true,
+  });
   app.setGlobalPrefix("api");
   app.useGlobalPipes(
     new ValidationPipe({
@@ -34,7 +58,6 @@ async function bootstrap() {
 
   const port = Number(process.env.API_PORT ?? 3001);
   await app.listen(port);
-  // eslint-disable-next-line no-console
   console.log(
     `API listening on http://localhost:${port} — Swagger: http://localhost:${port}/api/docs`,
   );

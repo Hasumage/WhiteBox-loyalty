@@ -3,7 +3,7 @@ import { ProxyAgent, fetch as undiciFetch } from "undici";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const proxyUrl = process.env.TELEGRAM_PROXY_URL;
-const webAppUrl = process.env.TELEGRAM_WEB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://nearloy.app/";
+const webAppUrl = process.env.TELEGRAM_WEB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://nearloy.up.railway.app/";
 
 if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not set.");
 

@@ -1,14 +1,11 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Banknote, Building2, CircleAlert, CircleCheckBig, Clock3, FilePlus2, ShieldCheck, Wallet } from "lucide-react";
+import { Banknote, Building2, CircleAlert, CircleCheckBig, Clock3, Megaphone, ShieldCheck, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  adminCreateFinanceOperation,
   adminListFinanceOperations,
   adminUpdateFinanceOperation,
   type AdminFinanceOperation,
@@ -22,11 +19,7 @@ function money(value: string, currency: string, locale: string) {
 export default function AdminFinancePage() {
   const { locale, t } = useI18n("ru");
   const [items, setItems] = useState<AdminFinanceOperation[]>([]);
-  const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("");
-  const [details, setDetails] = useState("");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   const pendingTotal = useMemo(
@@ -45,22 +38,6 @@ export default function AdminFinancePage() {
   useEffect(() => {
     void load();
   }, []);
-
-  async function create() {
-    setSaving(true);
-    setMessage("");
-    const result = await adminCreateFinanceOperation({ title, amount, details });
-    setSaving(false);
-    if (!result.ok) {
-      setMessage(result.message);
-      return;
-    }
-    setTitle("");
-    setAmount("");
-    setDetails("");
-    setMessage(t("admin.finance.createdNotice"));
-    await load();
-  }
 
   async function setStatus(uuid: string, status: AdminFinanceOperation["status"]) {
     setMessage("");
@@ -98,23 +75,23 @@ export default function AdminFinancePage() {
       </div>
 
       <Card className="border-white/10 bg-card/70">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <FilePlus2 className="h-5 w-5" /> {t("admin.finance.createTitle")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 lg:grid-cols-[1.4fr_180px_auto]">
-          <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t("admin.finance.reasonPlaceholder")} />
-          <Input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder={t("admin.finance.amountPlaceholder")} />
-          <Button disabled={saving || !title.trim() || !amount.trim()} onClick={create}>
-            {t("admin.finance.createRequest")}
-          </Button>
-          <Textarea
-            value={details}
-            onChange={(event) => setDetails(event.target.value)}
-            placeholder={t("admin.finance.detailsPlaceholder")}
-            className="min-h-28 lg:col-span-3"
-          />
+        <CardContent className="grid gap-3 p-5 md:grid-cols-2">
+          <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.035] p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <Building2 className="h-4 w-4 text-cyan-100" /> Выплаты компаниям
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Создаются только из ЛК компании и проверяются по доступному балансу компании.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-violet-300/15 bg-violet-300/[0.035] p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <Megaphone className="h-4 w-4 text-violet-100" /> Выплаты PR-агентам
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Создаются PR-агентом в своём кабинете и проверяются по заработанной referral-комиссии.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -142,6 +119,11 @@ export default function AdminFinancePage() {
                   {item.company && (
                     <p className="mt-2 flex items-center gap-1.5 text-sm text-cyan-100">
                       <Building2 className="h-4 w-4" /> {item.company.name}
+                    </p>
+                  )}
+                  {item.payoutTarget === "PR_AGENT" && (
+                    <p className="mt-2 flex items-center gap-1.5 text-sm text-violet-100">
+                      <Megaphone className="h-4 w-4" /> PR-агент: {item.requestedBy?.name ?? item.requestedBy?.email ?? "неизвестно"}
                     </p>
                   )}
                   {item.details && <p className="mt-2 text-sm text-muted-foreground">{item.details}</p>}
@@ -193,9 +175,43 @@ export default function AdminFinancePage() {
                       </div>
                     )}
                   </section>
+                ) : item.referralSnapshot ? (
+                  <section className="space-y-3 rounded-2xl border border-violet-300/15 bg-violet-300/[0.035] p-4 lg:col-span-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="flex items-center gap-2 font-semibold">
+                        <Megaphone className="h-4 w-4 text-violet-100" /> PR-позиция
+                      </h3>
+                      {item.referralSnapshot.requestCovered ? (
+                        <Badge className="gap-1 border-emerald-300/25 bg-emerald-300/10 text-emerald-100">
+                          <CircleCheckBig className="h-3.5 w-3.5" /> {t("admin.finance.covered")}
+                        </Badge>
+                      ) : (
+                        <Badge className="gap-1 border-red-300/25 bg-red-300/10 text-red-100">
+                          <CircleAlert className="h-3.5 w-3.5" /> {t("admin.finance.notCovered")}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                      {[
+                        ["Доступно до заявки", money(String(item.referralSnapshot.availableBeforeThisRequest), item.currency, locale)],
+                        ["Заработано PR", money(String(item.referralSnapshot.referralCommission), item.currency, locale)],
+                        ["В резерве", money(String(item.referralSnapshot.reserved), item.currency, locale)],
+                        ["Оплачено", money(String(item.referralSnapshot.paid), item.currency, locale)],
+                        ["Компаний", `${item.referralSnapshot.activeCompanies}/${item.referralSnapshot.companies}`],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-xl border border-white/8 bg-black/15 p-3">
+                          <p className="text-xs text-muted-foreground">{label}</p>
+                          <p className="mt-1 font-semibold">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      Выплата покрывается только заработанной PR-комиссией по привлечённым компаниям.
+                    </p>
+                  </section>
                 ) : (
                   <p className="rounded-xl border border-white/8 bg-white/[0.025] p-3 text-xs text-muted-foreground lg:col-span-4">
-                    {t("admin.finance.internalRequest")}
+                    Непривязанная ручная операция. Новые такие заявки отключены; эту запись лучше отклонить или удалить из базы после сверки.
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2 lg:col-span-4">
@@ -204,7 +220,7 @@ export default function AdminFinancePage() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        disabled={item.companySnapshot?.requestCovered === false}
+                        disabled={item.companySnapshot?.requestCovered === false || item.referralSnapshot?.requestCovered === false || item.payoutTarget === "UNLINKED"}
                         onClick={() => setStatus(item.uuid, "APPROVED")}
                       >
                         {t("admin.finance.approve")}
@@ -213,7 +229,13 @@ export default function AdminFinancePage() {
                     </>
                   )}
                   {item.status === "APPROVED" && (
-                    <Button size="sm" disabled={item.companySnapshot?.requestCovered === false} onClick={() => setStatus(item.uuid, "PAID")}>{t("admin.finance.markPaid")}</Button>
+                    <Button
+                      size="sm"
+                      disabled={item.companySnapshot?.requestCovered === false || item.referralSnapshot?.requestCovered === false || item.payoutTarget === "UNLINKED"}
+                      onClick={() => setStatus(item.uuid, "PAID")}
+                    >
+                      {t("admin.finance.markPaid")}
+                    </Button>
                   )}
                 </div>
               </div>

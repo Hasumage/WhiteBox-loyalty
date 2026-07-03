@@ -62,7 +62,7 @@ export default function CompanyPortalPage() {
       <header className="relative overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_86%_8%,rgba(103,232,249,0.15),transparent_34%),linear-gradient(120deg,rgba(17,24,39,0.98),rgba(8,9,12,0.98))] p-6 sm:p-8">
         <div className="relative z-10 max-w-2xl">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">
-            <Sparkles className="h-3.5 w-3.5" /> Partner workspace
+            <Sparkles className="h-3.5 w-3.5" /> Рабочая область партнёра
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{dashboard?.company.name ?? "Кабинет компании"}</h1>

@@ -24,6 +24,7 @@ const STATUS_FILTERS: Array<{ value: AdminPaymentStatus | ""; label: string }> =
   { value: "CANCELED", label: "Отменены" },
   { value: "FAILED", label: "Ошибки" },
   { value: "REFUNDED", label: "Возвраты" },
+  { value: "EXPIRED", label: "Истекли" },
 ];
 
 const STATUS_COPY: Record<AdminPaymentStatus, { label: string; tone: string; icon: typeof Clock3 }> = {
@@ -33,6 +34,7 @@ const STATUS_COPY: Record<AdminPaymentStatus, { label: string; tone: string; ico
   CANCELED: { label: "Отменен", tone: "border-white/10 bg-white/5 text-muted-foreground", icon: XCircle },
   FAILED: { label: "Ошибка", tone: "border-red-400/25 bg-red-500/10 text-red-100", icon: AlertTriangle },
   REFUNDED: { label: "Возврат", tone: "border-violet-400/25 bg-violet-500/10 text-violet-100", icon: RefreshCw },
+  EXPIRED: { label: "Истёк", tone: "border-orange-400/25 bg-orange-500/10 text-orange-100", icon: Clock3 },
 };
 
 function money(value: string | number) {
@@ -89,12 +91,12 @@ export default function AdminPaymentsPage() {
     setLoading(true);
     setError(null);
     const result = await adminListPayments({ query: query.trim(), status, page: nextPage, limit: 20 });
-    if (!result) {
-      setError("Не удалось загрузить платежи. Проверьте доступ к финансам и API.");
+    if (!result.ok) {
+      setError(`Не удалось загрузить платежи (${result.status || "network"}): ${result.message}`);
       setData(null);
     } else {
-      setData(result);
-      setPage(result.page);
+      setData(result.data);
+      setPage(result.data.page);
     }
     setLoading(false);
   }
@@ -106,7 +108,7 @@ export default function AdminPaymentsPage() {
 
   const dangerCount = useMemo(() => {
     if (!data) return 0;
-    return data.summary.failed + data.summary.canceled + data.summary.refunded;
+    return data.summary.failed + data.summary.canceled + data.summary.refunded + data.summary.expired;
   }, [data]);
 
   return (
@@ -132,7 +134,7 @@ export default function AdminPaymentsPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard icon={ReceiptText} label="Оплачено" value={money(data?.summary.succeededAmount ?? 0)} hint={`${data?.summary.succeeded ?? 0} успешных платежей`} />
-        <SummaryCard icon={Clock3} label="В ожидании" value={String((data?.summary.pending ?? 0) + (data?.summary.waitingForCapture ?? 0))} hint="Клиенты еще не завершили оплату" />
+        <SummaryCard icon={Clock3} label="В ожидании" value={String((data?.summary.pending ?? 0) + (data?.summary.waitingForCapture ?? 0))} hint="Живые ссылки оплаты до 15 минут" />
         <SummaryCard icon={CheckCircle2} label="В выборке" value={String(data?.total ?? 0)} hint="Платежей по текущим фильтрам" />
         <SummaryCard icon={AlertTriangle} label="Требуют внимания" value={String(dangerCount)} hint="Ошибки, отмены и возвраты" />
       </div>
@@ -209,7 +211,7 @@ export default function AdminPaymentsPage() {
 
                 <div className="flex flex-col items-start gap-3 xl:items-end">
                   <p className="text-2xl font-semibold">{money(payment.amount)}</p>
-                  {payment.confirmationUrl && payment.status === "PENDING" && (
+                  {payment.confirmationUrl && (payment.status === "PENDING" || payment.status === "WAITING_FOR_CAPTURE") && (
                     <a href={payment.confirmationUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-sm hover:bg-white/10">
                       Ссылка оплаты <ExternalLink className="h-3.5 w-3.5" />
                     </a>

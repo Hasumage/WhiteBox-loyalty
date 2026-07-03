@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Building2,
   ChevronDown,
+  ClipboardList,
   CreditCard,
   Database,
   FileCheck,
@@ -57,14 +58,17 @@ const adminMenu: AdminMenuSection[] = [
   {
     groupKey: "admin.nav.overview",
     defaultOpen: true,
-    items: [{ href: "/admin", labelKey: "admin.nav.dashboard", icon: LayoutDashboard }],
+    items: [
+      { href: "/admin", labelKey: "admin.nav.dashboard", icon: LayoutDashboard },
+      { href: "/admin/tasks", labelKey: "admin.nav.tasks", icon: ClipboardList },
+    ],
   },
   {
     groupKey: "admin.nav.usersPartners",
     items: [
       { href: "/admin/users", labelKey: "admin.nav.users", icon: Users },
-      { href: "/admin/profile-statuses", labelKey: "admin.nav.profileStatuses", icon: Trophy },
       { href: "/admin/companies", labelKey: "admin.nav.companies", icon: Building2 },
+      { href: "/admin/profile-statuses", labelKey: "admin.nav.profileStatuses", icon: Trophy },
       { href: "/admin/categories", labelKey: "admin.nav.categories", icon: Tag },
       { href: "/admin/company-verifications", labelKey: "admin.nav.companyVerification", icon: FileCheck },
     ],

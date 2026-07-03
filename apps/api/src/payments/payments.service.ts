@@ -1,10 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { CompanyMemberRole, PaymentPurpose, PaymentStatus, Prisma, SubscriptionBundleStatus, SubscriptionStatus } from "@prisma/client";
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { CompanyMemberRole, PaymentProvider, PaymentPurpose, PaymentStatus, Prisma, SubscriptionBundleStatus, SubscriptionStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { PrismaService } from "../prisma/prisma.service";
 import { RegisteredService } from "../registered/registered.service";
 import { assertSubscriptionsEnabled } from "../common/subscriptions-feature";
+import { decryptPaymentMethodId, encryptPaymentMethodId } from "./payment-method-crypto";
 import { YooKassaPaymentObject, YooKassaService } from "./yookassa.service";
 
 function money(value: Prisma.Decimal | number | string) {
@@ -14,6 +15,16 @@ function money(value: Prisma.Decimal | number | string) {
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
+
+const PAYMENT_CHECKOUT_TTL_MS = 15 * 60 * 1000;
+const ACTIVE_CHECKOUT_STATUSES = [PaymentStatus.PENDING, PaymentStatus.WAITING_FOR_CAPTURE] as const;
+const FINAL_PAYMENT_STATUSES = new Set<PaymentStatus>([
+  PaymentStatus.SUCCEEDED,
+  PaymentStatus.CANCELED,
+  PaymentStatus.FAILED,
+  PaymentStatus.REFUNDED,
+  PaymentStatus.EXPIRED,
+]);
 
 function mapProviderStatus(status: string | undefined): PaymentStatus {
   if (status === "succeeded") return PaymentStatus.SUCCEEDED;
@@ -33,12 +44,137 @@ function formatDateTime(value: Date | null | undefined) {
 }
 
 @Injectable()
-export class PaymentsService {
+export class PaymentsService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(PaymentsService.name);
+  private reconciliationTimer: NodeJS.Timeout | null = null;
+  private reconciliationRunning = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly yookassa: YooKassaService,
     private readonly registeredService: RegisteredService,
   ) {}
+
+  onModuleInit() {
+    const intervalMs = this.reconciliationIntervalMs();
+    if (intervalMs <= 0) return;
+    this.reconciliationTimer = setInterval(() => {
+      void this.reconcileYooKassaPayments().catch((error) => {
+        this.logger.warn(`YooKassa payment reconciliation failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }, intervalMs);
+    this.reconciliationTimer.unref?.();
+    void this.reconcileYooKassaPayments().catch((error) => {
+      this.logger.warn(`Initial YooKassa payment reconciliation failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
+
+  onModuleDestroy() {
+    if (this.reconciliationTimer) clearInterval(this.reconciliationTimer);
+    this.reconciliationTimer = null;
+  }
+
+  private reconciliationIntervalMs() {
+    const raw = Number(process.env.PAYMENT_RECONCILIATION_INTERVAL_MS ?? "60000");
+    return Number.isFinite(raw) ? raw : 60_000;
+  }
+
+  private reconciliationLookbackMs() {
+    const rawHours = Number(process.env.PAYMENT_RECONCILIATION_LOOKBACK_HOURS ?? "24");
+    const hours = Number.isFinite(rawHours) && rawHours > 0 ? rawHours : 24;
+    return hours * 60 * 60 * 1000;
+  }
+
+  private reconciliationBatchSize() {
+    const raw = Number(process.env.PAYMENT_RECONCILIATION_BATCH_SIZE ?? "50");
+    return Number.isFinite(raw) && raw > 0 ? Math.min(200, Math.floor(raw)) : 50;
+  }
+
+  private paymentExpiresAt(payment: { createdAt: Date }) {
+    return new Date(payment.createdAt.getTime() + PAYMENT_CHECKOUT_TTL_MS);
+  }
+
+  private isPaymentExpired(payment: { createdAt: Date }) {
+    return this.paymentExpiresAt(payment).getTime() <= Date.now();
+  }
+
+  private addMonths(date: Date, months = 1) {
+    const next = new Date(date);
+    next.setUTCMonth(next.getUTCMonth() + months);
+    return next;
+  }
+
+  private async expireStalePayments(where: Prisma.PaymentWhereInput = {}) {
+    const expiresBefore = new Date(Date.now() - PAYMENT_CHECKOUT_TTL_MS);
+    await this.prisma.payment.updateMany({
+      where: {
+        ...where,
+        status: { in: [...ACTIVE_CHECKOUT_STATUSES] },
+        createdAt: { lt: expiresBefore },
+      },
+      data: {
+        status: PaymentStatus.EXPIRED,
+        canceledAt: new Date(),
+        cancelReason: "Payment checkout expired after 15 minutes.",
+      },
+    });
+  }
+
+  private shouldSyncProviderPayment(payment: { providerPaymentId: string | null; status: PaymentStatus }) {
+    if (!payment.providerPaymentId) return false;
+    return !FINAL_PAYMENT_STATUSES.has(payment.status) || payment.status === PaymentStatus.EXPIRED;
+  }
+
+  private async applySuccessfulPayment(payment: { id: number; purpose: PaymentPurpose }) {
+    if (payment.purpose === PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION) {
+      return this.activatePaidCompanyBilling(payment.id);
+    }
+    if (payment.purpose === PaymentPurpose.USER_SUBSCRIPTION || payment.purpose === PaymentPurpose.USER_SUBSCRIPTION_BUNDLE) {
+      return this.activatePaidSubscription(payment.id);
+    }
+    return payment;
+  }
+
+  async reconcileYooKassaPayments() {
+    if (this.reconciliationRunning) return { checked: 0, updated: 0, skipped: true as const };
+    if (!this.yookassa.isConfigured()) return { checked: 0, updated: 0, skipped: true as const };
+
+    this.reconciliationRunning = true;
+    try {
+      const expiredCutoff = new Date(Date.now() - this.reconciliationLookbackMs());
+      const payments = await this.prisma.payment.findMany({
+        where: {
+          provider: PaymentProvider.YOOKASSA,
+          providerPaymentId: { not: null },
+          OR: [
+            { status: { in: [PaymentStatus.PENDING, PaymentStatus.WAITING_FOR_CAPTURE] } },
+            { status: PaymentStatus.EXPIRED, createdAt: { gte: expiredCutoff } },
+          ],
+        },
+        select: { id: true, providerPaymentId: true },
+        orderBy: { createdAt: "asc" },
+        take: this.reconciliationBatchSize(),
+      });
+
+      let updated = 0;
+      for (const payment of payments) {
+        if (!payment.providerPaymentId) continue;
+        try {
+          const synced = await this.syncProviderPayment(payment.providerPaymentId);
+          if (synced) updated += 1;
+        } catch (error) {
+          this.logger.warn(
+            `YooKassa payment ${payment.id} reconciliation skipped: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
+      await this.expireStalePayments();
+      return { checked: payments.length, updated, skipped: false as const };
+    } finally {
+      this.reconciliationRunning = false;
+    }
+  }
 
   private appReturnUrl(paymentUuid: string) {
     const configured = process.env.YOOKASSA_RETURN_URL || process.env.TELEGRAM_WEB_APP_URL || process.env.FRONTEND_ORIGIN || "http://localhost:3000";
@@ -72,7 +208,7 @@ export class PaymentsService {
     return `${base}/company/billing?payment=${encodeURIComponent(paymentUuid)}`;
   }
 
-  async createCompanyBillingCheckout(userId: number) {
+  async createCompanyBillingCheckout(userId: number, options: { savePaymentMethod?: boolean; paymentMethodId?: string } = {}) {
     if (!this.yookassa.isConfigured()) {
       throw new BadRequestException("YooKassa is not configured. Payment checkout is unavailable.");
     }
@@ -105,11 +241,16 @@ export class PaymentsService {
       throw new BadRequestException("Сейчас нет счёта на оплату подписки NearLoy.");
     }
 
+    await this.expireStalePayments({
+      companyId: member.companyId,
+      purpose: PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION,
+    });
+
     const invoicePayments = await this.prisma.payment.findMany({
       where: {
         companyId: member.companyId,
         purpose: PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION,
-        status: { in: [PaymentStatus.PENDING, PaymentStatus.WAITING_FOR_CAPTURE, PaymentStatus.SUCCEEDED] },
+        status: { in: [PaymentStatus.PENDING, PaymentStatus.WAITING_FOR_CAPTURE] },
       },
       orderBy: { createdAt: "desc" },
       take: 20,
@@ -121,10 +262,7 @@ export class PaymentsService {
       return metadata.invoiceUuid === invoice.uuid;
     });
 
-    if (existingPayment?.status === PaymentStatus.SUCCEEDED) {
-      throw new BadRequestException("Текущая подписка NearLoy уже оплачена.");
-    }
-    if (existingPayment && existingPayment.confirmationUrl) {
+    if (!options.paymentMethodId && existingPayment && existingPayment.confirmationUrl && !this.isPaymentExpired(existingPayment)) {
       return this.serializePayment(existingPayment);
     }
 
@@ -138,9 +276,60 @@ export class PaymentsService {
         companyId: String(member.companyId),
         invoiceUuid: invoice.uuid,
         planType: "company-nearloy-subscription",
+        savePaymentMethod: String(Boolean(options.savePaymentMethod)),
       },
       returnUrlKind: "company",
+      savePaymentMethod: options.savePaymentMethod,
+      paymentMethodId: options.paymentMethodId,
     });
+  }
+
+  async createCompanyBillingSavedMethodPayment(userId: number) {
+    const member = await this.prisma.companyMember.findFirst({
+      where: {
+        userId,
+        isActive: true,
+        role: { in: [CompanyMemberRole.OWNER, CompanyMemberRole.MANAGER] },
+      },
+      include: { company: { select: { billingAccount: true } } },
+    });
+    const account = member?.company.billingAccount;
+    if (!member || !account?.paymentMethodEncrypted || !account.paymentMethodIv || !account.paymentMethodTag || account.paymentMethodDeletedAt) {
+      throw new NotFoundException("Saved YooKassa payment method not found.");
+    }
+    const paymentMethodId = decryptPaymentMethodId({
+      encrypted: account.paymentMethodEncrypted,
+      iv: account.paymentMethodIv,
+      tag: account.paymentMethodTag,
+    });
+    return this.createCompanyBillingCheckout(userId, { paymentMethodId });
+  }
+
+  async deleteCompanyBillingPaymentMethod(userId: number) {
+    const member = await this.prisma.companyMember.findFirst({
+      where: {
+        userId,
+        isActive: true,
+        role: { in: [CompanyMemberRole.OWNER, CompanyMemberRole.MANAGER] },
+      },
+      select: { companyId: true },
+    });
+    if (!member) throw new NotFoundException("Company account not found.");
+    await this.prisma.companyBillingAccount.updateMany({
+      where: { companyId: member.companyId },
+      data: {
+        paymentMethodProvider: null,
+        paymentMethodEncrypted: null,
+        paymentMethodIv: null,
+        paymentMethodTag: null,
+        paymentMethodTitle: null,
+        paymentMethodCardLast4: null,
+        paymentMethodCardType: null,
+        paymentMethodSavedAt: null,
+        paymentMethodDeletedAt: new Date(),
+      },
+    });
+    return { success: true as const };
   }
 
   async createUserSubscriptionCheckout(userId: number, planUuid: string) {
@@ -148,6 +337,8 @@ export class PaymentsService {
     if (!this.yookassa.isConfigured()) {
       throw new BadRequestException("YooKassa is not configured. Payment checkout is unavailable.");
     }
+
+    await this.expireStalePayments({ userId });
 
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true } });
     if (!user) throw new NotFoundException("User not found.");
@@ -239,6 +430,8 @@ export class PaymentsService {
     companyId?: number | null;
     metadata: Record<string, string>;
     returnUrlKind?: "user" | "company";
+    savePaymentMethod?: boolean;
+    paymentMethodId?: string;
   }) {
     const idempotenceKey = randomUUID();
     const created = await this.prisma.payment.create({
@@ -272,6 +465,8 @@ export class PaymentsService {
         nearloyUserId: String(input.user.id),
         ...input.metadata,
       },
+      savePaymentMethod: input.savePaymentMethod,
+      paymentMethodId: input.paymentMethodId,
     });
 
     const next = await this.prisma.payment.update({
@@ -285,6 +480,12 @@ export class PaymentsService {
         providerPayload: toJson(payment),
       },
     });
+
+    if (next.status === PaymentStatus.SUCCEEDED) {
+      await this.applySuccessfulPayment(next);
+      const activated = await this.prisma.payment.findUnique({ where: { id: next.id } });
+      return this.serializePayment(activated ?? next);
+    }
 
     return this.serializePayment(next);
   }
@@ -306,7 +507,6 @@ export class PaymentsService {
     const payment = await this.prisma.payment.findUnique({ where: { providerPaymentId: providerPayment.id } });
     if (!payment) return null;
 
-    const status = mapProviderStatus(providerPayment.status);
     const amountValue = Number(providerPayment.amount?.value ?? payment.amount);
     if (Number.isFinite(amountValue) && Math.abs(amountValue - Number(payment.amount)) > 0.01) {
       await this.prisma.payment.update({
@@ -321,6 +521,12 @@ export class PaymentsService {
       throw new BadRequestException("Provider payment amount mismatch.");
     }
 
+    const providerStatus = mapProviderStatus(providerPayment.status);
+    const status =
+      payment.status === PaymentStatus.EXPIRED && providerStatus !== PaymentStatus.SUCCEEDED
+        ? PaymentStatus.EXPIRED
+        : providerStatus;
+
     const updated = await this.prisma.payment.update({
       where: { id: payment.id },
       data: {
@@ -334,11 +540,7 @@ export class PaymentsService {
     });
 
     if (status === PaymentStatus.SUCCEEDED) {
-      if (updated.purpose === PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION) {
-        await this.activatePaidCompanyBilling(updated.id);
-      } else {
-        await this.activatePaidSubscription(updated.id);
-      }
+      await this.applySuccessfulPayment(updated);
     }
     return updated;
   }
@@ -364,13 +566,29 @@ export class PaymentsService {
 
       if (!invoice || invoice.status === "PAID" || invoice.status === "WAIVED") return payment;
 
+      const paidAt = payment.paidAt ?? new Date();
+      const periodStartsAt = invoice.periodEndsAt <= paidAt ? paidAt : invoice.periodStartsAt;
+      const periodEndsAt = invoice.periodEndsAt <= paidAt ? this.addMonths(paidAt) : invoice.periodEndsAt;
+
       await tx.companyBillingInvoice.update({
         where: { id: invoice.id },
         data: {
           status: "PAID",
           paidAmount: payment.amount,
-          paidAt: payment.paidAt ?? new Date(),
+          paidAt,
+          periodStartsAt,
+          periodEndsAt,
         },
+      });
+
+      await tx.companyBillingInvoice.updateMany({
+        where: {
+          companyId: invoice.companyId,
+          id: { not: invoice.id },
+          status: "OPEN",
+          periodStartsAt: { lt: periodEndsAt },
+        },
+        data: { status: "CANCELED" },
       });
 
       await tx.companyBillingAccount.upsert({
@@ -379,19 +597,60 @@ export class PaymentsService {
           companyId: invoice.companyId,
           status: "ACTIVE",
           trialEndsAt: null,
-          currentPeriodStartsAt: invoice.periodStartsAt,
-          currentPeriodEndsAt: invoice.periodEndsAt,
+          currentPeriodStartsAt: periodStartsAt,
+          currentPeriodEndsAt: periodEndsAt,
         },
         update: {
           status: "ACTIVE",
           trialEndsAt: null,
-          currentPeriodStartsAt: invoice.periodStartsAt,
-          currentPeriodEndsAt: invoice.periodEndsAt,
+          currentPeriodStartsAt: periodStartsAt,
+          currentPeriodEndsAt: periodEndsAt,
         },
       });
 
+      const savedPaymentMethod = this.extractSavedPaymentMethod(payment.providerPayload);
+      if (savedPaymentMethod) {
+        const encrypted = encryptPaymentMethodId(savedPaymentMethod.id);
+        await tx.companyBillingAccount.update({
+          where: { companyId: invoice.companyId },
+          data: {
+            paymentMethodProvider: PaymentProvider.YOOKASSA,
+            paymentMethodEncrypted: Uint8Array.from(encrypted.encrypted),
+            paymentMethodIv: encrypted.iv,
+            paymentMethodTag: encrypted.tag,
+            paymentMethodTitle: savedPaymentMethod.title,
+            paymentMethodCardLast4: savedPaymentMethod.cardLast4,
+            paymentMethodCardType: savedPaymentMethod.cardType,
+            paymentMethodSavedAt: paidAt,
+            paymentMethodDeletedAt: null,
+          },
+        });
+      }
+
       return payment;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  private extractSavedPaymentMethod(payload: Prisma.JsonValue | null) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+    const paymentMethod = (payload as { payment_method?: unknown }).payment_method;
+    if (!paymentMethod || typeof paymentMethod !== "object" || Array.isArray(paymentMethod)) return null;
+    const method = paymentMethod as {
+      id?: unknown;
+      saved?: unknown;
+      title?: unknown;
+      type?: unknown;
+      card?: { last4?: unknown; card_type?: unknown };
+    };
+    if (typeof method.id !== "string" || method.saved !== true) return null;
+    const cardLast4 = typeof method.card?.last4 === "string" ? method.card.last4 : null;
+    const cardType = typeof method.card?.card_type === "string" ? method.card.card_type : null;
+    return {
+      id: method.id,
+      title: typeof method.title === "string" ? method.title : typeof method.type === "string" ? method.type : "YooKassa",
+      cardLast4,
+      cardType,
+    };
   }
 
   private async activatePaidSubscription(paymentId: number) {
@@ -516,10 +775,11 @@ export class PaymentsService {
   }
 
   async getUserPayment(userId: number, uuid: string) {
+    await this.expireStalePayments({ userId, uuid });
     let payment = await this.findUserPayment(userId, uuid);
     if (!payment) throw new NotFoundException("Payment not found.");
-    if (payment.providerPaymentId && payment.status !== PaymentStatus.SUCCEEDED && payment.status !== PaymentStatus.CANCELED) {
-      await this.syncProviderPayment(payment.providerPaymentId);
+    if (this.shouldSyncProviderPayment(payment)) {
+      await this.syncProviderPayment(payment.providerPaymentId!);
       payment = await this.findUserPayment(userId, uuid);
       if (!payment) throw new NotFoundException("Payment not found.");
     }
@@ -554,10 +814,11 @@ export class PaymentsService {
   }
 
   async getCompanyBillingPayment(userId: number, uuid: string) {
+    await this.expireStalePayments({ uuid });
     let payment = await this.findCompanyBillingPayment(userId, uuid);
 
-    if (payment.providerPaymentId && payment.status !== PaymentStatus.SUCCEEDED && payment.status !== PaymentStatus.CANCELED) {
-      await this.syncProviderPayment(payment.providerPaymentId);
+    if (this.shouldSyncProviderPayment(payment)) {
+      await this.syncProviderPayment(payment.providerPaymentId!);
       payment = await this.findCompanyBillingPayment(userId, uuid);
     }
 
@@ -570,6 +831,7 @@ export class PaymentsService {
   }
 
   async listAdminPayments(options: { query?: string; status?: PaymentStatus; page?: number; limit?: number }) {
+    await this.expireStalePayments();
     const page = Math.max(1, Number(options.page) || 1);
     const limit = Math.min(50, Math.max(5, Number(options.limit) || 20));
     const skip = (page - 1) * limit;
@@ -654,6 +916,7 @@ export class PaymentsService {
         canceled: summary.byStatus[PaymentStatus.CANCELED] ?? 0,
         failed: summary.byStatus[PaymentStatus.FAILED] ?? 0,
         refunded: summary.byStatus[PaymentStatus.REFUNDED] ?? 0,
+        expired: summary.byStatus[PaymentStatus.EXPIRED] ?? 0,
       },
     };
   }
