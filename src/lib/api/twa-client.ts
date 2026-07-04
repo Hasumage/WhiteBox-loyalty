@@ -36,6 +36,8 @@ export type TwaCompany = {
   description: string | null;
   isActive: boolean;
   operatesOnline: boolean;
+  isFavorite: boolean;
+  favoritedAt: string | null;
   category: ApiCategory;
   categories: ApiCategory[];
   locations: Array<{
@@ -539,8 +541,28 @@ export function getCachedTwaCompanies() {
   return readCachedJson<TwaCompany[]>("/registered/companies", []);
 }
 
-export function getTwaCompanies() {
-  return getJson<TwaCompany[]>("/registered/companies", []);
+export function getTwaCompanies(force = false) {
+  return getJson<TwaCompany[]>("/registered/companies", [], TWA_CACHE_TTL_MS, force);
+}
+
+export function getPublicTwaCompany(slug: string) {
+  return getJson<TwaCompany | null>(`/public/companies/${encodeURIComponent(slug)}`, null, TWA_CACHE_TTL_MS, true);
+}
+
+export async function setTwaCompanyFavorite(companyId: number | string, isFavorite: boolean) {
+  const result = await putJson<{
+    companyId: number;
+    slug: string;
+    name: string;
+    isFavorite: boolean;
+    favoritedAt: string | null;
+  }>(
+    `/registered/companies/${encodeURIComponent(String(companyId))}/favorite`,
+    { isFavorite },
+    "Failed to update favorite company.",
+  );
+  if (result.ok) clearTwaCache();
+  return result;
 }
 
 const walletFallback: TwaWallet = {

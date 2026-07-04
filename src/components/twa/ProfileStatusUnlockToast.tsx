@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight, Sparkles, X } from "lucide-react";
@@ -11,14 +12,17 @@ import {
   markUserProfileStatusesSeen,
   type UserProfileStatusState,
 } from "@/lib/api/twa-client";
+import { getAccessToken } from "@/lib/api/auth-client";
 
 const SESSION_KEY = "nearloy.profile-status-unlock-toast";
 
 export function ProfileStatusUnlockToast() {
+  const pathname = usePathname();
   const [state, setState] = useState<UserProfileStatusState | null>(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    if (pathname.startsWith("/wallet/") && !getAccessToken()) return;
     let active = true;
     void (async () => {
       const result = await getUserProfileStatuses();
@@ -34,7 +38,7 @@ export function ProfileStatusUnlockToast() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [pathname]);
 
   const statuses = state?.newlyUnlocked ?? [];
   const title = useMemo(() => {

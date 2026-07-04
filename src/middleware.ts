@@ -50,6 +50,10 @@ export async function middleware(request: NextRequest) {
     return responseWithLocale(request);
   }
 
+  if (path.startsWith("/wallet/")) {
+    return responseWithLocale(request);
+  }
+
   const token = request.cookies.get(ACCESS_COOKIE)?.value;
 
   if (!token) {

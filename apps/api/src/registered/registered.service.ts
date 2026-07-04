@@ -839,6 +839,8 @@ export class RegisteredService {
               pointsToNextReward: true,
               expiringPoints: true,
               expiringDate: true,
+              isFavorite: true,
+              favoritedAt: true,
               updatedAt: true,
             },
             take: 1,
@@ -871,6 +873,8 @@ export class RegisteredService {
         description: company.description,
         isActive: company.isActive,
         operatesOnline: company.operatesOnline,
+        isFavorite: link?.isFavorite ?? false,
+        favoritedAt: link?.favoritedAt ?? null,
         category: company.category,
         categories: company.categories.map((row) => row.category),
         locations: (company.locations ?? []).map((location) => ({
@@ -898,6 +902,132 @@ export class RegisteredService {
         level: this.resolveLevel(totalEarnedPoints, company.levelRules),
       };
     });
+  }
+
+  async publicCompany(slug: string) {
+    const company = await this.prisma.company.findFirst({
+      where: { isActive: true, slug },
+      include: {
+        category: { select: { id: true, slug: true, name: true, icon: true } },
+        categories: {
+          select: {
+            categoryId: true,
+            category: { select: { id: true, slug: true, name: true, icon: true } },
+          },
+          orderBy: { id: "asc" },
+        },
+        levelRules: {
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            levelName: true,
+            minTotalSpend: true,
+            cashbackPercent: true,
+            sortOrder: true,
+          },
+        },
+        locations: {
+          where: { isActive: true },
+          orderBy: [{ isMain: "desc" }, { createdAt: "asc" }],
+          select: {
+            uuid: true,
+            title: true,
+            address: true,
+            city: true,
+            latitude: true,
+            longitude: true,
+            precision: true,
+            openTime: true,
+            closeTime: true,
+            workingDays: true,
+            isMain: true,
+          },
+        },
+      },
+    });
+
+    if (!company) throw new NotFoundException("Company not found.");
+
+    return {
+      id: company.id,
+      slug: company.slug,
+      name: company.name,
+      description: company.description,
+      isActive: company.isActive,
+      operatesOnline: company.operatesOnline,
+      isFavorite: false,
+      favoritedAt: null,
+      category: company.category,
+      categories: company.categories.map((row) => row.category),
+      locations: (company.locations ?? []).map((location) => ({
+        uuid: location.uuid,
+        title: location.title,
+        address: location.address,
+        city: location.city,
+        latitude: Number(location.latitude),
+        longitude: Number(location.longitude),
+        precision: location.precision,
+        openTime: location.openTime,
+        closeTime: location.closeTime,
+        workingDays: location.workingDays,
+        isMain: location.isMain,
+      })),
+      points: {
+        balance: 0,
+        totalEarnedPoints: 0,
+        totalSpentPoints: 0,
+        pointsToNextReward: null,
+        expiringPoints: null,
+        expiringDate: null,
+        updatedAt: null,
+      },
+      level: this.resolveLevel(0, company.levelRules),
+    };
+  }
+
+  async setCompanyFavorite(userId: number, companyIdentifier: string, isFavorite: boolean) {
+    const numericId = Number(companyIdentifier);
+    const company = await this.prisma.company.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          ...(Number.isInteger(numericId) && numericId > 0 ? [{ id: numericId }] : []),
+          { slug: companyIdentifier },
+        ],
+      },
+      select: { id: true, slug: true, name: true },
+    });
+
+    if (!company) throw new NotFoundException("Company not found.");
+
+    if (!isFavorite) {
+      await this.prisma.userCompany.updateMany({
+        where: { userId, companyId: company.id },
+        data: { isFavorite: false, favoritedAt: null },
+      });
+      return {
+        companyId: company.id,
+        slug: company.slug,
+        name: company.name,
+        isFavorite: false,
+        favoritedAt: null,
+      };
+    }
+
+    const link = await this.prisma.userCompany.upsert({
+      where: { userId_companyId: { userId, companyId: company.id } },
+      update: { isFavorite: true, favoritedAt: new Date() },
+      create: { userId, companyId: company.id, isFavorite: true, favoritedAt: new Date() },
+      select: { isFavorite: true, favoritedAt: true },
+    });
+
+    return {
+      companyId: company.id,
+      slug: company.slug,
+      name: company.name,
+      isFavorite: link.isFavorite,
+      favoritedAt: link.favoritedAt,
+    };
   }
 
   async wallet(userId: number) {

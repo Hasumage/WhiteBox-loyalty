@@ -169,6 +169,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ uuid
   const userRole = data?.user.role;
   const activeRole = draftRole ?? (isWorkspaceRole(userRole) ? userRole : null);
   const roleChanged = Boolean(data && draftRole && draftRole !== data.user.role);
+  const companyRoleTransferRequiresOverview = data?.user.role === "COMPANY";
 
   const allowedCount = useMemo(
     () => permissions.reduce((sum, permission) => sum + Number(permission.canView) + Number(permission.canEdit) + Number(permission.canApprove), 0),
@@ -238,6 +239,10 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ uuid
 
   function selectRole(role: WorkspaceRole) {
     if (!data || targetLocked || saving || !canManage) return;
+    if (companyRoleTransferRequiresOverview) {
+      setMessage("Смена роли COMPANY переносит компанию. Откройте основную карточку пользователя и выберите нового владельца.");
+      return;
+    }
     const isCurrentRole = role === data.user.role;
     const canAssignRole = assignableRoles.has(role);
     if (!isCurrentRole && !canAssignRole) {
@@ -308,7 +313,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ uuid
           <Button type="button" variant="secondary" onClick={applyRoleBaseline} disabled={!data || targetLocked || !canManage}>
             <Sparkles className="h-4 w-4" /> Пресет роли
           </Button>
-          <Button onClick={save} disabled={saving || !data || targetLocked || !canManage}>
+          <Button onClick={save} disabled={saving || !data || targetLocked || !canManage || companyRoleTransferRequiresOverview}>
             <Save className="h-4 w-4" /> {saving ? "Сохраняю..." : "Сохранить доступы"}
           </Button>
         </div>
@@ -350,6 +355,23 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ uuid
         <div className={cn("rounded-2xl border p-4 text-sm", message.toLowerCase().includes("failed") || message.includes("required") || message.includes("cannot") ? "border-red-300/25 bg-red-300/10 text-red-100" : "border-white/10 bg-white/[0.05]")}>{message}</div>
       )}
 
+      {companyRoleTransferRequiresOverview && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4 text-sm text-amber-50 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-100" />
+            <div>
+              <p className="font-semibold">Смена роли COMPANY требует передачи компании</p>
+              <p className="mt-1 text-amber-100/75">
+                На этой странице роль не меняется вслепую. Откройте карточку пользователя, выберите нового владельца или подтвердите удаление компании.
+              </p>
+            </div>
+          </div>
+          <Button asChild variant="secondary">
+            <Link href={`/admin/users/${uuid}`}>Открыть карточку</Link>
+          </Button>
+        </div>
+      )}
+
       {highRiskApprovals > 0 && (
         <div className="rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4 text-sm text-amber-100">
           <div className="flex flex-wrap items-center gap-2 font-semibold">
@@ -374,7 +396,7 @@ export default function UserPermissionsPage({ params }: { params: Promise<{ uuid
           const selected = activeRole === card.role;
           const current = data?.user.role === card.role;
           const canAssignRole = assignableRoles.has(card.role);
-          const disabled = !data || targetLocked || saving || !canManage || (!current && !canAssignRole);
+          const disabled = !data || targetLocked || saving || !canManage || companyRoleTransferRequiresOverview || (!current && !canAssignRole);
           return (
             <Card
               key={card.role}

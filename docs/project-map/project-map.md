@@ -45,7 +45,7 @@ TWA/mobile:
 - `/loyalty-cards` companies where the user has earned points.
 - `/marketplace` subscription catalog from DB.
 - `/marketplace/[id]` subscription details and activation.
-- `/wallet/[id]` company loyalty card, levels, subscriptions and addresses.
+- `/wallet/[slug]` company loyalty card, levels, subscriptions and addresses.
 - `/map` Yandex map with branches, clustering, route presets, user location and filters.
 - `/history` activity + archived subscriptions.
 - `/scan` QR screen.

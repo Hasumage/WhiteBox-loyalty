@@ -5,9 +5,10 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { AccountStatus, PermissionScope, SubscriptionEntitlementWindow, UserRole } from "@prisma/client";
+import { AccountStatus, CompanyMemberRole, PermissionScope, SubscriptionEntitlementWindow, UserRole } from "@prisma/client";
 import { EmailService } from "../email/email.service";
 import { AdminService } from "./admin.service";
+import { AdminCompanyAssignmentMode } from "./dto/assign-user-company.dto";
 
 describe("AdminService", () => {
   const originalSubscriptionsEnabled = process.env.SUBSCRIPTIONS_ENABLED;
@@ -23,6 +24,7 @@ describe("AdminService", () => {
     };
     category: {
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       findMany: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
@@ -58,6 +60,11 @@ describe("AdminService", () => {
     };
     userCompany: {
       findMany: jest.Mock;
+      upsert: jest.Mock;
+    };
+    companyMember: {
+      upsert: jest.Mock;
+      updateMany: jest.Mock;
     };
     loyaltyTransaction: {
       groupBy: jest.Mock;
@@ -111,6 +118,7 @@ describe("AdminService", () => {
       },
       category: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
@@ -146,6 +154,11 @@ describe("AdminService", () => {
       },
       userCompany: {
         findMany: jest.fn(),
+        upsert: jest.fn(),
+      },
+      companyMember: {
+        upsert: jest.fn(),
+        updateMany: jest.fn(),
       },
       loyaltyTransaction: {
         groupBy: jest.fn(),
@@ -162,7 +175,9 @@ describe("AdminService", () => {
         findMany: jest.fn(),
         count: jest.fn(),
       },
-      $transaction: jest.fn().mockResolvedValue([]),
+      $transaction: jest.fn((operation: unknown) =>
+        typeof operation === "function" ? operation(prisma) : Promise.resolve([]),
+      ),
       userSubscription: { count: jest.fn(), findMany: jest.fn() },
       subscription: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn() },
       subscriptionBundle: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
@@ -247,6 +262,8 @@ describe("AdminService", () => {
       loginEvents: [],
       loyaltyTransactions: [],
       targetAuditEvents: [],
+      managedCompany: null,
+      companyMemberships: [],
     });
 
     const result = await service.getUserByUuid("u-10");
@@ -288,6 +305,8 @@ describe("AdminService", () => {
         loginEvents: [],
         loyaltyTransactions: [],
         targetAuditEvents: [],
+        managedCompany: null,
+        companyMemberships: [],
       });
     prisma.user.update.mockResolvedValue({});
 
@@ -308,6 +327,367 @@ describe("AdminService", () => {
       }),
     );
     expect(result.uuid).toBe("u-11");
+  });
+
+  it("updateUserByUuid requires successor when company owner leaves COMPANY role", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 11,
+        uuid: "owner-uuid",
+        name: "Owner",
+        email: "owner@example.com",
+        role: UserRole.COMPANY,
+        accountStatus: AccountStatus.ACTIVE,
+      })
+      .mockResolvedValueOnce({
+        id: 1,
+        role: UserRole.SUPER_ADMIN,
+        email: "super@example.com",
+      });
+    prisma.company.findUnique.mockResolvedValue({
+      id: 7,
+      name: "Aurora Coffee",
+      members: [
+        {
+          userId: 12,
+          role: "MANAGER",
+          user: {
+            uuid: "manager-uuid",
+            name: "Manager",
+            email: "manager@example.com",
+            role: UserRole.MANAGER,
+            accountStatus: AccountStatus.ACTIVE,
+          },
+        },
+      ],
+    });
+
+    await expect(
+      service.updateUserByUuid("owner-uuid", { role: UserRole.CLIENT }, 1),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("updateUserByUuid transfers owned company to selected active employee", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 11,
+        uuid: "owner-uuid",
+        name: "Owner",
+        email: "owner@example.com",
+        role: UserRole.COMPANY,
+        accountStatus: AccountStatus.ACTIVE,
+      })
+      .mockResolvedValueOnce({
+        id: 1,
+        role: UserRole.SUPER_ADMIN,
+        email: "super@example.com",
+      })
+      .mockResolvedValueOnce({
+        id: 11,
+        uuid: "owner-uuid",
+        telegramId: null,
+        name: "Owner",
+        email: "owner@example.com",
+        role: UserRole.CLIENT,
+        accountStatus: "ACTIVE",
+        emailVerifiedAt: null,
+        deletionScheduledAt: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+        passwordHash: "hashed-from-bcrypt",
+        favoriteCategories: [],
+        companyLinks: [],
+        subscriptions: [],
+        refreshTokens: [],
+        oauthAccounts: [],
+        loginEvents: [],
+        loyaltyTransactions: [],
+        targetAuditEvents: [],
+        managedCompany: null,
+        companyMemberships: [],
+      });
+    prisma.company.findUnique.mockResolvedValue({
+      id: 7,
+      name: "Aurora Coffee",
+      members: [
+        {
+          userId: 12,
+          role: "MANAGER",
+          user: {
+            uuid: "manager-uuid",
+            name: "Manager",
+            email: "manager@example.com",
+            role: UserRole.MANAGER,
+            accountStatus: AccountStatus.ACTIVE,
+          },
+        },
+      ],
+    });
+    prisma.user.update.mockResolvedValue({});
+    prisma.company.update.mockResolvedValue({});
+
+    const result = await service.updateUserByUuid(
+      "owner-uuid",
+      {
+        role: UserRole.CLIENT,
+        companyTransferToUserUuid: "manager-uuid",
+      },
+      1,
+    );
+
+    expect(prisma.companyMember.updateMany).toHaveBeenCalledWith({
+      where: { userId: 11, isActive: true },
+      data: { isActive: false },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 12 },
+      data: { role: UserRole.COMPANY },
+    });
+    expect(prisma.company.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { ownerUserId: 12, isActive: true },
+    });
+    expect(result.role).toBe(UserRole.CLIENT);
+  });
+
+  it("updateUserByUuid deletes owned company when there is no successor and deletion is confirmed", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 11,
+        uuid: "owner-uuid",
+        name: "Owner",
+        email: "owner@example.com",
+        role: UserRole.COMPANY,
+        accountStatus: AccountStatus.ACTIVE,
+      })
+      .mockResolvedValueOnce({
+        id: 1,
+        role: UserRole.SUPER_ADMIN,
+        email: "super@example.com",
+      })
+      .mockResolvedValueOnce({
+        id: 11,
+        uuid: "owner-uuid",
+        telegramId: null,
+        name: "Owner",
+        email: "owner@example.com",
+        role: UserRole.CLIENT,
+        accountStatus: "ACTIVE",
+        emailVerifiedAt: null,
+        deletionScheduledAt: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+        passwordHash: "hashed-from-bcrypt",
+        favoriteCategories: [],
+        companyLinks: [],
+        subscriptions: [],
+        refreshTokens: [],
+        oauthAccounts: [],
+        loginEvents: [],
+        loyaltyTransactions: [],
+        targetAuditEvents: [],
+        managedCompany: null,
+        companyMemberships: [],
+      });
+    prisma.company.findUnique.mockResolvedValue({
+      id: 7,
+      name: "Solo Coffee",
+      members: [],
+    });
+    prisma.user.update.mockResolvedValue({});
+    prisma.company.update.mockResolvedValue({});
+    prisma.company.delete.mockResolvedValue({});
+
+    await service.updateUserByUuid(
+      "owner-uuid",
+      {
+        role: UserRole.CLIENT,
+        confirmCompanyDeletion: true,
+      },
+      1,
+    );
+
+    expect(prisma.company.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { isActive: false, ownerUserId: null },
+    });
+    expect(prisma.company.delete).toHaveBeenCalledWith({ where: { id: 7 } });
+  });
+
+  it("assignUserCompany attaches user to an existing company as manager", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 21,
+        uuid: "client-uuid",
+        name: "New Employee",
+        email: "employee@example.com",
+        role: UserRole.CLIENT,
+        accountStatus: AccountStatus.ACTIVE,
+      })
+      .mockResolvedValueOnce({
+        email: "super@example.com",
+        uuid: "super-uuid",
+      })
+      .mockResolvedValueOnce({
+        id: 21,
+        uuid: "client-uuid",
+        telegramId: null,
+        name: "New Employee",
+        email: "employee@example.com",
+        role: UserRole.COMPANY,
+        accountStatus: "ACTIVE",
+        emailVerifiedAt: null,
+        deletionScheduledAt: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+        passwordHash: null,
+        favoriteCategories: [],
+        companyLinks: [],
+        subscriptions: [],
+        refreshTokens: [],
+        oauthAccounts: [],
+        loginEvents: [],
+        loyaltyTransactions: [],
+        targetAuditEvents: [],
+        managedCompany: null,
+        companyMemberships: [
+          {
+            uuid: "member-uuid",
+            role: CompanyMemberRole.MANAGER,
+            isActive: true,
+            createdAt: new Date("2026-01-02T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+            company: {
+              id: 7,
+              name: "Red Gate Nails",
+              slug: "red-gate-nails",
+              isActive: true,
+              ownerUserId: 99,
+              owner: { uuid: "owner-uuid", name: "Owner", email: "owner@example.com" },
+            },
+          },
+        ],
+      });
+    prisma.company.findUnique
+      .mockResolvedValueOnce({ id: 7, name: "Red Gate Nails", slug: "red-gate-nails", ownerUserId: 99 })
+      .mockResolvedValueOnce(null);
+    prisma.user.update.mockResolvedValue({});
+    prisma.companyMember.updateMany.mockResolvedValue({ count: 0 });
+    prisma.companyMember.upsert.mockResolvedValue({});
+    prisma.auditEvent.create.mockResolvedValue({});
+
+    const result = await service.assignUserCompany(
+      "client-uuid",
+      {
+        mode: AdminCompanyAssignmentMode.ATTACH_EXISTING,
+        companyId: 7,
+        memberRole: CompanyMemberRole.MANAGER,
+      },
+      1,
+    );
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 21 },
+      data: { role: UserRole.COMPANY },
+    });
+    expect(prisma.companyMember.upsert).toHaveBeenCalledWith({
+      where: { companyId_userId: { companyId: 7, userId: 21 } },
+      update: { role: CompanyMemberRole.MANAGER, isActive: true },
+      create: { companyId: 7, userId: 21, role: CompanyMemberRole.MANAGER, isActive: true },
+    });
+    expect(result.companyMemberships[0].company.name).toBe("Red Gate Nails");
+  });
+
+  it("assignUserCompany creates a new company workspace and owner membership", async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 22,
+        uuid: "owner-uuid",
+        name: "Fresh Company",
+        email: "fresh@example.com",
+        role: UserRole.CLIENT,
+        accountStatus: AccountStatus.ACTIVE,
+      })
+      .mockResolvedValueOnce({
+        email: "super@example.com",
+        uuid: "super-uuid",
+      })
+      .mockResolvedValueOnce({
+        id: 22,
+        uuid: "owner-uuid",
+        telegramId: null,
+        name: "Fresh Company",
+        email: "fresh@example.com",
+        role: UserRole.COMPANY,
+        accountStatus: "ACTIVE",
+        emailVerifiedAt: null,
+        deletionScheduledAt: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+        passwordHash: null,
+        favoriteCategories: [],
+        companyLinks: [],
+        subscriptions: [],
+        refreshTokens: [],
+        oauthAccounts: [],
+        loginEvents: [],
+        loyaltyTransactions: [],
+        targetAuditEvents: [],
+        managedCompany: {
+          id: 8,
+          slug: "fresh-company",
+          name: "Fresh Company",
+          isActive: true,
+          members: [
+            {
+              userId: 22,
+              role: CompanyMemberRole.OWNER,
+              user: {
+                uuid: "owner-uuid",
+                name: "Fresh Company",
+                email: "fresh@example.com",
+                role: UserRole.COMPANY,
+                accountStatus: AccountStatus.ACTIVE,
+              },
+            },
+          ],
+        },
+        companyMemberships: [],
+      });
+    prisma.company.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    prisma.category.findFirst.mockResolvedValue({ id: 3 });
+    prisma.company.create.mockResolvedValue({ id: 8, name: "Fresh Company", slug: "fresh-company" });
+    prisma.user.update.mockResolvedValue({});
+    prisma.companyMember.updateMany.mockResolvedValue({ count: 0 });
+    prisma.companyMember.upsert.mockResolvedValue({});
+    prisma.userCompany.upsert.mockResolvedValue({});
+    prisma.auditEvent.create.mockResolvedValue({});
+
+    await service.assignUserCompany(
+      "owner-uuid",
+      {
+        mode: AdminCompanyAssignmentMode.CREATE_NEW,
+      },
+      1,
+    );
+
+    expect(prisma.company.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          name: "Fresh Company",
+          ownerUserId: 22,
+        }),
+      }),
+    );
+    expect(prisma.companyMember.upsert).toHaveBeenCalledWith({
+      where: { companyId_userId: { companyId: 8, userId: 22 } },
+      update: { role: CompanyMemberRole.OWNER, isActive: true },
+      create: { companyId: 8, userId: 22, role: CompanyMemberRole.OWNER },
+    });
   });
 
   it("updateUserRole allows ADMIN to assign support roles", async () => {

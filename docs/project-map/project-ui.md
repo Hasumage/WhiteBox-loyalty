@@ -13,7 +13,7 @@
 | `/loyalty-cards` | Companies where the user has points/activity | CLIENT |
 | `/marketplace` | Subscription catalog | CLIENT |
 | `/marketplace/[id]` | Subscription detail | CLIENT |
-| `/wallet/[id]` | Company loyalty card detail | CLIENT |
+| `/wallet/[slug]` | Company loyalty card detail | CLIENT |
 | `/map` | Yandex partner map | CLIENT |
 | `/history` | Activity and subscription archive | CLIENT |
 | `/scan` | User QR | CLIENT |
@@ -125,7 +125,7 @@
 - Admin creates/edits company location and sees coordinates saved.
 - TWA map shows branch marker and route button.
 - Activate marketplace subscription -> dashboard active subscriptions updates.
-- Earn points for company -> `/loyalty-cards` and `/wallet/[id]` update.
+- Earn points for company -> `/loyalty-cards` and `/wallet/[slug]` update.
 - Create points promo -> redeem in TWA -> loyalty transaction appears.
 - Create subscription promo -> redeem in TWA -> active subscription appears.
 - Referral code redeem rewards both sides and blocks self/duplicate redemption.

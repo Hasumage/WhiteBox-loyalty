@@ -17,6 +17,7 @@ import {
   Gift,
   Handshake,
   Headphones,
+  Images,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -114,6 +115,7 @@ const companyMenuBase: NavItem[] = [
   { href: "/company/billing", label: "Подписка", icon: Gift },
   { href: "/company/compliance", label: "Верификация", icon: FileCheck },
   { href: "/company/settings", label: "Настройки компании", icon: Settings2 },
+  { href: "/company/settings/media", label: "Фото и акции", icon: Images },
   { href: "/company/getting-started", label: "Первый запуск", icon: Rocket },
 ];
 

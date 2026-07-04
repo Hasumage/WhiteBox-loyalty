@@ -87,6 +87,39 @@ export class CompanyService {
       .slice(0, 60);
   }
 
+  private companySlug(value: string) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .replace(/-{2,}/g, "-")
+      .slice(0, 60);
+  }
+
+  private async validateCompanySlug(value: string, currentCompanyId: number) {
+    const slug = this.companySlug(value);
+    if (slug.length < 3 || /^\d+$/.test(slug)) {
+      throw new BadRequestException("Company slug must contain at least 3 latin letters or digits and cannot be only numbers.");
+    }
+    const existing = await this.prisma.company.findUnique({ where: { slug }, select: { id: true } });
+    if (existing && existing.id !== currentCompanyId) {
+      throw new ConflictException("Company slug is already taken.");
+    }
+    return slug;
+  }
+
+  private async uniqueCompanySlug(value: string) {
+    const base = this.companySlug(value) || `company-${Date.now()}`;
+    let candidate = base;
+    let suffix = 2;
+    while (await this.prisma.company.findUnique({ where: { slug: candidate }, select: { id: true } })) {
+      candidate = `${base.slice(0, Math.max(1, 60 - String(suffix).length - 1))}-${suffix}`;
+      suffix += 1;
+    }
+    return candidate;
+  }
+
   private async uniqueSubscriptionSlug(value: string) {
     const base = this.subscriptionSlug(value) || `plan-${Date.now()}`;
     let candidate = base;
@@ -164,6 +197,60 @@ export class CompanyService {
           where: { companyId_userId: { companyId: ownedCompany.id, userId } },
           update: { role: CompanyMemberRole.OWNER, isActive: true },
           create: { companyId: ownedCompany.id, userId, role: CompanyMemberRole.OWNER },
+        });
+        member = await this.prisma.companyMember.findFirst({
+          where: { userId, isActive: true },
+          include: {
+            user: { select: { uuid: true, name: true, email: true } },
+            company: {
+              include: {
+                categories: { include: { category: true } },
+                levelRules: { orderBy: { sortOrder: "asc" } },
+                verificationApplications: {
+                  orderBy: { createdAt: "desc" },
+                  take: 1,
+                  select: { uuid: true, status: true, createdAt: true, identityVerificationMode: true },
+                },
+              },
+            },
+          },
+        });
+      }
+    }
+
+    if (!member) {
+      const companyUser = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true, name: true, email: true },
+      });
+      if (companyUser?.role === UserRole.COMPANY) {
+        const category = await this.prisma.category.findFirst({
+          orderBy: { id: "asc" },
+          select: { id: true },
+        });
+        if (!category) {
+          throw new ForbiddenException("Company category catalog is empty.");
+        }
+        const companyName = companyUser.name?.trim() || companyUser.email.split("@")[0] || "Company";
+        const company = await this.prisma.company.create({
+          data: {
+            name: companyName,
+            slug: await this.uniqueCompanySlug(companyUser.email.split("@")[0] || companyName),
+            description: "Профиль компании создан автоматически после смены роли пользователя.",
+            categoryId: category.id,
+            ownerUserId: userId,
+            isActive: true,
+            identityVerificationCompleted: false,
+          },
+          select: { id: true },
+        });
+        await this.prisma.companyMember.create({
+          data: { companyId: company.id, userId, role: CompanyMemberRole.OWNER },
+        });
+        await this.prisma.userCompany.upsert({
+          where: { userId_companyId: { userId, companyId: company.id } },
+          update: {},
+          create: { userId, companyId: company.id },
         });
         member = await this.prisma.companyMember.findFirst({
           where: { userId, isActive: true },
@@ -677,11 +764,13 @@ export class CompanyService {
     if (categories.length !== categoryIds.length) {
       throw new BadRequestException("One or more selected categories do not exist.");
     }
+    const nextSlug = dto.slug !== undefined ? await this.validateCompanySlug(dto.slug, member.companyId) : undefined;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.company.update({
         where: { id: member.companyId },
         data: {
+          ...(nextSlug !== undefined ? { slug: nextSlug } : {}),
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
           operatesOnline: dto.operatesOnline,

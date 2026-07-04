@@ -1,49 +1,204 @@
-﻿"use client";
+"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { AlertCircle, ArrowLeft, Award, ChevronRight, CircleDollarSign, Clock3, MapPin, Navigation, Sparkles } from "lucide-react";
-import { getCachedTwaCompanies, getCachedTwaMarketplace, getTwaCompanies, getTwaMarketplace, type TwaCompany, type TwaSubscriptionPlan } from "@/lib/api/twa-client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { useParams, useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowLeft,
+  Award,
+  Check,
+  ChevronRight,
+  Copy,
+  Gift,
+  Heart,
+  MapPin,
+  Navigation,
+  Route,
+  Send,
+  Share2,
+  ShoppingBag,
+  Sparkles,
+  Star,
+  TicketPercent,
+} from "lucide-react";
+import {
+  getCachedTwaCompanies,
+  getCachedTwaHistory,
+  getPublicTwaCompany,
+  getTwaCompanies,
+  getTwaHistory,
+  setTwaCompanyFavorite,
+  type TwaCompany,
+  type TwaHistory,
+} from "@/lib/api/twa-client";
+import { getAccessToken } from "@/lib/api/auth-client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
-import { formatPlanPrice as formatLocalizedPlanPrice, interpolate } from "@/lib/i18n/format";
 import { categoryName } from "@/lib/i18n/categories";
-import type { TranslateFn } from "@/lib/i18n/format";
-import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
+const EMPTY_HISTORY: TwaHistory = {
+  transactions: [],
+  redemptions: [],
+  subscriptions: [],
+  archivedSubscriptions: [],
+};
 
-function isExpiringSoon(date: string | null) {
-  if (!date) return false;
-  const diff = new Date(date).getTime() - Date.now();
-  return diff > 0 && diff <= 14 * 24 * 60 * 60 * 1000;
-}
+const AURORA_ASSETS = {
+  hero: "/company-assets/aurora/hero-coffee-shop.webp",
+  coffee: "/company-assets/aurora/reward-coffee.webp",
+  dessert: "/company-assets/aurora/reward-dessert.webp",
+  frappe: "/company-assets/aurora/reward-frappe.webp",
+};
 
-function formatPlanPrice(plan: TwaSubscriptionPlan, t: TranslateFn) {
-  return formatLocalizedPlanPrice(plan.price, plan.renewalUnit, t);
-}
+const REWARD_CARDS = [
+  {
+    title: "Кофе в подарок",
+    cost: 650,
+    image: AURORA_ASSETS.coffee,
+    accent: "from-violet-500/35 via-violet-950/20 to-slate-950",
+    bar: "bg-violet-400",
+    icon: Gift,
+  },
+  {
+    title: "Десерт со скидкой",
+    cost: 400,
+    image: AURORA_ASSETS.dessert,
+    accent: "from-rose-500/30 via-rose-950/20 to-slate-950",
+    bar: "bg-rose-400",
+    icon: Gift,
+  },
+  {
+    title: "Апгрейд напитка",
+    cost: 250,
+    image: AURORA_ASSETS.frappe,
+    accent: "from-amber-500/30 via-amber-950/20 to-slate-950",
+    bar: "bg-amber-400",
+    icon: Gift,
+  },
+];
 
-function companyCategorySlugs(company: TwaCompany) {
-  return new Set([company.category, ...company.categories].filter(Boolean).map((category) => category.slug));
-}
+type PublicMediaAsset = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  url: string | null;
+  width: number;
+  height: number;
+  sortOrder: number;
+};
 
-function planBelongsToCompany(plan: TwaSubscriptionPlan, company: TwaCompany) {
-  if (plan.company?.id === company.id) return true;
-  if (!plan.company && plan.category?.slug) return companyCategorySlugs(company).has(plan.category.slug);
-  return false;
-}
+type PublicSpecialOffer = {
+  id: string;
+  title: string;
+  description: string | null;
+  code: string | null;
+  imageUrl: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  sortOrder: number;
+};
 
-function mapLocationHref(company: TwaCompany, locationUuid: string) {
-  return `/map?company=${encodeURIComponent(String(company.id))}&location=${encodeURIComponent(locationUuid)}`;
-}
+type PublicCompanyMediaState = {
+  media: {
+    logo: PublicMediaAsset | null;
+    hero: PublicMediaAsset | null;
+    gallery: PublicMediaAsset[];
+  };
+  offers: PublicSpecialOffer[];
+};
+
+type GalleryItem = {
+  title: string;
+  caption: string;
+  image: string;
+  className: string;
+  position: string;
+};
+
+const PUBLIC_GALLERY_ITEMS: GalleryItem[] = [
+  {
+    title: "Атмосфера вечера",
+    caption: "бар, свет и спокойный вайб",
+    image: AURORA_ASSETS.hero,
+    className: "col-span-2 h-36",
+    position: "center 44%",
+  },
+  {
+    title: "Фирменный кофе",
+    caption: "напитки каждый день",
+    image: AURORA_ASSETS.coffee,
+    className: "h-32",
+    position: "center",
+  },
+  {
+    title: "Десерты",
+    caption: "к кофе и встречам",
+    image: AURORA_ASSETS.dessert,
+    className: "h-32",
+    position: "center",
+  },
+  {
+    title: "Холодные напитки",
+    caption: "для прогулок рядом",
+    image: AURORA_ASSETS.frappe,
+    className: "h-32",
+    position: "center",
+  },
+  {
+    title: "Уютный зал",
+    caption: "можно зависнуть с ноутом",
+    image: AURORA_ASSETS.hero,
+    className: "h-32",
+    position: "68% 42%",
+  },
+  {
+    title: "Латте-арт",
+    caption: "маленький ритуал дня",
+    image: AURORA_ASSETS.coffee,
+    className: "col-span-2 h-36",
+    position: "center 36%",
+  },
+  {
+    title: "Сладкая витрина",
+    caption: "новинки и классика",
+    image: AURORA_ASSETS.dessert,
+    className: "h-32",
+    position: "center",
+  },
+  {
+    title: "Барная стойка",
+    caption: "быстрый заказ",
+    image: AURORA_ASSETS.hero,
+    className: "h-32",
+    position: "34% 46%",
+  },
+  {
+    title: "Напиток с собой",
+    caption: "по пути на дела",
+    image: AURORA_ASSETS.frappe,
+    className: "h-32",
+    position: "center",
+  },
+  {
+    title: "Подарки за баллы",
+    caption: "копите и забирайте",
+    image: AURORA_ASSETS.coffee,
+    className: "h-32",
+    position: "center",
+  },
+].slice(0, 10);
 
 function timeToMinutes(value: string) {
   const [hours, minutes] = value.split(":").map(Number);
@@ -68,47 +223,189 @@ function routeHref(location: TwaCompany["locations"][number]) {
   return `https://yandex.ru/maps/?rtext=~${location.latitude},${location.longitude}&rtt=auto`;
 }
 
+function formatTime(value: string | null | undefined) {
+  return value ? value.slice(0, 5) : "22:00";
+}
+
+function formatOperationTime(value: string, locale: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const dayDiff = Math.round((startOfToday - startOfDate) / (24 * 60 * 60 * 1000));
+  const time = date.toLocaleTimeString(locale === "ru" ? "ru-RU" : "en-US", { hour: "2-digit", minute: "2-digit" });
+
+  if (dayDiff === 0) return `${locale === "ru" ? "Сегодня" : "Today"} · ${time}`;
+  if (dayDiff === 1) return `${locale === "ru" ? "Вчера" : "Yesterday"} · ${time}`;
+  return `${dayDiff} ${locale === "ru" ? "дн. назад" : "days ago"} · ${time}`;
+}
+
+function operationsForCompany(history: TwaHistory, company: TwaCompany, locale: string) {
+  const transactions = history.transactions
+    .filter((operation) => operation.company.id === company.id)
+    .map((operation) => ({
+      id: operation.uuid,
+      amount: operation.type === "SPEND" ? -operation.amount : operation.amount,
+      title: operation.type === "SPEND" ? "Оплата баллами" : "Покупка",
+      subtitle: operation.description ?? (operation.type === "SPEND" ? "Списание в заведении" : "Начисление баллов"),
+      occurredAt: operation.occurredAt,
+      time: formatOperationTime(operation.occurredAt, locale),
+      tone: operation.type === "SPEND" ? "amber" : "violet",
+      icon: operation.type === "SPEND" ? ShoppingBag : Star,
+    }));
+
+  const redemptions = history.redemptions
+    .filter((operation) => operation.company.id === company.id)
+    .map((operation) => ({
+      id: operation.uuid,
+      amount: -operation.quantity,
+      title: "Награда",
+      subtitle: operation.benefit,
+      occurredAt: operation.redeemedAt,
+      time: formatOperationTime(operation.redeemedAt, locale),
+      tone: "amber",
+      icon: Gift,
+    }));
+
+  return [...transactions, ...redemptions]
+    .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime())
+    .slice(0, 3);
+}
+
 export default function WalletPage() {
   const { locale, t } = useI18n("ru");
   const params = useParams();
+  const router = useRouter();
   const id = String(params.id ?? "");
   const [companies, setCompanies] = useState<TwaCompany[]>([]);
-  const [plans, setPlans] = useState<TwaSubscriptionPlan[]>([]);
+  const [history, setHistory] = useState<TwaHistory>(() => getCachedTwaHistory());
   const [loading, setLoading] = useState(true);
+  const [isPublicView, setIsPublicView] = useState(false);
+  const [publicMedia, setPublicMedia] = useState<PublicCompanyMediaState | null>(null);
+  const [levelsOpen, setLevelsOpen] = useState(false);
+  const [locationsOpen, setLocationsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [selectedGalleryItem, setSelectedGalleryItem] = useState<GalleryItem | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [favoriteSaving, setFavoriteSaving] = useState(false);
+  const [largeFavoriteHidden, setLargeFavoriteHidden] = useState(false);
+  const [favoritePulse, setFavoritePulse] = useState(0);
+  const [favoriteFlight, setFavoriteFlight] = useState<{
+    id: number;
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+  } | null>(null);
+  const headerFavoriteButtonRef = useRef<HTMLButtonElement | null>(null);
+  const largeFavoriteButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     let ignore = false;
+    setLoading(true);
+
+    const loadPublicCompany = async () => {
+      const publicCompany = await getPublicTwaCompany(id);
+      if (ignore) return;
+      setIsPublicView(true);
+      setCompanies(publicCompany ? [publicCompany] : []);
+      setHistory(EMPTY_HISTORY);
+      setLoading(false);
+    };
+
+    const token = getAccessToken();
+    if (!token) {
+      void loadPublicCompany();
+      return () => {
+        ignore = true;
+      };
+    }
+
+    setIsPublicView(false);
     const cachedCompanies = getCachedTwaCompanies();
-    const cachedMarketplace = getCachedTwaMarketplace();
     if (cachedCompanies.length) {
       setCompanies(cachedCompanies);
-      if (SUBSCRIPTIONS_ENABLED) setPlans(cachedMarketplace.subscriptions);
       setLoading(false);
     }
-    const requests = SUBSCRIPTIONS_ENABLED
-      ? Promise.all([getTwaCompanies(), getTwaMarketplace()] as const)
-      : Promise.all([getTwaCompanies(), Promise.resolve({ subscriptions: [] })] as const);
 
-    void requests.then(([apiCompanies, marketplace]) => {
+    void Promise.all([getTwaCompanies(true), getTwaHistory()] as const).then(async ([apiCompanies, apiHistory]) => {
       if (ignore) return;
+      const matchedCompany = apiCompanies.find((item) => String(item.id) === id || item.slug === id);
+      if (!matchedCompany) {
+        await loadPublicCompany();
+        return;
+      }
+      setIsPublicView(false);
       setCompanies(apiCompanies);
-      setPlans(marketplace.subscriptions);
+      setHistory(apiHistory);
       setLoading(false);
     });
+
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [id]);
+
+  useEffect(() => {
+    setLargeFavoriteHidden(false);
+    setFavoriteFlight(null);
+    setFavoritePulse(0);
+  }, [id]);
 
   const company = useMemo(
     () => companies.find((item) => String(item.id) === id || item.slug === id) ?? null,
     [companies, id],
   );
+  const companySlug = company?.slug ?? null;
 
-  const partnerSubscriptions = useMemo(
-    () => (company ? plans.filter((plan) => planBelongsToCompany(plan, company)) : []),
-    [company, plans],
+  useEffect(() => {
+    if (company && id !== company.slug) {
+      router.replace(`/wallet/${company.slug}`);
+    }
+  }, [company, id, router]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (!companySlug) {
+      setPublicMedia(null);
+      return;
+    }
+
+    void fetch(`/api/public/company-media/${encodeURIComponent(companySlug)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: PublicCompanyMediaState | null) => {
+        if (!ignore) setPublicMedia(payload);
+      })
+      .catch(() => {
+        if (!ignore) setPublicMedia(null);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [companySlug]);
+
+  const mainLocation = useMemo(
+    () => company?.locations.find((location) => location.isMain) ?? company?.locations[0] ?? null,
+    [company],
   );
+
+  const operations = useMemo(
+    () => (company ? operationsForCompany(history, company, locale) : []),
+    [company, history, locale],
+  );
+  const galleryItems = useMemo<GalleryItem[]>(() => {
+    const uploaded = publicMedia?.media.gallery.filter((asset) => Boolean(asset.url)).slice(0, 10) ?? [];
+    if (!uploaded.length) return PUBLIC_GALLERY_ITEMS;
+    return uploaded.map((asset, index) => ({
+      title: asset.title?.trim() || `Фото ${index + 1}`,
+      caption: asset.description?.trim() || "атмосфера компании",
+      image: asset.url!,
+      className: index === 0 || index === 5 ? "col-span-2 h-36" : "h-32",
+      position: "center",
+    }));
+  }, [publicMedia]);
 
   if (loading && companies.length === 0) {
     return <TwaLoadingScreen title={t("client.wallet.loadingTitle")} subtitle={t("client.wallet.loadingSubtitle")} />;
@@ -122,303 +419,927 @@ export default function WalletPage() {
         className="flex min-h-full flex-col items-center justify-center px-6"
       >
         <p className="mb-4 text-muted-foreground">{t("client.wallet.notFound")}</p>
-        <Button asChild variant="secondary">
-          <Link href="/app">{t("client.common.backHome")}</Link>
-        </Button>
+        {!isPublicView && (
+          <Button asChild variant="secondary">
+            <Link href="/app">{t("client.common.backHome")}</Link>
+          </Button>
+        )}
       </motion.div>
     );
   }
 
-  const progressPercent = company.level.progressPercent;
-  const showExpiring =
-    company.points.expiringPoints != null &&
-    company.points.expiringPoints > 0 &&
-    isExpiringSoon(company.points.expiringDate);
   const categories = [company.category, ...company.categories].filter(Boolean);
-  const mainLocation = company.locations.find((location) => location.isMain) ?? company.locations[0] ?? null;
-  const branchLocations = company.locations.filter((location) => location.uuid !== mainLocation?.uuid);
+  const isOpen = mainLocation ? isLocationOpenNow(mainLocation) : true;
+  const statusOpenTime = formatTime(mainLocation?.openTime);
+  const statusCloseTime = formatTime(mainLocation?.closeTime);
+  const currentLevel = company.level.current?.levelName ?? t("client.common.member");
+  const nextLevel = company.level.next?.levelName ?? "Премиум";
+  const pointsToNextLevel = company.level.next?.pointsToNext ?? 0;
+  const levelProgress = Math.max(0, Math.min(100, company.level.progressPercent));
+  const levels = [...company.level.ladder].sort((left, right) => left.sortOrder - right.sortOrder);
+  const routeLocations = company.locations.filter(
+    (location) => Number.isFinite(location.latitude) && Number.isFinite(location.longitude),
+  );
+  const hasRouteLocations = routeLocations.length > 0;
+  const hasMultipleRouteLocations = routeLocations.length > 1;
+  const showLargeFavoriteButton = !isPublicView && !company.isFavorite && !largeFavoriteHidden;
+  const hasActionButtons = !isPublicView && (hasRouteLocations || showLargeFavoriteButton);
+  const actionGridClass = hasRouteLocations && showLargeFavoriteButton ? "grid-cols-2" : "grid-cols-1";
+  const publicCompanyPath = `/wallet/${company.slug}`;
+  const publicCompanyUrl =
+    typeof window === "undefined" ? publicCompanyPath : new URL(publicCompanyPath, window.location.origin).toString();
+  const shareText = `${company.name} в NearLoy — бонусы, уровни и награды в одной карточке.`;
+  const vkShareUrl = `https://vk.com/share.php?url=${encodeURIComponent(publicCompanyUrl)}&title=${encodeURIComponent(company.name)}&description=${encodeURIComponent(shareText)}`;
+  const heroImage = publicMedia?.media.hero?.url ?? AURORA_ASSETS.hero;
+  const logoImage = publicMedia?.media.logo?.url ?? null;
+  const activeOffer = publicMedia?.offers[0] ?? null;
+  const offerTitle = activeOffer?.title ?? "Скидка 10% на всю выпечку";
+  const offerDescription = activeOffer?.description ?? "Активируйте предложение в карточке NearLoy при визите.";
+  const offerCode = activeOffer?.code ?? "WELCOME10";
+  const offerImage = activeOffer?.imageUrl ?? AURORA_ASSETS.dessert;
+
+  const handleNativeShare = async () => {
+    if (typeof navigator === "undefined" || !("share" in navigator)) {
+      return false;
+    }
+    await navigator.share({
+      title: company.name,
+      text: shareText,
+      url: publicCompanyUrl,
+    });
+    return true;
+  };
+
+  const handleCopyShareLink = async () => {
+    await navigator.clipboard?.writeText(publicCompanyUrl).catch(() => undefined);
+    setShareCopied(true);
+    window.setTimeout(() => setShareCopied(false), 1800);
+  };
+
+  const startFavoriteFlight = () => {
+    const sourceRect = largeFavoriteButtonRef.current?.getBoundingClientRect();
+    const targetRect = headerFavoriteButtonRef.current?.getBoundingClientRect();
+    if (!sourceRect || !targetRect) {
+      setFavoritePulse((current) => current + 1);
+      return;
+    }
+
+    setFavoriteFlight({
+      id: Date.now(),
+      fromX: sourceRect.left + sourceRect.width / 2,
+      fromY: sourceRect.top + sourceRect.height / 2,
+      toX: targetRect.left + targetRect.width / 2,
+      toY: targetRect.top + targetRect.height / 2,
+    });
+    window.setTimeout(() => {
+      setFavoriteFlight(null);
+      setFavoritePulse((current) => current + 1);
+    }, 760);
+  };
+
+  const handleFavoriteToggle = async (source: "header" | "large" = "header") => {
+    if (favoriteSaving) return;
+    const nextFavorite = !company.isFavorite;
+    setFavoriteSaving(true);
+    setLargeFavoriteHidden(true);
+    if (source === "large" && nextFavorite) {
+      startFavoriteFlight();
+    }
+    setCompanies((current) =>
+      current.map((item) =>
+        item.id === company.id
+          ? {
+              ...item,
+              isFavorite: nextFavorite,
+              favoritedAt: nextFavorite ? new Date().toISOString() : null,
+            }
+          : item,
+      ),
+    );
+
+    const result = await setTwaCompanyFavorite(company.id, nextFavorite);
+    setFavoriteSaving(false);
+    if (!result.ok) {
+      if (nextFavorite) {
+        setLargeFavoriteHidden(false);
+      }
+      if (source === "large" && nextFavorite) {
+        setFavoriteFlight(null);
+      }
+      setCompanies((current) =>
+        current.map((item) =>
+          item.id === company.id
+            ? {
+                ...item,
+                isFavorite: !nextFavorite,
+                favoritedAt: company.favoritedAt,
+              }
+            : item,
+        ),
+      );
+      return;
+    }
+    setCompanies((current) =>
+      current.map((item) =>
+        item.id === company.id
+          ? {
+              ...item,
+              isFavorite: result.data.isFavorite,
+              favoritedAt: result.data.favoritedAt,
+            }
+          : item,
+      ),
+    );
+    if (nextFavorite && source !== "large") {
+      setFavoritePulse((current) => current + 1);
+    }
+  };
 
   return (
-    <motion.div
+    <motion.main
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25 }}
-      className="min-h-full px-4 pb-6 pt-4"
+      className="mx-auto min-h-full w-full max-w-[430px] overflow-hidden bg-[#03060a] pb-8 text-white"
     >
-      <Link
-        href="/app"
-        className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        {t("client.common.back")}
-      </Link>
+      <AnimatePresence>
+        {favoriteFlight && (
+          <motion.div
+            key={favoriteFlight.id}
+            initial={{ opacity: 0, scale: 0.55, x: 0, y: 0 }}
+            animate={{
+              opacity: [0, 1, 1, 0],
+              scale: [0.55, 1.08, 0.82, 0.34],
+              x: favoriteFlight.toX - favoriteFlight.fromX,
+              y: favoriteFlight.toY - favoriteFlight.fromY,
+            }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.76, ease: [0.22, 1, 0.36, 1] }}
+            className="pointer-events-none fixed z-[80] flex h-11 w-11 items-center justify-center rounded-full border border-violet-200/40 bg-violet-500/85 text-white shadow-[0_18px_46px_rgba(139,92,246,0.45)]"
+            style={{ left: favoriteFlight.fromX - 22, top: favoriteFlight.fromY - 22 }}
+          >
+            <Heart className="h-5 w-5 fill-white" />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <motion.section
-        initial={{ y: 8, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.05 }}
-        className="mb-6"
-      >
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          <p className="text-sm text-muted-foreground">{company.name}</p>
-          {categories.slice(0, 3).map((category) => (
-            <Badge key={category.slug} variant="secondary" className="inline-flex items-center gap-1 text-[10px] font-normal">
-              <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
-              {categoryName(category, t)}
-            </Badge>
-          ))}
-        </div>
-        <p className="text-4xl font-bold tracking-tight tabular-nums text-primary">
-          {company.points.balance}
-          <span className="ml-2 text-lg font-normal text-muted-foreground">{t("client.common.pointsShort")}</span>
-        </p>
-        <div className="mt-3 space-y-2">
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{company.level.current?.levelName ?? t("client.common.member")}</span>
-            <span>{company.level.next ? `${company.level.next.pointsToNext} ${t("client.common.ptsLeft")}` : t("client.common.topLevel")}</span>
-          </div>
-          <Progress value={progressPercent} className="h-2" />
-        </div>
-      </motion.section>
+      <section className="relative h-[250px] overflow-hidden">
+        <img
+          src={heroImage}
+          alt={company.name}
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.24)_38%,rgba(3,6,10,0.92)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_60%_10%,rgba(255,180,85,0.2),transparent_32%),radial-gradient(circle_at_8%_100%,rgba(124,58,237,0.18),transparent_34%)]" />
 
-      {mainLocation && (
-        <motion.section
-          initial={{ y: 8, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.07 }}
-          className="mb-6"
-        >
-          <Card className="glass overflow-hidden border-white/10">
-            <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
-              <div className="flex items-start gap-2">
-                <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                <div>
-                  <CardTitle className="text-sm font-semibold">{t("client.wallet.locations")}</CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">{t("client.wallet.locationsSubtitle")}</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3">
-                <div className="mb-1 flex items-center gap-2">
-                  <Badge className="h-5 px-1.5 text-[10px]">{t("client.wallet.main")}</Badge>
-                  {mainLocation.precision && (
-                    <span className="text-[10px] text-muted-foreground">{t("client.wallet.precision")}: {mainLocation.precision}</span>
-                  )}
-                </div>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{mainLocation.title ?? company.name}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{mainLocation.address}</p>
-                    <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <Clock3 className="h-3 w-3" />
-                      {mainLocation.openTime ?? "09:00"}-{mainLocation.closeTime ?? "21:00"}
-                      <span className={cn("font-medium", isLocationOpenNow(mainLocation) ? "text-emerald-300" : "text-muted-foreground")}>
-                        {isLocationOpenNow(mainLocation) ? t("client.wallet.openNow") : t("client.wallet.closedNow")}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-col gap-2">
-                    <Button asChild size="sm" variant="secondary" className="h-8">
-                      <Link href={mapLocationHref(company, mainLocation.uuid)}>{t("client.wallet.map")}</Link>
-                    </Button>
-                    <Button asChild size="sm" className="h-8">
-                      <a href={routeHref(mainLocation)} target="_blank" rel="noreferrer">
-                        <Navigation className="mr-1 h-3.5 w-3.5" />
-                        {t("client.wallet.route")}
-                      </a>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {branchLocations.slice(0, 3).map((location) => (
-                <div key={location.uuid} className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{location.title ?? t("client.common.branch")}</p>
-                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{location.address}</p>
-                      <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <Clock3 className="h-3 w-3" />
-                        {location.openTime ?? "09:00"}-{location.closeTime ?? "21:00"}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col gap-2">
-                      <Button asChild size="sm" variant="secondary" className="h-8">
-                        <Link href={mapLocationHref(company, location.uuid)}>{t("client.wallet.map")}</Link>
-                      </Button>
-                      <Button asChild size="sm" className="h-8">
-                        <a href={routeHref(location)} target="_blank" rel="noreferrer">
-                          <Navigation className="mr-1 h-3.5 w-3.5" />
-                          {t("client.wallet.route")}
-                        </a>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {branchLocations.length > 3 && (
-                <p className="text-center text-xs text-muted-foreground">
-                  {branchLocations.length - 3 === 1
-                    ? t("client.wallet.moreLocation")
-                    : interpolate(t("client.wallet.moreLocations"), { count: branchLocations.length - 3 })}
-                </p>
+        {!isPublicView && (
+        <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4 pt-4">
+          <Link
+            href="/app"
+            aria-label={t("client.common.back")}
+            className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-slate-950/55 text-white shadow-[0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/10"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              aria-label="Поделиться"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-slate-950/55 text-white shadow-[0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/10"
+            >
+              <Share2 className="h-5 w-5" />
+            </button>
+            <motion.button
+              type="button"
+              ref={headerFavoriteButtonRef}
+              onClick={() => handleFavoriteToggle("header")}
+              disabled={favoriteSaving}
+              aria-pressed={company.isFavorite}
+              aria-label={company.isFavorite ? "Убрать из избранного" : "В избранное"}
+              animate={favoritePulse > 0 ? { scale: [1, 1.16, 0.96, 1] } : { scale: 1 }}
+              transition={{ duration: 0.44, ease: "easeOut" }}
+              className={cn(
+                "relative flex h-12 w-12 items-center justify-center overflow-visible rounded-full border text-white shadow-[0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:bg-white/10",
+                company.isFavorite ? "border-violet-300/35 bg-violet-500/28" : "border-white/10 bg-slate-950/55",
+                favoriteSaving && "opacity-70",
               )}
-            </CardContent>
-          </Card>
-        </motion.section>
-      )}
+            >
+              <AnimatePresence>
+                {favoritePulse > 0 && company.isFavorite && (
+                  <motion.span
+                    key={favoritePulse}
+                    initial={{ opacity: 0.7, scale: 0.7 }}
+                    animate={{ opacity: 0, scale: 1.8 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.62, ease: "easeOut" }}
+                    className="absolute inset-0 rounded-full border border-violet-200/70"
+                  />
+                )}
+              </AnimatePresence>
+              <motion.span
+                key={`heart-${favoritePulse}`}
+                animate={favoritePulse > 0 ? { rotate: [0, -10, 8, 0], scale: [1, 1.18, 1] } : undefined}
+                transition={{ duration: 0.42, ease: "easeOut" }}
+              >
+                <Heart className={cn("h-5 w-5", company.isFavorite && "fill-white")} />
+              </motion.span>
+            </motion.button>
+          </div>
+        </div>
+        )}
 
-      <motion.section
-        initial={{ y: 8, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.08 }}
-        className="mb-6"
-      >
-        <Card className="glass overflow-hidden border-white/10">
-          <CardHeader className="flex flex-row items-center gap-2 pb-2">
-            <Award className="h-5 w-5 text-primary" />
-            <div>
-              <CardTitle className="text-sm font-semibold">{t("client.wallet.companyLevel")}</CardTitle>
-              <p className="text-xs text-muted-foreground">{interpolate(t("client.wallet.spendStatus"), { company: company.name })}</p>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("client.wallet.current")}</p>
-                  <p className="text-lg font-semibold">{company.level.current?.levelName ?? t("client.common.member")}</p>
+        <div className="absolute inset-x-0 bottom-3 z-10 px-4">
+          <div className="flex items-end gap-3">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[24px] border border-amber-200/35 bg-[radial-gradient(circle_at_22%_12%,rgba(255,255,255,0.22),transparent_28%),linear-gradient(135deg,rgba(115,64,25,0.92),rgba(34,18,9,0.96))] shadow-[0_22px_52px_rgba(0,0,0,0.55)]">
+              {logoImage ? (
+                <img
+                  src={logoImage}
+                  alt={company.name}
+                  className="h-full w-full object-cover"
+                  onError={(event) => {
+                    event.currentTarget.style.display = "none";
+                  }}
+                />
+              ) : (
+                <div className="text-[46px] font-black leading-none tracking-[-0.08em] text-white">
+                  {company.name.slice(0, 1).toUpperCase()}
                 </div>
-                <Badge className="gap-1">
-                  <Sparkles className="h-3 w-3" />
-                  {company.level.current?.cashbackPercent ?? 0}% {t("client.wallet.cashback")}
-                </Badge>
-              </div>
-              <div className="mt-3 space-y-1">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{company.level.totalSpentPoints} {t("client.wallet.levelPts")}</span>
-                  <span>{company.level.next ? `${company.level.next.minTotalSpend} ${t("client.wallet.next")}` : t("client.wallet.maxed")}</span>
-                </div>
-                <Progress value={company.level.progressPercent} className="h-2" />
-              </div>
+              )}
             </div>
 
-            <div className="grid gap-2">
-              {company.level.ladder.map((rule) => {
-                const reached = company.level.totalSpentPoints >= rule.minTotalSpend;
-                const active = company.level.current?.id === rule.id;
-                return (
-                  <div
-                    key={rule.id}
+            <div className="min-w-0 pb-1">
+              <h1 className="line-clamp-2 text-[26px] font-black leading-[0.98] tracking-[-0.05em] text-white drop-shadow-[0_8px_24px_rgba(0,0,0,0.8)]">
+                {company.name}
+              </h1>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-white/78">
+                {categories.slice(0, 2).map((category) => (
+                  <span
+                    key={category.slug}
+                    className="inline-flex items-center gap-1 rounded-xl border border-white/8 bg-slate-950/62 px-2 py-0.5 text-xs backdrop-blur-xl"
+                  >
+                    <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3.5 w-3.5 text-cyan-100" />
+                    {categoryName(category, t)}
+                  </span>
+                ))}
+                {mainLocation && (
+                  <span className="inline-flex items-center gap-1 rounded-xl border border-violet-300/20 bg-slate-950/62 px-2 py-0.5 text-xs text-violet-200 backdrop-blur-xl">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {mainLocation.city ?? "рядом"}
+                  </span>
+                )}
+                {mainLocation && (
+                  <span
                     className={cn(
-                      "flex items-center justify-between rounded-xl border px-3 py-2 text-sm",
-                      active
-                        ? "border-primary/50 bg-primary/10"
-                        : reached
-                          ? "border-emerald-400/30 bg-emerald-500/5"
-                          : "border-white/10 bg-white/[0.02]",
+                      "inline-flex items-center gap-1 rounded-xl border bg-slate-950/62 px-2 py-0.5 text-xs font-medium backdrop-blur-xl",
+                      isOpen
+                        ? "border-emerald-300/25 text-emerald-300"
+                        : "border-red-300/25 text-red-300",
                     )}
                   >
-                    <div>
-                      <p className="font-medium">{rule.levelName}</p>
-                      <p className="text-xs text-muted-foreground">{interpolate(t("client.wallet.fromLevelPts"), { count: rule.minTotalSpend })}</p>
+                    <span className={cn("h-1.5 w-1.5 rounded-full", isOpen ? "bg-emerald-300" : "bg-red-300")} />
+                    {isOpen ? `Открыто до ${statusCloseTime}` : `Закрыто · откроется в ${statusOpenTime}`}
+                  </span>
+                )}
+                {!mainLocation && (
+                  <span className="inline-flex items-center gap-1 rounded-xl border border-emerald-300/25 bg-slate-950/62 px-2 py-0.5 text-xs font-medium text-emerald-300 backdrop-blur-xl">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                    Открыто до {statusCloseTime}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="space-y-5 px-4 pt-5">
+        {isPublicView ? (
+          <>
+            <motion.section
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.05 }}
+              className="overflow-hidden rounded-[24px] border border-cyan-200/16 bg-[radial-gradient(circle_at_12%_0%,rgba(34,211,238,0.18),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.92),rgba(3,7,18,0.9))] p-5 shadow-[0_18px_46px_rgba(0,0,0,0.38)]"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/18 bg-cyan-400/10 text-cyan-100">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-lg font-black leading-tight tracking-[-0.04em]">
+                    Эти и другие потрясающие компании доступны в NearLoy!
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-white/62">
+                    В приложении можно копить баллы, открывать уровни, получать награды и хранить любимые места в одной карте.
+                  </p>
+                  <Button asChild className="mt-4 h-11 rounded-2xl bg-white px-5 text-sm font-black text-slate-950 hover:bg-white/90">
+                    <Link href={`/register?next=${encodeURIComponent(publicCompanyPath)}`}>
+                      Создать аккаунт
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </motion.section>
+
+            <Dialog
+              open={Boolean(selectedGalleryItem)}
+              onOpenChange={(open) => {
+                if (!open) setSelectedGalleryItem(null);
+              }}
+            >
+              <DialogContent className="w-[calc(100vw-1rem)] max-w-[920px] overflow-hidden border-white/10 bg-[#03060a] p-0 text-white shadow-[0_30px_90px_rgba(0,0,0,0.72)]">
+                {selectedGalleryItem && (
+                  <>
+                    <div className="relative max-h-[78dvh] min-h-[420px] overflow-hidden bg-black">
+                      <img
+                        src={selectedGalleryItem.image}
+                        alt={selectedGalleryItem.title}
+                        className="h-full max-h-[78dvh] min-h-[420px] w-full object-contain"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                      />
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/82 via-black/24 to-transparent p-5 pt-20">
+                        <DialogTitle className="text-2xl font-black tracking-[-0.05em] text-white">
+                          {selectedGalleryItem.title}
+                        </DialogTitle>
+                        <DialogDescription className="mt-1 text-sm text-white/64">
+                          {selectedGalleryItem.caption}
+                        </DialogDescription>
+                      </div>
                     </div>
-                    <span className="text-xs font-medium text-primary">{rule.cashbackPercent}%</span>
+                  </>
+                )}
+              </DialogContent>
+            </Dialog>
+
+            <motion.section
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.08 }}
+            >
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-black tracking-[-0.04em]">Галерея</h2>
+                  <p className="mt-1 text-sm text-white/52">До 10 фото — достаточно красиво и не тяжело для сервера.</p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-white/62">
+                  {galleryItems.length} фото
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {galleryItems.map((item, index) => (
+                  <button
+                    type="button"
+                    key={`${item.title}-${index}`}
+                    onClick={() => setSelectedGalleryItem(item)}
+                    className={cn(
+                      "group relative overflow-hidden rounded-[22px] border border-white/10 bg-slate-950 text-left shadow-[0_18px_44px_rgba(0,0,0,0.32)] outline-none transition duration-200 hover:border-cyan-200/30 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-cyan-200/70",
+                      item.className,
+                    )}
+                  >
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      style={{ objectPosition: item.position }}
+                    />
+                    <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.22)_44%,rgba(3,6,10,0.84)_100%)]" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(168,85,247,0.22),transparent_34%)]" />
+                    <div className="absolute inset-x-0 bottom-0 p-3">
+                      <p className="line-clamp-1 text-sm font-black tracking-[-0.03em] text-white">{item.title}</p>
+                      <p className="mt-0.5 line-clamp-1 text-xs text-white/58">{item.caption}</p>
+                    </div>
+                    <span className="absolute right-3 top-3 rounded-full border border-white/12 bg-black/45 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/72 opacity-0 backdrop-blur transition group-hover:opacity-100">
+                      открыть
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </motion.section>
+
+            <motion.section
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.09 }}
+              className="relative overflow-hidden rounded-[28px] border border-fuchsia-300/16 bg-[radial-gradient(circle_at_12%_12%,rgba(217,70,239,0.36),transparent_32%),radial-gradient(circle_at_92%_20%,rgba(251,191,36,0.24),transparent_30%),linear-gradient(135deg,rgba(18,9,32,0.96),rgba(3,7,18,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.42)]"
+            >
+              <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-fuchsia-500/18 blur-3xl" />
+              <div className="absolute -bottom-12 left-2 h-32 w-32 rounded-full bg-amber-400/14 blur-3xl" />
+              <div className="relative">
+                <p className="inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.06] px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-100">
+                  <TicketPercent className="h-4 w-4" />
+                  Акция
+                </p>
+                <div className="mt-4 grid grid-cols-[1fr_116px] items-stretch gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-2xl font-black leading-[0.98] tracking-[-0.06em] text-white">
+                      {offerTitle}
+                    </h2>
+                    <p className="mt-2 text-sm leading-relaxed text-white/62">
+                      {offerDescription}
+                    </p>
+                    {offerCode && (
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-[18px] border border-fuchsia-200/24 bg-fuchsia-500/14 px-4 py-2 shadow-[0_0_28px_rgba(217,70,239,0.16)]">
+                        <Sparkles className="h-4 w-4 text-fuchsia-100" />
+                        <span className="font-mono text-lg font-black tracking-[0.18em] text-white">{offerCode}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative overflow-hidden rounded-[24px] border border-white/12 bg-black/32">
+                    <img
+                      src={offerImage}
+                      alt={offerTitle}
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.04),rgba(0,0,0,0.62))]" />
+                    <div className="absolute bottom-3 right-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-950 shadow-[0_16px_36px_rgba(0,0,0,0.35)]">
+                      <span className="text-lg font-black">%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.section>
+
+            <motion.section
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(3,7,18,0.88))] p-4"
+            >
+              <div className="mb-4">
+                <p className="inline-flex items-center gap-2 rounded-2xl border border-amber-200/18 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-100">
+                  <Award className="h-4 w-4" />
+                  Уровни компании
+                </p>
+                <h2 className="mt-3 text-xl font-black tracking-[-0.04em]">Что можно открыть у {company.name}</h2>
+                <p className="mt-1 text-sm text-white/56">Пороги и бонусы видны сразу — без регистрации и всплывающих окон.</p>
+              </div>
+              <div className="space-y-2">
+                {levels.length > 0 ? (
+                  levels.map((level, index) => (
+                    <div
+                      key={level.id}
+                      className="flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-slate-950/44 px-4 py-3"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-amber-200/20 bg-amber-500/12 text-amber-100">
+                          {index + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-base font-bold text-white">{level.levelName}</p>
+                          <p className="mt-1 text-sm text-white/52">от {level.minTotalSpend} баллов</p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 rounded-2xl border border-cyan-200/14 bg-cyan-400/8 px-3 py-1.5 text-sm font-black text-cyan-100">
+                        {level.cashbackPercent}%
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[20px] border border-white/8 bg-slate-950/44 px-4 py-5 text-sm text-white/56">
+                    Уровни компании пока не настроены.
+                  </div>
+                )}
+              </div>
+            </motion.section>
+          </>
+        ) : (
+          <>
+        <motion.section
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.05 }}
+          className="overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.92),rgba(3,7,18,0.88))] p-4 shadow-[0_18px_46px_rgba(0,0,0,0.38)]"
+        >
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+              <p className="text-sm text-white/70">Ваш баланс</p>
+              <div className="mt-2 flex items-end gap-2">
+                <span className="text-[42px] font-black leading-[0.82] tracking-[-0.06em]">{company.points.balance}</span>
+                <span className="pb-0.5 text-sm text-white/78">баллов</span>
+              </div>
+              <div className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-violet-300/20 bg-violet-500/12 px-3 py-1.5 text-sm text-violet-200">
+                <Star className="h-4 w-4 fill-violet-300 text-violet-300" />
+                {currentLevel}
+              </div>
+            </div>
+
+              <div className="min-w-[116px] rounded-[18px] border border-white/8 bg-slate-950/45 px-3 py-2 text-right">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Дальше</p>
+                <p className="mt-1 truncate text-sm font-bold text-white/86">{company.level.next ? nextLevel : "Максимум"}</p>
+              </div>
+            </div>
+
+            <div className="rounded-[18px] border border-white/8 bg-slate-950/45 p-3">
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-white/58">До следующего уровня</p>
+                  <p className="mt-1 truncate text-sm text-white/84">
+                    {company.level.next ? `${currentLevel} → ${nextLevel}` : "Вы на максимальном уровне"}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-xl font-black leading-none tracking-[-0.04em]">{pointsToNextLevel}</p>
+                  <p className="mt-0.5 text-[11px] leading-none text-white/58">баллов</p>
+                </div>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-amber-300 to-orange-500"
+                  style={{ width: `${levelProgress}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {hasActionButtons && (
+          <motion.section
+            initial={{ y: 12, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.08 }}
+            className={cn("grid gap-3", actionGridClass)}
+          >
+            {hasRouteLocations && (
+              hasMultipleRouteLocations ? (
+                <Button
+                  type="button"
+                  onClick={() => setLocationsOpen(true)}
+                  className="h-12 rounded-2xl border border-white/10 bg-slate-950/82 text-xs font-semibold text-white shadow-[0_14px_34px_rgba(0,0,0,0.35)] hover:bg-white/10"
+                >
+                  <Route className="mr-2 h-4 w-4" />
+                  Выбрать адрес
+                </Button>
+              ) : (
+                <Button asChild className="h-12 rounded-2xl border border-white/10 bg-slate-950/82 text-xs font-semibold text-white shadow-[0_14px_34px_rgba(0,0,0,0.35)] hover:bg-white/10">
+                  <a href={routeHref(routeLocations[0])} target="_blank" rel="noreferrer">
+                    <Route className="mr-2 h-4 w-4" />
+                    Построить маршрут
+                  </a>
+                </Button>
+              )
+            )}
+            <AnimatePresence initial={false}>
+              {showLargeFavoriteButton && (
+                <motion.div
+                  key="favorite-large-cta"
+                  initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.82, y: -10, filter: "blur(6px)" }}
+                  transition={{ duration: 0.28, ease: "easeOut" }}
+                >
+                  <Button
+                    ref={largeFavoriteButtonRef}
+                    type="button"
+                    onClick={() => handleFavoriteToggle("large")}
+                    disabled={favoriteSaving}
+                    aria-pressed={company.isFavorite}
+                    className="h-12 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-purple-700 text-xs font-semibold text-white shadow-[0_14px_34px_rgba(88,28,135,0.35)] hover:from-violet-500 hover:to-purple-600"
+                  >
+                    <Heart className="mr-2 h-4 w-4" />
+                    В избранное
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.section>
+        )}
+
+        <motion.section initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xl font-black tracking-[-0.04em]">Награды</h2>
+            <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-violet-300">
+              Все награды
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex snap-x gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {REWARD_CARDS.map((reward) => {
+              const progress = Math.min(100, (company.points.balance / reward.cost) * 100);
+              const Icon = reward.icon;
+              return (
+                <article
+                  key={reward.title}
+                  className={cn(
+                    "relative min-w-[168px] snap-start overflow-hidden rounded-[20px] border border-white/10 bg-gradient-to-br p-3 shadow-[0_18px_46px_rgba(0,0,0,0.35)]",
+                    reward.accent,
+                  )}
+                >
+                  <div className="relative h-20 overflow-hidden rounded-2xl">
+                    <img
+                      src={reward.image}
+                      alt={reward.title}
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+                    <div className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-black/45 text-white backdrop-blur">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <h3 className="mt-3 text-sm font-bold leading-tight">{reward.title}</h3>
+                  <p className="mt-1 text-sm text-white/75">
+                    <span className="font-bold text-violet-200">{reward.cost}</span> баллов
+                  </p>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div className={cn("h-full rounded-full", reward.bar)} style={{ width: `${progress}%` }} />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </motion.section>
+
+        <motion.section
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.12 }}
+          className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(3,7,18,0.88))] p-4"
+        >
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setLevelsOpen(true)}
+              className="absolute right-0 top-1/2 z-10 flex h-[76px] w-[92px] -translate-y-1/2 flex-col items-center justify-center rounded-[22px] border border-amber-200/20 bg-amber-500/10 text-amber-100 transition hover:bg-amber-500/16"
+            >
+              <Award className="mb-1 h-8 w-8" />
+              <span className="text-xs font-semibold leading-none">Все уровни</span>
+            </button>
+
+            <div className="mb-4 pr-[108px]">
+              <h2 className="text-xl font-black tracking-[-0.04em]">Ваш уровень</h2>
+            </div>
+            <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-4 pr-[108px]">
+              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[24px] border border-amber-200/25 bg-[radial-gradient(circle_at_30%_20%,rgba(251,191,36,0.5),transparent_34%),linear-gradient(135deg,rgba(154,76,21,0.9),rgba(45,19,9,0.96))] shadow-[0_18px_42px_rgba(0,0,0,0.35)]">
+                <Star className="h-8 w-8 fill-white text-white" />
+              </div>
+              <div>
+                <p className="text-base font-bold">
+                  {currentLevel}
+                  <span className="mx-2 text-white/45">→</span>
+                  <span className="font-medium text-white/65">{nextLevel}</span>
+                </p>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-orange-500" style={{ width: `${levelProgress}%` }} />
+                </div>
+                <p className="mt-2 text-sm text-white/74">
+                  <span className="font-bold text-amber-200">{company.level.totalSpentPoints}</span>
+                  {company.level.next ? ` / ${company.level.next.minTotalSpend} баллов` : " баллов"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        <Dialog open={levelsOpen} onOpenChange={setLevelsOpen}>
+          <DialogContent className="max-h-[82vh] overflow-hidden border-white/10 bg-[#070b12] p-0 text-white">
+            <DialogHeader className="border-b border-white/8 px-5 py-4 text-left">
+              <DialogTitle className="flex items-center gap-2 text-xl font-black tracking-[-0.04em]">
+                <Award className="h-5 w-5 text-amber-200" />
+                Уровни компании
+              </DialogTitle>
+              <DialogDescription className="text-sm text-white/58">
+                Все доступные уровни, порог баллов и кешбэк в {company.name}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 pb-5 pt-1">
+              {levels.map((level) => {
+                const isCurrent = company.level.current?.id === level.id;
+                const isNext = company.level.next?.id === level.id;
+                return (
+                  <div
+                    key={level.id}
+                    className={cn(
+                      "flex items-center justify-between gap-3 rounded-[20px] border px-4 py-3",
+                      isCurrent ? "border-amber-200/35 bg-amber-500/12" : "border-white/8 bg-slate-950/40",
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-bold text-white">{level.levelName}</p>
+                      <p className="mt-1 text-sm text-white/55">от {level.minTotalSpend} баллов</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-base font-black text-amber-100">{level.cashbackPercent}%</p>
+                      <p className="mt-1 text-xs text-white/45">
+                        {isCurrent ? "текущий" : isNext ? "следующий" : "уровень"}
+                      </p>
+                    </div>
                   </div>
                 );
               })}
             </div>
-          </CardContent>
-        </Card>
-      </motion.section>
+          </DialogContent>
+        </Dialog>
 
-      {partnerSubscriptions.length > 0 && (
-        <motion.section
-          initial={{ y: 8, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.12 }}
-          className="mb-6"
-        >
-          <Card className="glass overflow-hidden border-white/10">
-            <CardHeader className="border-b border-white/10 bg-white/[0.03] pb-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                    <CircleDollarSign className="h-5 w-5 text-primary" />
-                    {t("client.wallet.partnerSubscriptions")}
-                  </CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {interpolate(t("client.wallet.partnerSubscriptionsSubtitle"), { company: company.name })}
-                  </p>
-                </div>
-                <Badge variant="secondary" className="shrink-0">
-                  {partnerSubscriptions.length}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2 p-3">
-              {partnerSubscriptions.map((sub) => (
-                <Link key={sub.uuid} href={`/marketplace/${sub.uuid}`} className="block">
-                  <div className="group rounded-2xl border border-white/10 bg-background/45 p-3 transition-all hover:border-primary/35 hover:bg-primary/5 active:scale-[0.99]">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-                        {sub.category ? (
-                          <CategoryIcon iconName={sub.category.icon ?? "Circle"} className="h-5 w-5" />
-                        ) : (
-                          <CircleDollarSign className="h-5 w-5" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-semibold">{sub.name}</p>
-                          {sub.isOwned && <Badge className="h-5 shrink-0 px-1.5 text-[10px]">{t("client.common.active")}</Badge>}
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                          <Badge variant="secondary" className="text-[10px] font-normal">
-                            {formatPlanPrice(sub, t)}
-                          </Badge>
-                          {sub.category && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                              <CategoryIcon iconName={sub.category.icon ?? "Circle"} className="h-3 w-3" />
-                              {categoryName(sub.category, t)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.04] text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                        <ChevronRight className="h-4 w-4" />
-                      </div>
-                    </div>
+        <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+          <DialogContent className="overflow-hidden border-white/10 bg-[#070b12] p-0 text-white">
+            <DialogHeader className="border-b border-white/8 px-5 py-4 text-left">
+              <DialogTitle className="flex items-center gap-2 text-xl font-black tracking-[-0.04em]">
+                <Share2 className="h-5 w-5 text-violet-200" />
+                Поделиться компанией
+              </DialogTitle>
+              <DialogDescription className="text-sm text-white/58">
+                Отправьте клиентам красивую ссылку на карту лояльности {company.name}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 px-5 pb-5 pt-4">
+              <div className="overflow-hidden rounded-[24px] border border-violet-200/16 bg-[radial-gradient(circle_at_12%_0%,rgba(168,85,247,0.34),transparent_30%),linear-gradient(135deg,rgba(15,23,42,0.94),rgba(3,7,18,0.96))] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.34)]">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-amber-200/30 bg-[linear-gradient(135deg,rgba(115,64,25,0.95),rgba(34,18,9,0.98))] text-3xl font-black text-white">
+                    {logoImage ? (
+                      <img src={logoImage} alt={company.name} className="h-full w-full object-cover" />
+                    ) : (
+                      company.name.slice(0, 1).toUpperCase()
+                    )}
                   </div>
-                </Link>
-              ))}
-            </CardContent>
-          </Card>
-        </motion.section>
-      )}
+                  <div className="min-w-0">
+                    <p className="truncate text-lg font-black tracking-[-0.04em]">{company.name}</p>
+                    <p className="mt-1 truncate text-xs text-violet-100/68">{publicCompanyUrl}</p>
+                  </div>
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-white/70">{shareText}</p>
+              </div>
 
-      {showExpiring && (
-        <motion.section initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.15 }}>
-          <Card className={cn("glass border-amber-500/30 bg-amber-500/5")}>
-            <CardHeader className="flex flex-row items-center gap-2 pb-2">
-              <AlertCircle className="h-5 w-5 text-amber-400" />
-              <h2 className="text-sm font-semibold text-amber-200">{t("client.wallet.expiringSoon")}</h2>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                {interpolate(t("client.wallet.expiringCopy"), {
-                  points: company.points.expiringPoints ?? 0,
-                  date: company.points.expiringDate ? new Date(company.points.expiringDate).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US") : "",
-                })}
-              </p>
-            </CardContent>
-          </Card>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  onClick={() => void handleNativeShare().catch(() => undefined)}
+                  className="h-12 rounded-2xl bg-white text-slate-950 hover:bg-white/90"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Поделиться
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void handleCopyShareLink()}
+                  className="h-12 rounded-2xl"
+                >
+                  {shareCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {shareCopied ? "Скопировано" : "Копировать"}
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <a
+                  href={`https://t.me/share/url?url=${encodeURIComponent(publicCompanyUrl)}&text=${encodeURIComponent(shareText)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 text-sm font-semibold text-white/86 transition hover:bg-white/8"
+                >
+                  <Send className="h-4 w-4 text-cyan-200" />
+                  Telegram
+                </a>
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(`${shareText} ${publicCompanyUrl}`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 text-sm font-semibold text-white/86 transition hover:bg-white/8"
+                >
+                  <Share2 className="h-4 w-4 text-emerald-200" />
+                  WhatsApp
+                </a>
+                <a
+                  href={vkShareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 text-sm font-semibold text-white/86 transition hover:bg-white/8"
+                >
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-lg bg-[#0077ff] text-[10px] font-black leading-none text-white">
+                    VK
+                  </span>
+                  VK
+                </a>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={locationsOpen} onOpenChange={setLocationsOpen}>
+          <DialogContent className="max-h-[82vh] overflow-hidden border-white/10 bg-[#070b12] p-0 text-white">
+            <DialogHeader className="border-b border-white/8 px-5 py-4 text-left">
+              <DialogTitle className="flex items-center gap-2 text-xl font-black tracking-[-0.04em]">
+                <Route className="h-5 w-5 text-cyan-100" />
+                Куда построить маршрут
+              </DialogTitle>
+              <DialogDescription className="text-sm text-white/58">
+                Выберите удобную точку {company.name}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 pb-5 pt-1">
+              {routeLocations.map((location) => (
+                <a
+                  key={location.uuid}
+                  href={routeHref(location)}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setLocationsOpen(false)}
+                  className="flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-slate-950/40 px-4 py-3 transition hover:border-cyan-200/30 hover:bg-cyan-500/8"
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-400/12 text-cyan-100">
+                      <MapPin className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-bold text-white">
+                        {location.title || location.address || location.city || "Точка на карте"}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-white/52">
+                        {[location.address, location.city].filter(Boolean).join(" · ") || "Открыть в Яндекс Картах"}
+                      </span>
+                    </span>
+                  </span>
+                  <Navigation className="h-4 w-4 shrink-0 text-white/55" />
+                </a>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <motion.section initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.14 }}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xl font-black tracking-[-0.04em]">Последние операции</h2>
+            <Link href="/history" className="inline-flex items-center gap-1 text-sm font-medium text-violet-300">
+              Все операции
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(3,7,18,0.88))]">
+            {operations.length > 0 ? (
+              operations.map((operation, index) => {
+                const Icon = operation.icon;
+                const positive = operation.amount >= 0;
+                return (
+                  <div
+                    key={operation.id}
+                    className={cn(
+                      "grid grid-cols-[58px_40px_minmax(0,1fr)_64px] items-center gap-3 px-4 py-3",
+                      index > 0 && "border-t border-white/8",
+                    )}
+                  >
+                    <div className={cn("text-base font-black", positive ? "text-violet-300" : "text-amber-300")}>
+                      {positive ? "+" : ""}
+                      {operation.amount}
+                      <p className="mt-0.5 text-xs font-normal text-white/58">баллов</p>
+                    </div>
+                    <div className={cn("flex h-10 w-10 items-center justify-center rounded-2xl", operation.tone === "amber" ? "bg-amber-500/18 text-amber-300" : "bg-violet-500/18 text-violet-300")}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{operation.title}</p>
+                      <p className="truncate text-xs text-white/55">{operation.subtitle}</p>
+                    </div>
+                    <p className="text-right text-xs leading-relaxed text-white/54">{operation.time}</p>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="px-5 py-6 text-sm text-white/55">Операций по этой компании пока нет.</div>
+            )}
+          </div>
         </motion.section>
-      )}
-    </motion.div>
+
+        <motion.section
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.16 }}
+          className="rounded-[22px] border border-violet-300/15 bg-[radial-gradient(circle_at_7%_45%,rgba(124,58,237,0.36),transparent_22%),linear-gradient(135deg,rgba(35,15,70,0.9),rgba(8,8,18,0.9))] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.35)]"
+        >
+          <div className="grid grid-cols-[56px_1fr] items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-violet-500/20 text-violet-200">
+              <TicketPercent className="h-8 w-8" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black leading-tight tracking-[-0.04em]">{offerTitle}</h3>
+              <p className="mt-1 text-sm leading-snug text-white/62">{offerDescription}</p>
+            </div>
+            <Button className="col-span-2 h-11 rounded-2xl bg-violet-600 px-5 text-sm font-bold text-white hover:bg-violet-500">
+              {offerCode || "Подробнее"}
+            </Button>
+          </div>
+        </motion.section>
+
+          </>
+        )}
+      </div>
+    </motion.main>
   );
 }
-

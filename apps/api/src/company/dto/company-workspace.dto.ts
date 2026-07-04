@@ -68,6 +68,13 @@ export class UpdateCompanyProfileDto {
   @MaxLength(160)
   name!: string;
 
+  @ApiPropertyOptional({ example: "aurora-coffee", description: "Public company page slug for /wallet/:slug" })
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(60)
+  slug?: string;
+
   @ApiPropertyOptional({ example: "Specialty coffee and daily rewards." })
   @IsOptional()
   @IsString()

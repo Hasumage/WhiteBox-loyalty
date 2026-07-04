@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import { getAccessToken } from "@/lib/api/auth-client";
 
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
@@ -13,12 +14,24 @@ export function TwaStaleDataNudge() {
   const pathname = usePathname();
   const { t } = useI18n("ru");
   const [visible, setVisible] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
+    const updateSessionState = () => setHasSession(Boolean(getAccessToken()));
+    updateSessionState();
+    window.addEventListener("nearloy:auth-updated", updateSessionState);
+    return () => window.removeEventListener("nearloy:auth-updated", updateSessionState);
+  }, []);
+
+  useEffect(() => {
+    if (pathname.startsWith("/wallet/") && !hasSession) {
+      setVisible(false);
+      return;
+    }
     setVisible(false);
     const timer = window.setTimeout(() => setVisible(true), STALE_AFTER_MS);
     return () => window.clearTimeout(timer);
-  }, [pathname]);
+  }, [hasSession, pathname]);
 
   return (
     <AnimatePresence>

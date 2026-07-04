@@ -61,6 +61,12 @@ enum CompanyMemberRole {
   CASHIER
 }
 
+enum CompanyMediaKind {
+  LOGO
+  HERO
+  GALLERY
+}
+
 enum SubscriptionEntitlementWindow {
   DAY
   WEEK
@@ -499,6 +505,8 @@ model Company {
   billingPromoRedemptions CompanyBillingPromoRedemption[]
   payments           Payment[]
   kycRecord          CompanyKycRecord?
+  mediaAssets        CompanyMediaAsset[]
+  specialOffers      CompanySpecialOffer[]
   targetEmailMessages EmailMessage[] @relation("EmailTargetCompany")
 
   @@index([categoryId])
@@ -990,6 +998,52 @@ model CompanyCategory {
   @@index([categoryId])
 }
 
+model CompanyMediaAsset {
+  id          String           @id @default(cuid())
+  companyId   Int
+  kind        CompanyMediaKind
+  title       String?
+  description String?
+  storageKey  String           @unique
+  fileName    String
+  mimeType    String
+  size        Int
+  width       Int
+  height      Int
+  sortOrder   Int              @default(0)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, kind, sortOrder])
+}
+
+model CompanySpecialOffer {
+  id              String    @id @default(cuid())
+  companyId       Int
+  title           String
+  description     String?
+  code            String?
+  imageStorageKey String?   @unique
+  imageFileName   String?
+  imageMimeType   String?
+  imageSize       Int?
+  imageWidth      Int?
+  imageHeight     Int?
+  sortOrder       Int       @default(0)
+  isActive        Boolean   @default(true)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, isActive, sortOrder])
+}
+
 model CompanyLevelRule {
   id              Int      @id @default(autoincrement())
   companyId       Int
@@ -1052,6 +1106,8 @@ model UserCompany {
   pointsToNextReward Int?
   expiringPoints   Int?
   expiringDate     DateTime?
+  isFavorite       Boolean   @default(false)
+  favoritedAt      DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -1060,6 +1116,7 @@ model UserCompany {
 
   @@unique([userId, companyId])
   @@index([companyId])
+  @@index([userId, isFavorite, favoritedAt])
 }
 
 model UserSubscription {

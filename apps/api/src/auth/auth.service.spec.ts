@@ -139,86 +139,16 @@ describe("AuthService", () => {
     ).rejects.toThrow("Admin workspace accounts");
   });
 
-  it("register creates CLIENT and returns tokens", async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
-    prisma.user.create.mockResolvedValue({
-      id: 1,
-      uuid: "11111111-1111-4111-8111-111111111111",
-      email: "u@b.com",
-      name: "U",
-      role: UserRole.CLIENT,
-      passwordHash: "h",
-      telegramId: null,
-      phoneNumber: null,
-      phoneVerifiedAt: null,
-      companyReferralCode: null,
-      emailVerifiedAt: null,
-      accountStatus: "ACTIVE",
-      deletionScheduledAt: null,
-      selectedProfileStatusId: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    prisma.profileStatus.findUnique.mockResolvedValue({ id: "top-100-status" });
-    prisma.platformCounter.upsert.mockResolvedValue({ key: "top100_client_registrations", value: 1 });
-    prisma.userProfileStatusUnlock.upsert.mockResolvedValue({ id: "top-100-unlock" });
-    prisma.refreshToken.create.mockResolvedValue({ id: "rt" });
+  it("register requires email confirmation code flow", async () => {
+    await expect(
+      service.register({
+        name: "U",
+        email: "u@b.com",
+        password: "password12",
+      }),
+    ).rejects.toThrow("Email confirmation is required");
 
-    const result = await service.register({
-      name: "U",
-      email: "u@b.com",
-      password: "password12",
-    });
-
-    expect(result.accessToken).toBe("access.jwt.token");
-    expect(result.refreshToken).toHaveLength(96);
-    expect(result.needsCategoryOnboarding).toBe(true);
-    expect(prisma.user.create).toHaveBeenCalled();
-    expect(prisma.userProfileStatusUnlock.upsert).toHaveBeenCalledWith({
-      where: { userId_statusId: { userId: 1, statusId: "top-100-status" } },
-      create: { userId: 1, statusId: "top-100-status", source: "TOP_100" },
-      update: {},
-    });
-    expect(prisma.refreshToken.create).toHaveBeenCalled();
-  });
-
-  it("register does not grant Top 100 after the first 100 client registrations", async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
-    prisma.user.create.mockResolvedValue({
-      id: 101,
-      uuid: "10110110-1011-4101-8101-101101101101",
-      email: "late@user.com",
-      name: "Late User",
-      role: UserRole.CLIENT,
-      passwordHash: "h",
-      telegramId: null,
-      phoneNumber: null,
-      phoneVerifiedAt: null,
-      companyReferralCode: null,
-      emailVerifiedAt: null,
-      accountStatus: "ACTIVE",
-      deletionScheduledAt: null,
-      selectedProfileStatusId: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    prisma.profileStatus.findUnique.mockResolvedValue({ id: "top-100-status" });
-    prisma.platformCounter.upsert.mockResolvedValue({ key: "top100_client_registrations", value: 101 });
-    prisma.refreshToken.create.mockResolvedValue({ id: "rt-late" });
-
-    const result = await service.register({
-      name: "Late User",
-      email: "late@user.com",
-      password: "password12",
-    });
-
-    expect(result.accessToken).toBe("access.jwt.token");
-    expect(prisma.platformCounter.upsert).toHaveBeenCalledWith({
-      where: { key: "top100_client_registrations" },
-      create: { key: "top100_client_registrations", value: 1 },
-      update: { value: { increment: 1 } },
-    });
-    expect(prisma.userProfileStatusUnlock.upsert).not.toHaveBeenCalled();
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
   it("requestRegistrationCode stores a pending verification and emails a 6-digit code", async () => {
@@ -253,6 +183,41 @@ describe("AuthService", () => {
     expect(email.sendRegistrationCode).toHaveBeenCalledWith({
       toEmail: "new.client@example.com",
       toName: "New Client",
+      code: expect.stringMatching(/^\d{6}$/),
+      expiresAt: expect.any(Date),
+    });
+  });
+
+  it("requestRegistrationCode resends code for an existing unconfirmed account", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 55,
+      name: "Existing Client",
+      role: UserRole.CLIENT,
+      emailVerifiedAt: null,
+      accountStatus: "ACTIVE",
+    });
+    prisma.emailVerificationCode.updateMany.mockResolvedValue({ count: 0 });
+    prisma.emailVerificationCode.create.mockResolvedValue({ id: "pending-code" });
+
+    const result = await service.requestRegistrationCode({
+      name: "Ignored Name",
+      email: "Existing@Example.COM",
+      password: "password12",
+      confirmPassword: "password12",
+    });
+
+    expect(result.success).toBe(true);
+    expect(prisma.emailVerificationCode.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        normalizedEmail: "existing@example.com",
+        name: "Existing Client",
+        role: UserRole.CLIENT,
+        passwordHash: expect.any(String),
+      }),
+    });
+    expect(email.sendRegistrationCode).toHaveBeenCalledWith({
+      toEmail: "existing@example.com",
+      toName: "Existing Client",
       code: expect.stringMatching(/^\d{6}$/),
       expiresAt: expect.any(Date),
     });
@@ -303,6 +268,66 @@ describe("AuthService", () => {
       data: expect.objectContaining({
         name: "Verified User",
         email: "verified@example.com",
+        passwordHash,
+        role: UserRole.CLIENT,
+        emailVerifiedAt: expect.any(Date),
+      }),
+    });
+    expect(prisma.emailVerificationCode.update).toHaveBeenCalledWith({
+      where: { id: "pending-code" },
+      data: { status: "CONSUMED", consumedAt: expect.any(Date) },
+    });
+  });
+
+  it("verifyRegistrationCode verifies an existing unconfirmed account instead of conflicting", async () => {
+    const codeHash = await bcrypt.hash("123456", 4);
+    const passwordHash = await bcrypt.hash("password12", 4);
+    prisma.emailVerificationCode.findFirst.mockResolvedValue({
+      id: "pending-code",
+      normalizedEmail: "existing@example.com",
+      name: "Existing Client",
+      role: UserRole.CLIENT,
+      passwordHash,
+      codeHash,
+      attempts: 0,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 55,
+      emailVerifiedAt: null,
+      accountStatus: "ACTIVE",
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 55,
+      uuid: "55555555-5555-4555-8555-555555555555",
+      email: "existing@example.com",
+      name: "Existing Client",
+      role: UserRole.CLIENT,
+      passwordHash,
+      telegramId: null,
+      phoneNumber: null,
+      phoneVerifiedAt: null,
+      companyReferralCode: null,
+      emailVerifiedAt: new Date(),
+      accountStatus: "ACTIVE",
+      deletionScheduledAt: null,
+      selectedProfileStatusId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    prisma.emailVerificationCode.update.mockResolvedValue({ id: "pending-code" });
+    prisma.refreshToken.create.mockResolvedValue({ id: "rt-existing" });
+
+    const result = await service.verifyRegistrationCode({
+      email: "existing@example.com",
+      code: "123456",
+    });
+
+    expect(result.accessToken).toBe("access.jwt.token");
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 55 },
+      data: expect.objectContaining({
+        name: "Existing Client",
         passwordHash,
         role: UserRole.CLIENT,
         emailVerifiedAt: expect.any(Date),

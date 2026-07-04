@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, MailCheck } from "lucide-react";
@@ -58,6 +58,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const { locale, setLocale, t } = useI18n("ru");
   const text = copy[locale] ?? copy.ru;
+  const [safeNext, setSafeNext] = useState<string | null>(null);
   const [step, setStep] = useState<"details" | "code">("details");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -67,6 +68,13 @@ export default function RegisterPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const requestedNext = new URLSearchParams(window.location.search).get("next");
+    setSafeNext(
+      requestedNext && requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : null,
+    );
+  }, []);
 
   function normalizeMessage(message: unknown, fallback: string) {
     if (Array.isArray(message)) return message.join(", ");
@@ -117,7 +125,7 @@ export default function RegisterPage() {
         return;
       }
       setStoredSession(data);
-      router.replace(data.needsCategoryOnboarding ? "/onboarding" : "/app");
+      router.replace(data.needsCategoryOnboarding ? "/onboarding" : safeNext ?? "/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("client.auth.registrationFailed"));
     } finally {
@@ -279,7 +287,10 @@ export default function RegisterPage() {
           )}
           <p className="text-center text-sm text-muted-foreground">
             {t("client.auth.haveAccount")} {" "}
-            <Link href="/login" className="text-primary underline-offset-4 hover:underline">
+            <Link
+              href={safeNext ? `/login?next=${encodeURIComponent(safeNext)}` : "/login"}
+              className="text-primary underline-offset-4 hover:underline"
+            >
               {t("client.auth.signIn")}
             </Link>
           </p>

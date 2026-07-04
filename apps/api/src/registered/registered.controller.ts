@@ -5,6 +5,7 @@ import { CurrentUser, type RequestUser } from "../auth/decorators/current-user.d
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import { UpdateFavoriteCategoriesDto } from "./dto/update-favorite-categories.dto";
+import { UpdateCompanyFavoriteDto } from "./dto/update-company-favorite.dto";
 import { RedeemCodeDto } from "./dto/redeem-code.dto";
 import { UpdateProfilePreferencesDto } from "./dto/update-profile-preferences.dto";
 import { RegisteredService } from "./registered.service";
@@ -107,6 +108,17 @@ export class RegisteredController {
   @ApiOperation({ summary: "TWA partner companies with user points and level progress" })
   companies(@CurrentUser() user: RequestUser) {
     return this.registeredService.listCompanies(user.userId);
+  }
+
+  @Put("companies/:id/favorite")
+  @ApiBody({ type: UpdateCompanyFavoriteDto })
+  @ApiOperation({ summary: "Mark or unmark a company as favorite for current user" })
+  setCompanyFavorite(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @Body() dto: UpdateCompanyFavoriteDto,
+  ) {
+    return this.registeredService.setCompanyFavorite(user.userId, id, dto.isFavorite);
   }
 
   @Get("wallet")

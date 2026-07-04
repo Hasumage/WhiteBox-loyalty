@@ -12,9 +12,9 @@ describe("RegisteredService", () => {
     subscriptionBundle: { findMany: jest.Mock; findUnique: jest.Mock };
     userSubscription: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
     userSubscriptionBundle: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
-    company: { findMany: jest.Mock };
+    company: { findMany: jest.Mock; findFirst: jest.Mock };
     loyaltyTransaction: { findMany: jest.Mock; groupBy: jest.Mock; create: jest.Mock };
-    userCompany: { upsert: jest.Mock };
+    userCompany: { upsert: jest.Mock; updateMany: jest.Mock };
     user: { findUnique: jest.Mock };
     userProfilePreference: { upsert: jest.Mock };
     promoCode: { findUnique: jest.Mock };
@@ -52,13 +52,13 @@ describe("RegisteredService", () => {
         findFirst: jest.fn(),
         create: jest.fn(),
       },
-      company: { findMany: jest.fn() },
+      company: { findMany: jest.fn(), findFirst: jest.fn() },
       loyaltyTransaction: {
         findMany: jest.fn(),
         groupBy: jest.fn(),
         create: jest.fn(),
       },
-      userCompany: { upsert: jest.fn() },
+      userCompany: { upsert: jest.fn(), updateMany: jest.fn() },
       user: { findUnique: jest.fn() },
       userProfilePreference: { upsert: jest.fn() },
       promoCode: { findUnique: jest.fn() },
@@ -297,9 +297,21 @@ describe("RegisteredService", () => {
         name: "Pulse Fitness",
         description: null,
         isActive: true,
+        operatesOnline: false,
         category: { id: 2, slug: "fitness", name: "Fitness", icon: "Dumbbell" },
         categories: [],
-        userLinks: [{ balance: 120, pointsToNextReward: 80, expiringPoints: null, expiringDate: null, updatedAt: null }],
+        locations: [],
+        userLinks: [
+          {
+            balance: 120,
+            pointsToNextReward: 80,
+            expiringPoints: null,
+            expiringDate: null,
+            isFavorite: true,
+            favoritedAt: new Date("2026-07-04T09:00:00.000Z"),
+            updatedAt: null,
+          },
+        ],
         levelRules: [
           { id: 1, levelName: "Bronze", minTotalSpend: "0", cashbackPercent: "1", sortOrder: 1 },
           { id: 2, levelName: "Silver", minTotalSpend: "1000", cashbackPercent: "3", sortOrder: 2 },
@@ -315,9 +327,34 @@ describe("RegisteredService", () => {
 
     expect(result[0].points.balance).toBe(120);
     expect(result[0].points.totalEarnedPoints).toBe(500);
+    expect(result[0].isFavorite).toBe(true);
     expect(result[0].level.current?.levelName).toBe("Bronze");
     expect(result[0].level.next?.pointsToNext).toBe(500);
     expect(result[0].level.progressPercent).toBe(50);
+  });
+
+  it("setCompanyFavorite toggles favorite without a separate favorites table", async () => {
+    const favoritedAt = new Date("2026-07-04T09:00:00.000Z");
+    prisma.company.findFirst.mockResolvedValue({ id: 5, slug: "pulse", name: "Pulse Fitness" });
+    prisma.userCompany.upsert.mockResolvedValue({ isFavorite: true, favoritedAt });
+
+    const result = await service.setCompanyFavorite(11, "5", true);
+
+    expect(prisma.userCompany.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId_companyId: { userId: 11, companyId: 5 } },
+        update: expect.objectContaining({ isFavorite: true, favoritedAt: expect.any(Date) }),
+        create: expect.objectContaining({ userId: 11, companyId: 5, isFavorite: true, favoritedAt: expect.any(Date) }),
+      }),
+    );
+    expect(result).toMatchObject({ companyId: 5, slug: "pulse", isFavorite: true });
+
+    await service.setCompanyFavorite(11, "pulse", false);
+
+    expect(prisma.userCompany.updateMany).toHaveBeenCalledWith({
+      where: { userId: 11, companyId: 5 },
+      data: { isFavorite: false, favoritedAt: null },
+    });
   });
 
   it("activateSubscription creates active user subscription and company link", async () => {
