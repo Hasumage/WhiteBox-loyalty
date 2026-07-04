@@ -999,7 +999,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
           </a>
         </Button>
         <Button asChild size="sm" className="h-8 rounded-xl text-xs">
-          <Link href={`/wallet/${selectedPartner.id}`}>
+          <Link href={`/wallet/${selectedPartner.slug}`}>
             {t("client.map.openCard")}
             <ChevronRight className="ml-1 h-3.5 w-3.5" />
           </Link>
@@ -1642,7 +1642,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
 
                 <div className="flex gap-2">
                   <Button asChild className="flex-1">
-                    <Link href={`/wallet/${selectedPartner.id}`}>
+                    <Link href={`/wallet/${selectedPartner.slug}`}>
                       {t("client.map.openCard")}
                       <ChevronRight className="ml-1 h-4 w-4" />
                     </Link>

@@ -35,6 +35,10 @@ tmp_api_*.log
 tmp-*.log
 backups/
 storage/private/
+storage/public/
+.tmp/
+/tmp/
+/output/
 
 # env files (can opt-in for committing if needed)
 .env*

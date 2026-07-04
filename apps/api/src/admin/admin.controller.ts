@@ -23,6 +23,7 @@ import { AllowDuringMaintenance } from "../maintenance/allow-during-maintenance.
 import { MaintenanceStateService } from "../maintenance/maintenance-state.service";
 import { AdminService } from "./admin.service";
 import { CreateAuditEventDto } from "./dto/create-audit-event.dto";
+import { AssignUserCompanyDto } from "./dto/assign-user-company.dto";
 import { CreateBackupDto } from "./dto/create-backup.dto";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { CreateCompanySubscriptionDto } from "./dto/create-company-subscription.dto";
@@ -424,6 +425,22 @@ export class AdminController {
   async listCompanyUsers(@CurrentUser() actor: RequestUser, @Query("query") query?: string) {
     await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
     return this.adminService.listCompanyUsers(query);
+  }
+
+  @Get("company-profiles")
+  @ApiOperation({ summary: "Search company profiles for admin assignment" })
+  @ApiQuery({ name: "query", required: false, type: String })
+  async listCompanyProfiles(@CurrentUser() actor: RequestUser, @Query("query") query?: string) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canView");
+    return this.adminService.listCompanyProfiles(query);
+  }
+
+  @Post("users/:uuid/company-assignment")
+  @ApiOperation({ summary: "Create or attach a company workspace for a user" })
+  @ApiBody({ type: AssignUserCompanyDto })
+  async assignUserCompany(@Param("uuid") uuid: string, @Body() dto: AssignUserCompanyDto, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.COMPANIES, "canEdit");
+    return this.adminService.assignUserCompany(uuid, dto, actor.userId);
   }
 
   @Get("company-users/:uuid")

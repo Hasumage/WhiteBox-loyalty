@@ -122,7 +122,7 @@ export default function CategoryDetailPage() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {categoryCompanies.map((company) => (
-            <Link key={company.id} href={`/wallet/${company.id}`}>
+            <Link key={company.id} href={`/wallet/${company.slug}`}>
               <Card className="glass border-white/10 transition-all hover:border-white/20">
                 <CardContent className="p-3">
                   <p className="text-sm font-semibold">{company.name}</p>

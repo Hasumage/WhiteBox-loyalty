@@ -267,7 +267,7 @@ export default function CompaniesPage() {
               animate="show"
               transition={{ delay: Math.min(index * 0.04, 0.24) }}
             >
-              <Link href={`/wallet/${company.id}`}>
+              <Link href={`/wallet/${company.slug}`}>
                 <Card className="glass cursor-pointer border-white/10 transition-all active:scale-[0.98] hover:border-white/20">
                   <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 py-3 pb-1">
                     <div className="min-w-0">

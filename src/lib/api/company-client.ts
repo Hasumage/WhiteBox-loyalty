@@ -71,6 +71,54 @@ export type CompanyDashboard = {
   }>;
 };
 
+export type CompanyMediaAsset = {
+  id: string;
+  kind: "LOGO" | "HERO" | "GALLERY";
+  title: string | null;
+  description: string | null;
+  url: string | null;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  width: number;
+  height: number;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompanySpecialOffer = {
+  id: string;
+  title: string;
+  description: string | null;
+  code: string | null;
+  imageUrl: string | null;
+  imageFileName: string | null;
+  imageMimeType: string | null;
+  imageSize: number | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompanyMediaState = {
+  standards: {
+    logo: { width: number; height: number; ratio: string; maxSizeMb: number };
+    hero: { width: number; height: number; ratio: string; maxSizeMb: number };
+    gallery: { width: number; height: number; ratio: string; maxCount: number; maxSizeMb: number };
+    offer: { width: number; height: number; ratio: string; maxSizeMb: number };
+  };
+  media: {
+    logo: CompanyMediaAsset | null;
+    hero: CompanyMediaAsset | null;
+    gallery: CompanyMediaAsset[];
+  };
+  offers: CompanySpecialOffer[];
+};
+
 export type CompanyClient = {
   uuid: string;
   name: string;
@@ -267,6 +315,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+async function nextCompanyRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    cache: "no-store",
+    ...init,
+    headers: { Authorization: `Bearer ${getAccessToken() ?? ""}`, ...init?.headers },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = normalizeCompanyApiMessage(payload.message);
+    throw new Error(message || `HTTP ${response.status}`);
+  }
+  return payload as T;
+}
+
 export function companyProfile() {
   return request<CompanyProfile>("/company/profile");
 }
@@ -277,6 +339,7 @@ export function companyCategories() {
 
 export function updateCompanyProfile(body: {
   name: string;
+  slug?: string;
   description?: string;
   operatesOnline: boolean;
   categoryIds: number[];
@@ -284,6 +347,36 @@ export function updateCompanyProfile(body: {
   return request<CompanyProfile>("/company/profile", {
     method: "PATCH",
     body: JSON.stringify(body),
+  });
+}
+
+export function companyMedia() {
+  return nextCompanyRequest<CompanyMediaState>("/api/company/media");
+}
+
+export function uploadCompanyMediaAsset(form: FormData) {
+  return nextCompanyRequest<{ asset: CompanyMediaAsset }>("/api/company/media", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function deleteCompanyMediaAsset(id: string) {
+  return nextCompanyRequest<{ ok: true }>(`/api/company/media/assets/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export function createCompanySpecialOffer(form: FormData) {
+  return nextCompanyRequest<{ offer: CompanySpecialOffer }>("/api/company/media/offers", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function deleteCompanySpecialOffer(id: string) {
+  return nextCompanyRequest<{ ok: true }>(`/api/company/media/offers/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
 }
 

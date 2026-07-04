@@ -1105,6 +1105,56 @@ export type AdminUserDetail = {
     countryCode: string | null;
     createdAt: string;
   }>;
+  companyOwnership: {
+    id: number;
+    slug: string;
+    name: string;
+    isActive: boolean;
+    activeMembers: Array<{
+      uuid: string;
+      name: string;
+      email: string;
+      role: "OWNER" | "MANAGER" | "CASHIER";
+      accountRole: AdminRole;
+      accountStatus: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
+    }>;
+  } | null;
+  companyMemberships: Array<{
+    uuid: string;
+    role: "OWNER" | "MANAGER" | "CASHIER";
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+    company: {
+      id: number;
+      name: string;
+      slug: string;
+      isActive: boolean;
+      isOwnedByUser: boolean;
+      owner: {
+        uuid: string;
+        name: string;
+        email: string;
+      } | null;
+    };
+  }>;
+};
+
+export type AdminCompanyProfileOption = {
+  id: number;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  operatesOnline: boolean;
+  owner: {
+    uuid: string;
+    name: string;
+    email: string;
+  } | null;
+  _count: {
+    members: number;
+    locations: number;
+  };
 };
 
 export type AdminProfileStatusRarity = "RARE" | "EPIC" | "LEGENDARY";
@@ -1140,6 +1190,12 @@ export type AdminUpdateUserInput = {
   accountStatus?: "ACTIVE" | "FROZEN_PENDING_DELETION" | "BLOCKED";
   emailVerifiedAt?: string | null;
   createdAt?: string | null;
+  companyTransferToUserUuid?: string;
+  confirmCompanyDeletion?: boolean;
+  companyAssignmentMode?: "CREATE_NEW" | "ATTACH_EXISTING";
+  companyAssignmentCompanyId?: number;
+  companyAssignmentMemberRole?: "OWNER" | "MANAGER" | "CASHIER";
+  companyAssignmentDeactivatePrevious?: boolean;
 };
 
 function apiBase(): string {
@@ -1420,6 +1476,41 @@ export async function adminListCompanyUsers(query?: string) {
   } catch {
     return [];
   }
+}
+
+export async function adminListCompanyProfiles(query?: string) {
+  const params = new URLSearchParams();
+  if (query) params.set("query", query);
+  const suffix = params.toString() ? `?${params}` : "";
+  try {
+    const res = await fetch(`${apiBase()}/admin/company-profiles${suffix}`, { headers: authHeaders() });
+    if (!res.ok) return [];
+    return (await res.json()) as AdminCompanyProfileOption[];
+  } catch {
+    return [];
+  }
+}
+
+export async function adminAssignUserCompany(
+  uuid: string,
+  input: {
+    mode: "CREATE_NEW" | "ATTACH_EXISTING";
+    companyId?: number;
+    memberRole?: "OWNER" | "MANAGER" | "CASHIER";
+    deactivatePreviousMemberships?: boolean;
+  },
+) {
+  const res = await fetch(`${apiBase()}/admin/users/${uuid}/company-assignment`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+    return { ok: false as const, message: message ?? "Failed to assign company" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminUserDetail };
 }
 
 export async function adminGetCompanyUser(uuid: string) {

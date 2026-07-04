@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Home, MapPin, History, User, QrCode } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
+import { getAccessToken } from "@/lib/api/auth-client";
 
 const navItems = [
   { href: "/app", labelKey: "client.nav.home", icon: Home },
@@ -20,11 +22,21 @@ const navItems = [
 export function BottomNav() {
   const pathname = usePathname();
   const { t } = useI18n("ru");
-  const isWallet = pathname.startsWith("/wallet/");
+  const [hasSession, setHasSession] = useState(false);
+  useEffect(() => {
+    const updateSessionState = () => setHasSession(Boolean(getAccessToken()));
+    updateSessionState();
+    window.addEventListener("nearloy:auth-updated", updateSessionState);
+    return () => window.removeEventListener("nearloy:auth-updated", updateSessionState);
+  }, []);
   const isSubscriptionDetail = pathname.startsWith("/marketplace/") && pathname !== "/marketplace";
   const isFullMap = pathname === "/map/full";
-  const hideNav = isWallet || isSubscriptionDetail || isFullMap;
-  const hideFab = pathname === "/onboarding" || pathname === "/settings" || pathname.startsWith("/settings/");
+  const hideNav = isSubscriptionDetail || isFullMap || (pathname.startsWith("/wallet/") && !hasSession);
+  const hideFab =
+    pathname.startsWith("/wallet/") ||
+    pathname === "/onboarding" ||
+    pathname === "/settings" ||
+    pathname.startsWith("/settings/");
 
   if (hideNav) return null;
 

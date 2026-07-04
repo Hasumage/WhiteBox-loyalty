@@ -379,7 +379,7 @@ export default function HomePage() {
 
             return (
               <motion.div key={company.id} variants={item}>
-                <Link href={`/wallet/${company.id}`}>
+                <Link href={`/wallet/${company.slug}`}>
                   <Card
                     className={cn(
                       "glass cursor-pointer border-white/10 transition-all active:scale-[0.98] hover:border-white/20"

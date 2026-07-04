@@ -8,6 +8,7 @@ import {
   AuditLevel,
   AuditResult,
   AuditWorkspace,
+  CompanyMemberRole,
   CompanyReferralPipelineStatus,
   CompanyReferralStatus,
   EmailMessageTargetType,
@@ -39,6 +40,7 @@ import { UpdateCompanySubscriptionDto } from "./dto/update-company-subscription.
 import { UpdateCompanyUserDto } from "./dto/update-company-user.dto";
 import { UpdateReferralCampaignDto } from "./dto/update-referral-campaign.dto";
 import { AdminEmailTargetType, SendEmailDto } from "./dto/send-email.dto";
+import { AdminCompanyAssignmentMode, AssignUserCompanyDto } from "./dto/assign-user-company.dto";
 import { UpsertCompanyReferralDto } from "./dto/upsert-company-referral.dto";
 import { UpsertCompanyLocationDto } from "./dto/upsert-company-location.dto";
 import { UpsertCompanyProfileDto } from "./dto/upsert-company-profile.dto";
@@ -246,6 +248,263 @@ export class AdminService {
       company: row.company,
       referrer: row.referrer,
     };
+  }
+
+  private companyNameFromUser(user: { name: string; email: string }) {
+    return user.name?.trim() || user.email.split("@")[0] || "Company";
+  }
+
+  private async ensureCompanyWorkspaceForCompanyUser(
+    user: { id: number; name: string; email: string },
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
+    const existingCompany = await client.company.findUnique({
+      where: { ownerUserId: user.id },
+      select: { id: true, name: true, slug: true },
+    });
+
+    if (existingCompany) {
+      await client.companyMember.upsert({
+        where: { companyId_userId: { companyId: existingCompany.id, userId: user.id } },
+        update: { role: CompanyMemberRole.OWNER, isActive: true },
+        create: { companyId: existingCompany.id, userId: user.id, role: CompanyMemberRole.OWNER },
+      });
+      return existingCompany;
+    }
+
+    const category = await client.category.findFirst({
+      orderBy: { id: "asc" },
+      select: { id: true },
+    });
+    if (!category) {
+      throw new BadRequestException("Company category catalog is empty.");
+    }
+
+    const name = this.companyNameFromUser(user);
+    const slug = await this.createUniqueCompanySlug(name);
+    const company = await client.company.create({
+      data: {
+        name,
+        slug,
+        description: "Профиль компании создан автоматически после смены роли пользователя.",
+        categoryId: category.id,
+        ownerUserId: user.id,
+        isActive: true,
+        identityVerificationCompleted: false,
+      },
+      select: { id: true, name: true, slug: true },
+    });
+    await client.companyMember.upsert({
+      where: { companyId_userId: { companyId: company.id, userId: user.id } },
+      update: { role: CompanyMemberRole.OWNER, isActive: true },
+      create: { companyId: company.id, userId: user.id, role: CompanyMemberRole.OWNER },
+    });
+    await client.userCompany.upsert({
+      where: { userId_companyId: { userId: user.id, companyId: company.id } },
+      update: {},
+      create: { userId: user.id, companyId: company.id },
+    });
+    return company;
+  }
+
+  private async applyCompanyAssignmentTx(
+    tx: Prisma.TransactionClient,
+    user: { id: number; uuid: string; name: string; email: string },
+    input?: Partial<AssignUserCompanyDto>,
+  ) {
+    const mode = input?.mode ?? AdminCompanyAssignmentMode.CREATE_NEW;
+    const deactivatePreviousMemberships = input?.deactivatePreviousMemberships !== false;
+
+    if (mode === AdminCompanyAssignmentMode.CREATE_NEW) {
+      if (deactivatePreviousMemberships) {
+        await tx.companyMember.updateMany({
+          where: { userId: user.id, isActive: true },
+          data: { isActive: false },
+        });
+      }
+      await tx.user.update({
+        where: { id: user.id },
+        data: { role: UserRole.COMPANY },
+      });
+      const company = await this.ensureCompanyWorkspaceForCompanyUser(user, tx);
+      return {
+        mode,
+        company,
+        memberRole: CompanyMemberRole.OWNER,
+      };
+    }
+
+    const companyId = Number(input?.companyId);
+    if (!Number.isInteger(companyId) || companyId < 1) {
+      throw new BadRequestException("Выберите компанию для привязки сотрудника.");
+    }
+
+    const memberRole = input?.memberRole ?? CompanyMemberRole.MANAGER;
+    const company = await tx.company.findUnique({
+      where: { id: companyId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        ownerUserId: true,
+      },
+    });
+    if (!company) {
+      throw new NotFoundException("Компания для привязки не найдена.");
+    }
+
+    const ownedCompany = await tx.company.findUnique({
+      where: { ownerUserId: user.id },
+      select: { id: true, name: true },
+    });
+    if (ownedCompany && ownedCompany.id !== company.id) {
+      throw new BadRequestException(
+        `Пользователь уже владеет компанией «${ownedCompany.name}». Сначала передайте или удалите эту компанию.`,
+      );
+    }
+    if (ownedCompany?.id === company.id && memberRole !== CompanyMemberRole.OWNER) {
+      throw new BadRequestException("Нельзя понизить владельца через перепривязку. Сначала назначьте нового владельца.");
+    }
+
+    if (deactivatePreviousMemberships) {
+      await tx.companyMember.updateMany({
+        where: { userId: user.id, companyId: { not: company.id }, isActive: true },
+        data: { isActive: false },
+      });
+    }
+
+    if (memberRole === CompanyMemberRole.OWNER) {
+      if (company.ownerUserId && company.ownerUserId !== user.id) {
+        await tx.companyMember.updateMany({
+          where: { companyId: company.id, userId: company.ownerUserId },
+          data: { role: CompanyMemberRole.MANAGER, isActive: true },
+        });
+      }
+      await tx.company.update({
+        where: { id: company.id },
+        data: { ownerUserId: user.id, isActive: true },
+      });
+    }
+
+    await tx.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.COMPANY },
+    });
+    await tx.companyMember.upsert({
+      where: { companyId_userId: { companyId: company.id, userId: user.id } },
+      update: { role: memberRole, isActive: true },
+      create: { companyId: company.id, userId: user.id, role: memberRole, isActive: true },
+    });
+
+    return {
+      mode,
+      company: { id: company.id, name: company.name, slug: company.slug },
+      memberRole,
+    };
+  }
+
+  private async recordCompanyAssignmentAudit(
+    actorUserId: number | undefined,
+    user: { uuid: string; name: string; email: string },
+    result: {
+      mode: AdminCompanyAssignmentMode;
+      company: { id: number; name: string; slug: string };
+      memberRole: CompanyMemberRole;
+    },
+  ) {
+    await this.createAuditEvent({
+      workspace: AuditWorkspace.MANAGER,
+      category: AuditCategory.USER,
+      level: AuditLevel.WARN,
+      action: "Admin changed company membership",
+      details:
+        result.mode === AdminCompanyAssignmentMode.CREATE_NEW
+          ? `User ${user.email} became company owner of new workspace "${result.company.name}".`
+          : `User ${user.email} attached to "${result.company.name}" as ${result.memberRole}.`,
+      actorUserId,
+      targetUuid: user.uuid,
+      targetEmail: user.email,
+      targetLabel: user.name,
+      tags: ["COMPANY", "MEMBERSHIP", "ADMIN"],
+    });
+  }
+
+  private async handleCompanyOwnerRoleExit(
+    tx: Prisma.TransactionClient,
+    user: { id: number; uuid: string; name: string; email: string },
+    options: { transferToUserUuid?: string; confirmCompanyDeletion?: boolean },
+  ) {
+    const company = await tx.company.findUnique({
+      where: { ownerUserId: user.id },
+      select: {
+        id: true,
+        name: true,
+        members: {
+          where: { userId: { not: user.id }, isActive: true },
+          select: {
+            userId: true,
+            role: true,
+            user: {
+              select: {
+                uuid: true,
+                name: true,
+                email: true,
+                role: true,
+                accountStatus: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await tx.companyMember.updateMany({
+      where: { userId: user.id, isActive: true },
+      data: { isActive: false },
+    });
+
+    if (!company) return { action: "left-memberships" as const };
+
+    const activeSuccessors = company.members.filter((member) => member.user.accountStatus === AccountStatus.ACTIVE);
+    if (activeSuccessors.length > 0) {
+      if (!options.transferToUserUuid) {
+        throw new BadRequestException("Выберите сотрудника, которому перейдёт компания после смены роли владельца.");
+      }
+      const successor = activeSuccessors.find((member) => member.user.uuid === options.transferToUserUuid);
+      if (!successor) {
+        throw new BadRequestException("Выбранный новый владелец не найден среди активных сотрудников компании.");
+      }
+
+      await tx.user.update({
+        where: { id: successor.userId },
+        data: { role: UserRole.COMPANY },
+      });
+      await tx.companyMember.updateMany({
+        where: { companyId: company.id, userId: successor.userId },
+        data: { role: CompanyMemberRole.OWNER, isActive: true },
+      });
+      await tx.company.update({
+        where: { id: company.id },
+        data: { ownerUserId: successor.userId, isActive: true },
+      });
+      return {
+        action: "transferred" as const,
+        companyName: company.name,
+        successorName: successor.user.name,
+        successorEmail: successor.user.email,
+      };
+    }
+
+    if (!options.confirmCompanyDeletion) {
+      throw new BadRequestException("В компании нет других сотрудников. Подтвердите деактивацию и удаление компании перед сменой роли.");
+    }
+
+    await tx.company.update({
+      where: { id: company.id },
+      data: { isActive: false, ownerUserId: null },
+    });
+    await tx.company.delete({ where: { id: company.id } });
+    return { action: "deleted" as const, companyName: company.name };
   }
 
   private async companyReferralRevenue(companyId: number) {
@@ -1089,7 +1348,7 @@ export class AdminService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const user = await this.prisma.user.create({
+    const created = await this.prisma.user.create({
       data: {
         name: dto.name.trim(),
         email,
@@ -1097,6 +1356,7 @@ export class AdminService {
         passwordHash,
       },
       select: {
+        id: true,
         uuid: true,
         email: true,
         name: true,
@@ -1104,7 +1364,16 @@ export class AdminService {
         createdAt: true,
       },
     });
-    return user;
+    if (created.role === UserRole.COMPANY) {
+      await this.ensureCompanyWorkspaceForCompanyUser(created);
+    }
+    return {
+      uuid: created.uuid,
+      email: created.email,
+      name: created.name,
+      role: created.role,
+      createdAt: created.createdAt,
+    };
   }
 
   async listUsers(
@@ -1433,17 +1702,34 @@ export class AdminService {
     if (!user) {
       throw new NotFoundException("User not found");
     }
-    return this.prisma.user.update({
-      where: { uuid },
-      data: { role },
-      select: {
-        uuid: true,
-        email: true,
-        name: true,
-        role: true,
-        updatedAt: true,
-      },
+    const leavesCompanyRole = user.role === UserRole.COMPANY && role !== UserRole.COMPANY;
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (leavesCompanyRole) {
+        await this.handleCompanyOwnerRoleExit(tx, user, {});
+      }
+      return tx.user.update({
+        where: { uuid },
+        data: { role },
+        select: {
+          id: true,
+          uuid: true,
+          email: true,
+          name: true,
+          role: true,
+          updatedAt: true,
+        },
+      });
     });
+    if (updated.role === UserRole.COMPANY) {
+      await this.ensureCompanyWorkspaceForCompanyUser(updated);
+    }
+    return {
+      uuid: updated.uuid,
+      email: updated.email,
+      name: updated.name,
+      role: updated.role,
+      updatedAt: updated.updatedAt,
+    };
   }
 
   async getUserByUuid(uuid: string) {
@@ -1587,6 +1873,57 @@ export class AdminService {
             createdAt: true,
           },
         },
+        managedCompany: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            isActive: true,
+            members: {
+              where: { isActive: true },
+              orderBy: [{ role: "asc" }, { updatedAt: "desc" }],
+              select: {
+                userId: true,
+                role: true,
+                user: {
+                  select: {
+                    uuid: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    accountStatus: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        companyMemberships: {
+          orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
+          select: {
+            uuid: true,
+            role: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+            company: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                isActive: true,
+                ownerUserId: true,
+                owner: {
+                  select: {
+                    uuid: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -1621,6 +1958,40 @@ export class AdminService {
           unusualCountries.length > 0,
       },
       criticalActions: user.targetAuditEvents,
+      managedCompany: undefined,
+      companyOwnership: user.managedCompany
+        ? {
+            id: user.managedCompany.id,
+            slug: user.managedCompany.slug,
+            name: user.managedCompany.name,
+            isActive: user.managedCompany.isActive,
+            activeMembers: user.managedCompany.members
+              .filter((member) => member.userId !== user.id)
+              .map((member) => ({
+                uuid: member.user.uuid,
+                name: member.user.name,
+                email: member.user.email,
+                role: member.role,
+                accountRole: member.user.role,
+                accountStatus: member.user.accountStatus,
+              })),
+          }
+        : null,
+      companyMemberships: user.companyMemberships.map((membership) => ({
+        uuid: membership.uuid,
+        role: membership.role,
+        isActive: membership.isActive,
+        createdAt: membership.createdAt,
+        updatedAt: membership.updatedAt,
+        company: {
+          id: membership.company.id,
+          name: membership.company.name,
+          slug: membership.company.slug,
+          isActive: membership.company.isActive,
+          isOwnedByUser: membership.company.ownerUserId === user.id,
+          owner: membership.company.owner,
+        },
+      })),
     };
   }
 
@@ -1690,12 +2061,48 @@ export class AdminService {
     const shouldRecordBlockAudit =
       dto.accountStatus === AccountStatus.BLOCKED &&
       existing.accountStatus !== AccountStatus.BLOCKED;
+    const leavesCompanyRole =
+      existing.role === UserRole.COMPANY &&
+      dto.role !== undefined &&
+      dto.role !== UserRole.COMPANY;
+    const appliesCompanyAssignment =
+      dto.role === UserRole.COMPANY &&
+      (existing.role !== UserRole.COMPANY || dto.companyAssignmentMode !== undefined);
 
     try {
-      await this.prisma.user.update({
-        where: { uuid },
-        data: updateData,
+      const assignmentResult = await this.prisma.$transaction(async (tx) => {
+        if (leavesCompanyRole) {
+          await this.handleCompanyOwnerRoleExit(tx, existing, {
+            transferToUserUuid: dto.companyTransferToUserUuid?.trim() || undefined,
+            confirmCompanyDeletion: dto.confirmCompanyDeletion === true,
+          });
+        }
+        await tx.user.update({
+          where: { uuid },
+          data: updateData,
+        });
+        if (appliesCompanyAssignment) {
+          return this.applyCompanyAssignmentTx(
+            tx,
+            {
+              id: existing.id,
+              uuid: existing.uuid,
+              name: dto.name?.trim() || existing.name,
+              email: existing.email,
+            },
+            {
+              mode: dto.companyAssignmentMode,
+              companyId: dto.companyAssignmentCompanyId,
+              memberRole: dto.companyAssignmentMemberRole,
+              deactivatePreviousMemberships: dto.companyAssignmentDeactivatePrevious,
+            },
+          );
+        }
+        return null;
       });
+      if (assignmentResult) {
+        await this.recordCompanyAssignmentAudit(actorUserId, existing, assignmentResult);
+      }
       if (dto.accountStatus === AccountStatus.BLOCKED) {
         await this.prisma.refreshToken.updateMany({
           where: { userId: existing.id, revokedAt: null },
@@ -2072,6 +2479,57 @@ export class AdminService {
     return { success: true as const };
   }
 
+  async listCompanyProfiles(query?: string) {
+    const q = query?.trim();
+    const parsedId = q && /^\d+$/.test(q) ? Number(q) : null;
+    const where = {
+      ...(q
+        ? {
+            OR: [
+              ...(parsedId ? [{ id: parsedId }] : []),
+              { name: { contains: q, mode: "insensitive" as const } },
+              { slug: { contains: q, mode: "insensitive" as const } },
+              {
+                owner: {
+                  OR: [
+                    { name: { contains: q, mode: "insensitive" as const } },
+                    { email: { contains: q, mode: "insensitive" as const } },
+                    { uuid: { contains: q } },
+                  ],
+                },
+              },
+            ],
+          }
+        : {}),
+    } satisfies Prisma.CompanyWhereInput;
+
+    return this.prisma.company.findMany({
+      where,
+      orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
+      take: 30,
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isActive: true,
+        operatesOnline: true,
+        owner: {
+          select: {
+            uuid: true,
+            name: true,
+            email: true,
+          },
+        },
+        _count: {
+          select: {
+            members: true,
+            locations: true,
+          },
+        },
+      },
+    });
+  }
+
   async listCompanyUsers(query?: string) {
     const q = query?.trim();
     const where = {
@@ -2227,6 +2685,30 @@ export class AdminService {
       throw new NotFoundException("Company user not found");
     }
     return user;
+  }
+
+  async assignUserCompany(uuid: string, dto: AssignUserCompanyDto, actorUserId?: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { uuid },
+      select: {
+        id: true,
+        uuid: true,
+        name: true,
+        email: true,
+        role: true,
+        accountStatus: true,
+      },
+    });
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+    if (user.accountStatus === AccountStatus.BLOCKED) {
+      throw new BadRequestException("Заблокированный аккаунт нельзя привязать к компании.");
+    }
+
+    const result = await this.prisma.$transaction((tx) => this.applyCompanyAssignmentTx(tx, user, dto));
+    await this.recordCompanyAssignmentAudit(actorUserId, user, result);
+    return this.getUserByUuid(uuid);
   }
 
   private async listCompanyReferralCandidates(query?: string) {

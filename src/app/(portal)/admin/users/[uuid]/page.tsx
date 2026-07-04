@@ -4,17 +4,21 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   Ban,
+  Building2,
   CalendarClock,
   KeyRound,
   Mail,
   RefreshCcw,
   Save,
+  Search,
   ShieldCheck,
   Sparkles,
   Trash2,
   Trophy,
   UserCircle2,
+  UserPlus,
   WalletCards,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -25,13 +29,16 @@ import { SelectField } from "@/components/ui/select-field";
 import { Textarea } from "@/components/ui/textarea";
 import {
   adminDeleteUser,
+  adminAssignUserCompany,
   adminForceLogoutUser,
   adminGrantProfileStatus,
+  adminListCompanyProfiles,
   adminListProfileStatuses,
   adminReactivateUser,
   adminRequestEmailChange,
   adminSendEmail,
   adminUpdateUser,
+  type AdminCompanyProfileOption,
   type AdminProfileStatus,
   type AdminRole,
   type AdminUserDetail,
@@ -51,6 +58,8 @@ import {
 
 type Role = AdminRole;
 type AccountStatus = AdminUserDetail["accountStatus"];
+type CompanyAssignmentMode = "" | "CREATE_NEW" | "ATTACH_EXISTING";
+type CompanyMemberRole = "OWNER" | "MANAGER" | "CASHIER";
 const ADMIN_WORKSPACE_ROLES = new Set<Role>(["SUPER_ADMIN", "ADMIN", "MANAGER", "SUPPORT"]);
 
 type FormState = {
@@ -103,6 +112,16 @@ export default function AdminUserProfilePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [currentRole, setCurrentRole] = useState<string | null>(null);
+  const [companyTransferToUserUuid, setCompanyTransferToUserUuid] = useState("");
+  const [confirmCompanyDeletion, setConfirmCompanyDeletion] = useState(false);
+  const [companyAssignmentMode, setCompanyAssignmentMode] = useState<CompanyAssignmentMode>("");
+  const [companyAssignmentQuery, setCompanyAssignmentQuery] = useState("");
+  const [companyAssignmentCompanyId, setCompanyAssignmentCompanyId] = useState("");
+  const [companyAssignmentMemberRole, setCompanyAssignmentMemberRole] = useState<CompanyMemberRole>("MANAGER");
+  const [companyAssignmentDeactivatePrevious, setCompanyAssignmentDeactivatePrevious] = useState(true);
+  const [companyProfiles, setCompanyProfiles] = useState<AdminCompanyProfileOption[]>([]);
+  const [loadingCompanyProfiles, setLoadingCompanyProfiles] = useState(false);
+  const [assigningCompany, setAssigningCompany] = useState(false);
   const [profileStatuses, setProfileStatuses] = useState<AdminProfileStatus[]>([]);
   const [grantStatusId, setGrantStatusId] = useState("");
   const [grantingStatus, setGrantingStatus] = useState(false);
@@ -120,6 +139,12 @@ export default function AdminUserProfilePage() {
       emailVerifiedAt: toDateTimeLocal(user.emailVerifiedAt),
       createdAt: toDateTimeLocal(user.createdAt),
     });
+    setCompanyTransferToUserUuid("");
+    setConfirmCompanyDeletion(false);
+    setCompanyAssignmentMode("");
+    setCompanyAssignmentCompanyId("");
+    setCompanyAssignmentMemberRole("MANAGER");
+    setCompanyAssignmentDeactivatePrevious(true);
   }, [user]);
 
   useEffect(() => {
@@ -137,6 +162,29 @@ export default function AdminUserProfilePage() {
     };
   }, [user?.uuid]);
 
+  useEffect(() => {
+    if (!user?.uuid) return;
+    let ignore = false;
+    void (async () => {
+      setLoadingCompanyProfiles(true);
+      const profiles = await adminListCompanyProfiles("");
+      if (!ignore) {
+        setCompanyProfiles(profiles);
+        setLoadingCompanyProfiles(false);
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [user?.uuid]);
+
+  async function loadCompanyProfiles(search = companyAssignmentQuery) {
+    setLoadingCompanyProfiles(true);
+    const profiles = await adminListCompanyProfiles(search);
+    setCompanyProfiles(profiles);
+    setLoadingCompanyProfiles(false);
+  }
+
   const snapshot = useMemo(() => {
     if (!user) return null;
     return {
@@ -145,9 +193,45 @@ export default function AdminUserProfilePage() {
       security: user.loginEvents.length + user.criticalActions.length + user.refreshTokens.length,
     };
   }, [user]);
+  const companyOwnership = user?.companyOwnership ?? null;
+  const companyTransferCandidates = companyOwnership?.activeMembers.filter((member) => member.accountStatus === "ACTIVE") ?? [];
+  const roleLeavesOwnedCompany =
+    Boolean(user && form && user.role === "COMPANY" && form.role !== "COMPANY" && companyOwnership);
+  const needsCompanyTransfer = roleLeavesOwnedCompany && companyTransferCandidates.length > 0;
+  const needsCompanyDeletionConfirm = roleLeavesOwnedCompany && companyTransferCandidates.length === 0;
+  const roleChangeBlocked =
+    (needsCompanyTransfer && !companyTransferToUserUuid) ||
+    (needsCompanyDeletionConfirm && !confirmCompanyDeletion);
+  const entersCompanyRole = Boolean(user && form && user.role !== "COMPANY" && form.role === "COMPANY");
+  const selectedCompanyProfile = companyProfiles.find((company) => String(company.id) === companyAssignmentCompanyId) ?? null;
+  const companyAssignmentBlocked =
+    entersCompanyRole &&
+    (companyAssignmentMode === "" ||
+      (companyAssignmentMode === "ATTACH_EXISTING" && !companyAssignmentCompanyId));
+  const saveBlocked = roleChangeBlocked || companyAssignmentBlocked;
+  const canRunCompanyAssignment =
+    Boolean(userUuid) &&
+    companyAssignmentMode !== "" &&
+    (companyAssignmentMode === "CREATE_NEW" || Boolean(companyAssignmentCompanyId));
 
   async function onSave() {
     if (!form || !userUuid) return;
+    if (companyAssignmentBlocked) {
+      setError(
+        companyAssignmentMode === "ATTACH_EXISTING"
+          ? "Выберите компанию, к которой нужно привязать пользователя."
+          : "Выберите: создать новую компанию или привязать пользователя к существующей.",
+      );
+      return;
+    }
+    if (roleChangeBlocked) {
+      setError(
+        needsCompanyTransfer
+          ? "Выберите сотрудника, которому перейдёт компания после смены роли."
+          : "Подтвердите деактивацию и удаление компании перед сменой роли.",
+      );
+      return;
+    }
     setSaving(true);
     setNotice(null);
     const response = await adminUpdateUser(userUuid, {
@@ -156,6 +240,18 @@ export default function AdminUserProfilePage() {
       accountStatus: form.accountStatus,
       emailVerifiedAt: toIsoOrNull(form.emailVerifiedAt),
       createdAt: toIsoOrNull(form.createdAt),
+      companyTransferToUserUuid: needsCompanyTransfer ? companyTransferToUserUuid : undefined,
+      confirmCompanyDeletion: needsCompanyDeletionConfirm ? true : undefined,
+      companyAssignmentMode: entersCompanyRole && companyAssignmentMode ? companyAssignmentMode : undefined,
+      companyAssignmentCompanyId:
+        entersCompanyRole && companyAssignmentMode === "ATTACH_EXISTING"
+          ? Number(companyAssignmentCompanyId)
+          : undefined,
+      companyAssignmentMemberRole:
+        entersCompanyRole && companyAssignmentMode === "ATTACH_EXISTING"
+          ? companyAssignmentMemberRole
+          : undefined,
+      companyAssignmentDeactivatePrevious: entersCompanyRole ? companyAssignmentDeactivatePrevious : undefined,
     });
     setSaving(false);
     if (!response.ok) {
@@ -165,6 +261,31 @@ export default function AdminUserProfilePage() {
     setError(null);
     setNotice(t("admin.userDetail.updated"));
     setUser(response.data);
+  }
+
+  async function onAssignCompany() {
+    if (!userUuid || !canRunCompanyAssignment || !companyAssignmentMode) return;
+    setAssigningCompany(true);
+    setNotice(null);
+    const response = await adminAssignUserCompany(userUuid, {
+      mode: companyAssignmentMode,
+      companyId: companyAssignmentMode === "ATTACH_EXISTING" ? Number(companyAssignmentCompanyId) : undefined,
+      memberRole: companyAssignmentMode === "ATTACH_EXISTING" ? companyAssignmentMemberRole : undefined,
+      deactivatePreviousMemberships: companyAssignmentDeactivatePrevious,
+    });
+    setAssigningCompany(false);
+    if (!response.ok) {
+      setError(response.message);
+      return;
+    }
+    setError(null);
+    setNotice(
+      companyAssignmentMode === "CREATE_NEW"
+        ? "Компания создана, пользователь назначен владельцем."
+        : `Пользователь привязан к компании «${selectedCompanyProfile?.name ?? "выбранной"}».`,
+    );
+    setUser(response.data);
+    setForm((previous) => (previous ? { ...previous, role: "COMPANY" } : previous));
   }
 
   async function onReactivate() {
@@ -274,7 +395,7 @@ export default function AdminUserProfilePage() {
   const statusLocked = targetIsAdminWorkspace && !isSuperAdmin;
   const headerActions = (
     <>
-      <Button onClick={onSave} disabled={saving}>
+      <Button onClick={onSave} disabled={saving || saveBlocked}>
         <Save className="h-4 w-4" /> {t("admin.common.save")}
       </Button>
       <Button variant="secondary" onClick={() => void onForceLogout()} disabled={forcingLogout}>
@@ -346,6 +467,60 @@ export default function AdminUserProfilePage() {
               </div>
             </div>
 
+            {roleLeavesOwnedCompany && companyOwnership && (
+              <div className="rounded-2xl border border-amber-300/30 bg-amber-400/10 p-4 text-sm text-amber-50">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 rounded-xl border border-amber-200/20 bg-amber-200/10 p-2 text-amber-100">
+                    <AlertTriangle className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <div>
+                      <p className="font-semibold">
+                        Смена роли владельца компании
+                      </p>
+                      <p className="mt-1 text-amber-100/80">
+                        {needsCompanyTransfer
+                          ? `Если изменить роль, компания «${companyOwnership.name}» перейдёт другому сотруднику. Выберите нового владельца.`
+                          : `Для компании «${companyOwnership.name}» не найден новый владелец.`}
+                      </p>
+                    </div>
+
+                    {needsCompanyTransfer ? (
+                      <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-center">
+                        <span className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-amber-100/70">
+                          <Building2 className="h-4 w-4" /> Новый владелец
+                        </span>
+                        <SelectField
+                          value={companyTransferToUserUuid}
+                          onChange={(event) => setCompanyTransferToUserUuid(event.target.value)}
+                          className="border-amber-200/20 bg-black/30"
+                        >
+                          <option value="">Выберите сотрудника</option>
+                          {companyTransferCandidates.map((member) => (
+                            <option key={member.uuid} value={member.uuid}>
+                              {member.name} · {member.email} · {member.role}
+                            </option>
+                          ))}
+                        </SelectField>
+                      </div>
+                    ) : (
+                      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-red-300/20 bg-red-500/10 p-3 text-red-50">
+                        <input
+                          type="checkbox"
+                          checked={confirmCompanyDeletion}
+                          onChange={(event) => setConfirmCompanyDeletion(event.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-red-200/40 accent-red-400"
+                        />
+                        <span>
+                          Подтверждаю: после смены роли компания будет деактивирована и удалена.
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-3 md:grid-cols-2">
               <InfoTile icon={Mail} label={t("admin.userDetail.emailReadonly")} value={user.email} />
               <InfoTile icon={KeyRound} label={t("admin.userDetail.telegramReadonly")} value={user.telegramId ?? t("admin.userDetail.notLinked")} />
@@ -361,6 +536,159 @@ export default function AdminUserProfilePage() {
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">{t("admin.userDetail.createdAtEdit")}</p>
                 <Input type="datetime-local" value={form.createdAt} onChange={(e) => setForm((p) => (p ? { ...p, createdAt: e.target.value } : p))} />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-cyan-200/15 bg-cyan-300/[0.04] p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="flex items-center gap-2 font-semibold">
+                    <UserPlus className="h-5 w-5 text-cyan-100" /> Компания сотрудника
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Создайте новую компанию для пользователя или привяжите его сотрудником к существующей.
+                  </p>
+                </div>
+                <Badge variant="outline" className="w-fit border-cyan-200/25 bg-cyan-300/10 text-cyan-100">
+                  {user.companyMemberships.filter((membership) => membership.isActive).length} активных связей
+                </Badge>
+              </div>
+
+              {user.companyMemberships.length > 0 && (
+                <div className="mt-4 grid gap-2">
+                  {user.companyMemberships.slice(0, 3).map((membership) => (
+                    <div key={membership.uuid} className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{membership.company.name}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {membership.company.slug} · {membership.role}
+                          {membership.company.isOwnedByUser ? " · владелец" : ""}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={membership.isActive ? "border-emerald-200/30 bg-emerald-300/10 text-emerald-100" : "border-white/10 bg-white/[0.04] text-muted-foreground"}>
+                        {membership.isActive ? "Активна" : "Отключена"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setCompanyAssignmentMode("CREATE_NEW")}
+                  className={cn(
+                    "rounded-2xl border p-3 text-left text-sm transition",
+                    companyAssignmentMode === "CREATE_NEW"
+                      ? "border-cyan-200/45 bg-cyan-300/12 text-cyan-50"
+                      : "border-white/10 bg-black/18 text-muted-foreground hover:bg-white/[0.05]",
+                  )}
+                >
+                  <span className="font-semibold text-foreground">Создать новую компанию</span>
+                  <span className="mt-1 block text-xs">Пользователь станет владельцем нового профиля.</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompanyAssignmentMode("ATTACH_EXISTING")}
+                  className={cn(
+                    "rounded-2xl border p-3 text-left text-sm transition",
+                    companyAssignmentMode === "ATTACH_EXISTING"
+                      ? "border-cyan-200/45 bg-cyan-300/12 text-cyan-50"
+                      : "border-white/10 bg-black/18 text-muted-foreground hover:bg-white/[0.05]",
+                  )}
+                >
+                  <span className="font-semibold text-foreground">Привязать к текущей</span>
+                  <span className="mt-1 block text-xs">Для нового сотрудника или перепривязки между компаниями.</span>
+                </button>
+              </div>
+
+              {companyAssignmentMode === "ATTACH_EXISTING" && (
+                <div className="mt-4 space-y-3">
+                  <form
+                    className="flex flex-col gap-2 sm:flex-row"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void loadCompanyProfiles(companyAssignmentQuery);
+                    }}
+                  >
+                    <Input
+                      value={companyAssignmentQuery}
+                      onChange={(event) => setCompanyAssignmentQuery(event.target.value)}
+                      placeholder="Поиск компании по названию, slug, владельцу"
+                    />
+                    <Button type="submit" variant="secondary" disabled={loadingCompanyProfiles}>
+                      <Search className="h-4 w-4" /> Найти
+                    </Button>
+                  </form>
+
+                  <div className="grid gap-3 md:grid-cols-[1.5fr_0.8fr]">
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Компания</p>
+                      <SelectField
+                        value={companyAssignmentCompanyId}
+                        onChange={(event) => setCompanyAssignmentCompanyId(event.target.value)}
+                      >
+                        <option value="">Выберите компанию</option>
+                        {companyProfiles.map((company) => (
+                          <option key={company.id} value={company.id}>
+                            {company.name} · {company.slug} · {company.owner?.email ?? "без владельца"}
+                          </option>
+                        ))}
+                      </SelectField>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Роль в компании</p>
+                      <SelectField
+                        value={companyAssignmentMemberRole}
+                        onChange={(event) => setCompanyAssignmentMemberRole(event.target.value as CompanyMemberRole)}
+                      >
+                        <option value="MANAGER">MANAGER</option>
+                        <option value="CASHIER">CASHIER</option>
+                        <option value="OWNER">OWNER</option>
+                      </SelectField>
+                    </div>
+                  </div>
+
+                  {selectedCompanyProfile && (
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-muted-foreground">
+                      <span className="font-semibold text-foreground">{selectedCompanyProfile.name}</span>
+                      <span> · владелец: {selectedCompanyProfile.owner?.email ?? "не назначен"}</span>
+                      <span> · сотрудников: {selectedCompanyProfile._count.members}</span>
+                    </div>
+                  )}
+
+                  {companyAssignmentMemberRole === "OWNER" && (
+                    <p className="rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm text-amber-100">
+                      Роль OWNER передаст владение выбранной компанией этому пользователю. Текущий владелец будет понижен до MANAGER.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {companyAssignmentMode === "CREATE_NEW" && (
+                <p className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-muted-foreground">
+                  Будет создан новый профиль компании с названием по имени пользователя. Его можно будет переименовать в настройках компании.
+                </p>
+              )}
+
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={companyAssignmentDeactivatePrevious}
+                    onChange={(event) => setCompanyAssignmentDeactivatePrevious(event.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-cyan-200/30 accent-cyan-300"
+                  />
+                  <span>Отключить другие активные привязки сотрудника</span>
+                </label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void onAssignCompany()}
+                  disabled={!canRunCompanyAssignment || assigningCompany}
+                >
+                  <Building2 className="h-4 w-4" /> {assigningCompany ? "Сохраняю..." : "Применить привязку"}
+                </Button>
               </div>
             </div>
           </CardContent>

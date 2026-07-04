@@ -240,25 +240,78 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   async register(dto: RegisterDto) {
     const role = dto.role ?? UserRole.CLIENT;
     this.assertPublicRegistrationRole(role);
-    const email = dto.email.trim().toLowerCase();
-    const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing) {
+    throw new BadRequestException("Email confirmation is required. Request a registration code first.");
+  }
+
+  private assertRegistrationCanUseExistingEmail(existing: {
+    emailVerifiedAt: Date | null;
+    accountStatus: AccountStatusValue;
+  } | null) {
+    if (!existing) return;
+    if (existing.accountStatus === "BLOCKED") {
+      throw new BadRequestException("Account is blocked");
+    }
+    if (existing.emailVerifiedAt) {
       throw new ConflictException("Email is already registered");
     }
-    const passwordHash = await bcrypt.hash(dto.password, 12);
-    const user = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.user.create({
-        data: {
-          name: dto.name.trim(),
-          email,
-          passwordHash,
-          role,
-        },
-      });
-      await this.grantClientRegistrationRewards(tx, created.id, role);
-      return created;
+  }
+
+  private registrationTargetFromExisting(
+    existing: { name: string; role: UserRole } | null,
+    dto: RequestRegistrationCodeDto,
+    requestedRole: UserRole,
+  ) {
+    return {
+      name: existing?.name?.trim() || dto.name.trim(),
+      role: existing?.role ?? requestedRole,
+    };
+  }
+
+  private async createVerifiedUserFromPending(
+    tx: Prisma.TransactionClient,
+    pending: {
+      name: string;
+      passwordHash: string;
+      role: UserRole;
+    },
+    email: string,
+  ) {
+    const created = await tx.user.create({
+      data: {
+        name: pending.name,
+        email,
+        passwordHash: pending.passwordHash,
+        role: pending.role,
+        emailVerifiedAt: new Date(),
+      },
     });
-    return this.issueTokens(user);
+    await this.grantClientRegistrationRewards(tx, created.id, pending.role);
+    return created;
+  }
+
+  private async verifyExistingUnconfirmedUser(
+    tx: Prisma.TransactionClient,
+    existing: {
+      id: number;
+      emailVerifiedAt: Date | null;
+      accountStatus: AccountStatusValue;
+    },
+    pending: {
+      name: string;
+      passwordHash: string;
+      role: UserRole;
+    },
+  ) {
+    this.assertRegistrationCanUseExistingEmail(existing);
+    return tx.user.update({
+      where: { id: existing.id },
+      data: {
+        name: pending.name,
+        passwordHash: pending.passwordHash,
+        role: pending.role,
+        emailVerifiedAt: new Date(),
+      },
+    });
   }
 
   async requestRegistrationCode(dto: RequestRegistrationCodeDto) {
@@ -269,10 +322,12 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     this.assertPublicRegistrationRole(role);
 
     const email = dto.email.trim().toLowerCase();
-    const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      throw new ConflictException("Email is already registered");
-    }
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, role: true, emailVerifiedAt: true, accountStatus: true },
+    });
+    this.assertRegistrationCanUseExistingEmail(existing);
+    const target = this.registrationTargetFromExisting(existing, dto, role);
 
     const code = String(randomInt(100000, 1_000_000));
     const codeHash = await bcrypt.hash(code, 12);
@@ -289,9 +344,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
         data: {
           email: dto.email.trim(),
           normalizedEmail: email,
-          name: dto.name.trim(),
+          name: target.name,
           passwordHash,
-          role,
+          role: target.role,
           codeHash,
           expiresAt,
         },
@@ -300,7 +355,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
 
     await this.email.sendRegistrationCode({
       toEmail: email,
-      toName: dto.name.trim(),
+      toName: target.name,
       code,
       expiresAt,
     });
@@ -344,25 +399,18 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     }
 
     const user = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.user.findUnique({ where: { email } });
-      if (existing) {
-        throw new ConflictException("Email is already registered");
-      }
-      const created = await tx.user.create({
-        data: {
-          name: pending.name,
-          email,
-          passwordHash: pending.passwordHash,
-          role: pending.role,
-          emailVerifiedAt: new Date(),
-        },
+      const existing = await tx.user.findUnique({
+        where: { email },
+        select: { id: true, emailVerifiedAt: true, accountStatus: true },
       });
+      const user = existing
+        ? await this.verifyExistingUnconfirmedUser(tx, existing, pending)
+        : await this.createVerifiedUserFromPending(tx, pending, email);
       await tx.emailVerificationCode.update({
         where: { id: pending.id },
         data: { status: "CONSUMED", consumedAt: new Date() },
       });
-      await this.grantClientRegistrationRewards(tx, created.id, pending.role);
-      return created;
+      return user;
     });
 
     return this.issueTokens(user);
