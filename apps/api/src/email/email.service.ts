@@ -1,8 +1,9 @@
-﻿import { Injectable, Logger } from "@nestjs/common";
+﻿import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { EmailMessageTargetType } from "@prisma/client";
 import * as nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type SendEmailInput = {
@@ -17,6 +18,17 @@ export type SendEmailInput = {
   targetCompanyId?: number | null;
 };
 
+type ResolvedEmailTransport = {
+  provider: string;
+  from: string;
+  transporter: Transporter;
+};
+
+type SmtpOptionsWithNetworkTuning = SMTPTransport.Options & {
+  family?: 4 | 6;
+  dnsTimeout?: number;
+};
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -29,6 +41,37 @@ export class EmailService {
 
   private getFromAddress() {
     return this.config.get<string>("MAIL_FROM") ?? "NearLoy <no-reply@nearloy.local>";
+  }
+
+  private isTruthyConfig(key: string) {
+    const value = this.config.get<string>(key);
+    if (value === undefined || value === null) return false;
+    return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+  }
+
+  private isProductionLikeRuntime() {
+    const nodeEnv = String(this.config.get<string>("NODE_ENV") ?? process.env.NODE_ENV ?? "").toLowerCase();
+    const railwayEnv = String(this.config.get<string>("RAILWAY_ENVIRONMENT") ?? process.env.RAILWAY_ENVIRONMENT ?? "").toLowerCase();
+    return nodeEnv === "production" || railwayEnv === "production";
+  }
+
+  private isDeployedRuntime() {
+    return Boolean(
+      this.config.get<string>("RAILWAY_ENVIRONMENT") ||
+        this.config.get<string>("RAILWAY_SERVICE_ID") ||
+        this.config.get<string>("VERCEL") ||
+        process.env.RAILWAY_ENVIRONMENT ||
+        process.env.RAILWAY_SERVICE_ID ||
+        process.env.VERCEL,
+    );
+  }
+
+  private isDevOutboxEnabled() {
+    const explicit = this.config.get<string>("EMAIL_DEV_OUTBOX_ENABLED");
+    if (explicit !== undefined && explicit !== null) {
+      return this.isTruthyConfig("EMAIL_DEV_OUTBOX_ENABLED");
+    }
+    return !this.isProductionLikeRuntime() && !this.isDeployedRuntime();
   }
 
   private getRecipientDomain(email: string) {
@@ -72,7 +115,12 @@ export class EmailService {
     };
   }
 
-  private resolveTransport(toEmail: string) {
+  private getSmtpTimeoutMs(key: string, fallback: number) {
+    const raw = Number(this.config.get(key) ?? fallback);
+    return Number.isFinite(raw) ? Math.max(1_000, Math.floor(raw)) : fallback;
+  }
+
+  private resolveTransports(toEmail: string): ResolvedEmailTransport[] {
     const domain = this.getRecipientDomain(toEmail);
     const russianDomains = new Set([
       "yandex.ru",
@@ -90,10 +138,11 @@ export class EmailService {
 
     const providerOrder =
       russianDomains.has(domain)
-        ? ["YANDEX_SMTP", "SMTP"]
+        ? ["YANDEX_SMTP", "GOOGLE_SMTP", "SMTP"]
         : googleDomains.has(domain)
-          ? ["GOOGLE_SMTP", "SMTP"]
+          ? ["GOOGLE_SMTP", "YANDEX_SMTP", "SMTP"]
           : ["GOOGLE_SMTP", "YANDEX_SMTP", "SMTP"];
+    const transports: ResolvedEmailTransport[] = [];
 
     for (const provider of providerOrder) {
       const config = provider === "SMTP" ? this.getDefaultSmtpConfig() : this.getSmtpConfig(provider);
@@ -102,27 +151,36 @@ export class EmailService {
       const cacheKey = `${provider}:${config.host}:${config.port}:${config.secure ? "secure" : "plain"}`;
       let transporter = this.transporters.get(cacheKey);
       if (!transporter) {
-        transporter = nodemailer.createTransport({
+        const options: SmtpOptionsWithNetworkTuning = {
           host: config.host,
           port: config.port,
           secure: config.secure,
           auth: config.auth,
-        });
+          family: 4,
+          connectionTimeout: this.getSmtpTimeoutMs("SMTP_CONNECTION_TIMEOUT_MS", 12_000),
+          greetingTimeout: this.getSmtpTimeoutMs("SMTP_GREETING_TIMEOUT_MS", 12_000),
+          socketTimeout: this.getSmtpTimeoutMs("SMTP_SOCKET_TIMEOUT_MS", 20_000),
+          dnsTimeout: this.getSmtpTimeoutMs("SMTP_DNS_TIMEOUT_MS", 8_000),
+          tls: { servername: config.host },
+        };
+        transporter = nodemailer.createTransport(options);
         this.transporters.set(cacheKey, transporter);
         this.logger.log(`SMTP email transport enabled: ${provider} (${config.host}:${config.port}).`);
       }
 
-      return {
+      transports.push({
         provider: provider.toLowerCase().replace("_smtp", ""),
         from: config.from,
         transporter,
-      };
+      });
     }
 
-    return null;
+    return transports;
   }
 
   async sendEmail(input: SendEmailInput) {
+    const transports = this.resolveTransports(input.toEmail);
+    const primaryTransport = transports[0] ?? null;
     const message = await this.prisma.emailMessage.create({
       data: {
         targetType: input.targetType ?? EmailMessageTargetType.DIRECT,
@@ -134,12 +192,20 @@ export class EmailService {
         sentByUserId: input.sentByUserId ?? null,
         targetUserId: input.targetUserId ?? null,
         targetCompanyId: input.targetCompanyId ?? null,
-        provider: this.resolveTransport(input.toEmail)?.provider ?? "dev-outbox",
+        provider: primaryTransport?.provider ?? "dev-outbox",
       },
     });
 
-    const transport = this.resolveTransport(input.toEmail);
-    if (!transport) {
+    if (transports.length === 0) {
+      if (!this.isDevOutboxEnabled()) {
+        const errorText = "Email delivery is not configured: no SMTP transport is available.";
+        this.logger.error(`${errorText} Message ${message.uuid} -> ${message.toEmail}`);
+        await this.prisma.emailMessage.update({
+          where: { id: message.id },
+          data: { status: "FAILED", error: errorText },
+        });
+        throw new ServiceUnavailableException(errorText);
+      }
       if (process.env.NODE_ENV !== "test") {
         this.logger.log(`Email dev-outbox saved: ${message.uuid} -> ${message.toEmail}`);
       }
@@ -149,26 +215,51 @@ export class EmailService {
       });
     }
 
-    try {
-      await transport.transporter.sendMail({
-        from: transport.from,
-        to: input.toName ? `${input.toName} <${input.toEmail}>` : input.toEmail,
-        subject: input.subject,
-        text: input.text,
-        html: input.html ?? undefined,
-      });
-      return this.prisma.emailMessage.update({
-        where: { id: message.id },
-        data: { status: "SENT", sentAt: new Date() },
-      });
-    } catch (error) {
-      const errorText = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Email send failed: ${message.uuid}`, error as Error);
-      await this.prisma.emailMessage.update({
-        where: { id: message.id },
-        data: { status: "FAILED", error: errorText.slice(0, 2000) },
-      });
-      throw error;
+    const failures: string[] = [];
+    let lastError: unknown = null;
+    for (const transport of transports) {
+      try {
+        const result = await transport.transporter.sendMail({
+          from: transport.from,
+          to: input.toName ? `${input.toName} <${input.toEmail}>` : input.toEmail,
+          subject: input.subject,
+          text: input.text,
+          html: input.html ?? undefined,
+        });
+        this.assertAcceptedBySmtp(result);
+        return this.prisma.emailMessage.update({
+          where: { id: message.id },
+          data: { status: "SENT", sentAt: new Date(), provider: transport.provider },
+        });
+      } catch (error) {
+        lastError = error;
+        const errorText = error instanceof Error ? error.message : String(error);
+        failures.push(`${transport.provider}: ${errorText}`);
+        this.logger.warn(`Email transport failed (${transport.provider}) for ${message.uuid}: ${errorText}`);
+      }
+    }
+
+    const errorText = failures.join(" | ") || "Email send failed.";
+    this.logger.error(`Email send failed: ${message.uuid}. ${errorText}`);
+    await this.prisma.emailMessage.update({
+      where: { id: message.id },
+      data: { status: "FAILED", error: errorText.slice(0, 2000) },
+    });
+    throw (lastError instanceof Error ? lastError : new Error(errorText));
+  }
+
+  private assertAcceptedBySmtp(result: unknown) {
+    const info = result as { accepted?: unknown; rejected?: unknown };
+    const rejected = Array.isArray(info.rejected) ? info.rejected.filter(Boolean) : [];
+    if (rejected.length > 0) {
+      throw new Error(`SMTP rejected recipient(s): ${rejected.join(", ")}`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(info, "accepted")) {
+      const accepted = Array.isArray(info.accepted) ? info.accepted.filter(Boolean) : [];
+      if (accepted.length === 0) {
+        throw new Error("SMTP did not accept any recipients.");
+      }
     }
   }
 
