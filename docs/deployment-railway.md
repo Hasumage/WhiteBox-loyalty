@@ -71,7 +71,12 @@ Optional variables:
 
 ```env
 YANDEX_GEOCODER_API_KEY=<key>
-EMAIL_FROM=no-reply@nearloy.local
+MAIL_FROM=NearLoy <no-reply@nearloy.ru>
+SMTP_HOST=<smtp-host>
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=<smtp-login>
+SMTP_PASS=<smtp-password>
 YOOKASSA_SHOP_ID=<shop-id>
 YOOKASSA_SECRET_KEY=<secret-key>
 YOOKASSA_RETURN_URL=https://<web-domain>/payment/success
@@ -79,6 +84,11 @@ YOOKASSA_COMPANY_RETURN_URL=https://<web-domain>/company/billing
 YOOKASSA_VAT_CODE=1
 YOOKASSA_MAX_BANK_CARD_PAYMENT_RUB=349999
 ```
+
+Email delivery is mandatory in production. If `SMTP_HOST` is not configured, the API returns an error instead of silently
+saving the message to the local dev outbox. For provider-specific routing you may also configure
+`YANDEX_SMTP_HOST`/`YANDEX_SMTP_PORT`/`YANDEX_SMTP_USER`/`YANDEX_SMTP_PASS` and
+`GOOGLE_SMTP_HOST`/`GOOGLE_SMTP_PORT`/`GOOGLE_SMTP_USER`/`GOOGLE_SMTP_PASS`.
 
 The API health endpoint is:
 
@@ -123,7 +133,7 @@ DIRECT_URL=postgresql://...
 ```
 
 Set the generated web domain as `FRONTEND_ORIGIN` in the API service.
-Set the generated web domain in `YOOKASSA_RETURN_URL` and `YOOKASSA_COMPANY_RETURN_URL` so YooKassa returns users to the TWA/payment and company billing status screens.
+Set the generated web domain in `YOOKASSA_RETURN_URL` and `YOOKASSA_COMPANY_RETURN_URL` so YooKassa returns users to the client payment and company billing status screens.
 
 ## CI/CD handoff
 
