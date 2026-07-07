@@ -1,6 +1,6 @@
-# NearLoy - Loyalty Wallet (TWA) + API
+# NearLoy - Loyalty, subscriptions and company operations
 
-Monorepo: **Next.js** (Telegram Web App UI) + **NestJS** (REST API) + **Prisma** + **PostgreSQL**.
+Monorepo: **Next.js** client/company/admin UI + **NestJS** REST API + **Prisma** + **PostgreSQL**.
 
 ## Prerequisites
 
@@ -49,7 +49,9 @@ npm run api:dev
 
 Auth routes (`/api/auth/*`):
 
-- `POST /api/auth/register` - default role is `CLIENT`; `ADMIN` is rejected
+- `POST /api/auth/register/request-code` - request registration email code
+- `POST /api/auth/register/verify` - verify email code and create/confirm account
+- `POST /api/auth/register` - blocked compatibility endpoint; registration must use email confirmation
 - `POST /api/auth/login` - email + password (Passport local)
 - `POST /api/auth/refresh` - refresh token rotation
 - `GET /api/auth/me` - Bearer JWT profile
@@ -82,8 +84,13 @@ Admin routes (`/api/admin/*`, ADMIN only):
 - `DELETE /api/admin/backups/:backupId` - delete snapshot
 - `GET /api/admin/backups/restore-status` - live restore process status
 - `GET /api/admin/dashboard` - live operational metrics and permission-filtered task queue
+- `GET` / `POST /api/admin/tasks` - operations Kanban tasks and manual task creation
 - `GET /api/admin/tasks/:uuid` / `PATCH` - view, take or resolve an admin task
-- `GET /api/admin/system-health` - system incidents and Telegram queue with task routing
+- `GET /api/admin/system-health` - critical system incidents and source-linked alerts
+- `GET /api/admin/payments` - YooKassa payment ledger
+- `GET /api/admin/company-users/:uuid/overview` - company operational stats
+- `GET /api/admin/company-users/:uuid/payments` - company payment ledger
+- `GET /api/admin/company-users/:uuid/security` - company staff/security summary
 
 Company workspace routes (`/api/company/*`, COMPANY membership):
 
@@ -93,16 +100,22 @@ Company workspace routes (`/api/company/*`, COMPANY membership):
 - `GET` / `POST /api/company/team` - company staff and invitations
 - `PATCH /api/company/team/:uuid/role` / `PATCH /api/company/team/:uuid/status` - local company roles and staff access
 - `GET /api/company/finance` / `POST /api/company/finance/payouts` - revenue forecast and payout request
+- `GET /api/company/billing` - NearLoy subscription, invoice, saved payment method and payment history
+- `POST /api/company/billing/checkout` - create/reuse YooKassa checkout for NearLoy subscription
+- `POST /api/company/billing/payment-method/pay` / `DELETE /api/company/billing/payment-method` - charge or remove saved YooKassa method
+- `POST /api/company/ai/assist` - safe AI drafts for launch, offers, finance explanations and loyalty levels
 - `GET` / `POST /api/company/subscriptions` - company tariff workspace
 - `POST /api/company/subscriptions/:uuid/entitlements` - service usage limits
 - `POST /api/company/subscriptions/redemptions` - controlled service redemption
 - `GET /api/company/club` / `POST /api/company/club/bundles` - partner club and paired subscription proposals
 - `POST /api/company/club/bundles/:uuid/approve|reject` - two-sided proposal workflow
 - `POST /api/company/club/bundles/redemptions` - redeem only the current company benefit in a paired subscription
+- `GET` / `POST /api/company/media` - list/upload public logo, hero and gallery assets
+- `POST /api/company/media/offers` / `DELETE /api/company/media/offers/:id` - manage public special offers
 
 Registered routes (`/api/registered/*`, CLIENT only):
 
-- `GET /api/registered/dashboard` - TWA dashboard read model from DB
+- `GET /api/registered/dashboard` - client dashboard read model from DB
 - `GET /api/registered/marketplace` - active subscription marketplace from DB
 - `GET /api/registered/companies` - companies with user points and level progress
 - `GET /api/registered/wallet` - wallet cards and total point balance
@@ -112,6 +125,8 @@ Registered routes (`/api/registered/*`, CLIENT only):
 - `GET /api/registered/subscriptions/archive` - expired/canceled subscriptions
 - `POST /api/registered/payments/subscriptions/:uuid/checkout` - create YooKassa checkout for a subscription or bundle
 - `GET /api/registered/payments/:uuid` - sync/check current user's payment status and activate after successful payment
+- `PUT /api/registered/companies/:id/favorite` - favorite/unfavorite company
+- `GET /api/public/company-media/:slug` - public company card media and offers
 
 Payments:
 
@@ -119,11 +134,15 @@ Payments:
 - `GET /api/admin/payments` - admin payment ledger with status filters and provider identifiers
 - `POST /api/company/billing/checkout` - create YooKassa checkout for company NearLoy billing
 - `GET /api/company/billing/payments/:uuid` - sync/check company billing payment status
+- `POST /api/company/billing/payment-method/pay` - pay with saved YooKassa method
+- `DELETE /api/company/billing/payment-method` - remove saved YooKassa method metadata
 
 Set `NEXT_PUBLIC_API_URL=http://localhost:3001/api` for the Next.js auth and admin API clients.
 Set `NEXT_PUBLIC_YANDEX_MAPS_API_KEY=<key>` to enable the Yandex Maps JS API integration on `/map`.
 Set `YANDEX_GEOCODER_API_KEY=<key>` to let admin company locations resolve addresses into saved coordinates.
 Set `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `YOOKASSA_RETURN_URL` and `YOOKASSA_COMPANY_RETURN_URL` to enable YooKassa checkout payments.
+Set `EMAIL_PROVIDER=resend` and `RESEND_API_KEY` for production email delivery on Railway; SMTP may time out on Railway Hobby.
+Set `OPENAI_API_KEY` to enable `/company/ai`; default model is `gpt-5.4-nano` with compact JSON output and no critical-system actions.
 
 ## Backup and Restore Safety
 
@@ -138,6 +157,7 @@ Set `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `YOOKASSA_RETURN_URL` and `YOOKAS
 ## Admin UI Overview
 
 - `/admin` - live operations dashboard and prioritized task board
+- `/admin/tasks` - operations Kanban board
 - `/admin/tasks/:uuid` - task resolution workspace with a direct route to the source alert/workflow
 - `/admin/users` - users directory
 - `/admin/users/:uuid` - full user profile editor
@@ -145,6 +165,10 @@ Set `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `YOOKASSA_RETURN_URL` and `YOOKAS
 - `/admin/companies` - company users directory
 - `/admin/companies/:uuid` - company profile + subscriptions CRUD
 - `/admin/companies/:uuid/clients` - company clients table with search, sorting, pagination, and expandable details
+- `/admin/companies/:uuid/payments` - company payments
+- `/admin/companies/:uuid/security` - company staff/security summary
+- `/admin/payments` - provider payment ledger
+- `/admin/system-health` - critical alerts cockpit
 - `/admin/database` - interactive DB map (zoom, pan, relations)
 - `/admin/subscriptions` - KPI/SLA dashboard + forecast analytics
 - `/admin/audit` - manager/developer audit feed
@@ -156,8 +180,11 @@ Set `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `YOOKASSA_RETURN_URL` and `YOOKAS
 - `/company/club` - entrepreneur club and paired subscription workflow
 - `/company/team` - owner/manager/cashier membership management
 - `/company/payments` - subscription forecast and payout requests
+- `/company/billing` - NearLoy subscription payment and saved YooKassa method
+- `/company/settings/media` - logo, hero, gallery and public offers
 - `/email-change/confirm?token=...` - public confirmation page for user email change
-- `/loyalty-cards` - TWA list of companies where the user has earned points
+- `/loyalty-cards` - client list of companies where the user has earned points
+- `/wallet/[slug]` - authenticated client card or public read-only company showcase
 
 ## Tests
 
@@ -177,14 +204,16 @@ npm run api:test
 
 - `Min redeem` (stored as `pointsPerReward`) defines the minimum points threshold from which a client can redeem points.
 - Level validation prevents invalid cashback ladders: for higher spend thresholds, cashback must stay the same or increase.
-- TWA marketplace, partners, category, wallet, map, and history screens are backed by registered API read models instead of mock data.
+- Client marketplace, partners, category, wallet, map, and history screens are backed by registered API read models instead of mock data.
 - Company addresses are stored as `CompanyLocation` rows; admin company pages can geocode addresses and `/map` renders saved location coordinates.
 - Partner/category filtering respects multi-category company relations.
 - Company operations separate platform role `COMPANY` from membership roles `OWNER`, `MANAGER` and `CASHIER`.
 - Subscription benefits can be period-limited or marked `UNLIMITED` for repeatable access such as gym entry while still recording each redemption.
 - Subscription redemptions use configured service allowances and periodic windows; QR replay protection remains a required pre-production enhancement.
 - `AdminTask` turns open verification requests, pending finance approvals and critical audit alerts into one deduplicated resolution queue. Task visibility follows granular admin permissions.
-- Subscription activation is paid: the TWA creates a YooKassa checkout and activates the subscription only after `PaymentStatus.SUCCEEDED`.
+- Subscription activation is paid: the client creates a YooKassa checkout and activates the subscription only after `PaymentStatus.SUCCEEDED`.
+- Pending YooKassa checkouts are reused during the 15-minute payment window to prevent duplicate orders.
+- Company public media and offers are managed from `/company/settings/media`; production needs persistent storage or object storage before heavy real uploads.
 
 ## Build
 
@@ -218,6 +247,7 @@ Key docs:
 - `docs/project-map/project-services.md`
 - `docs/project-map/project-ui.md`
 - `docs/project-map/database-map.md`
+- `docs/project-map/recent-prs.md`
 - `docs/company-workspace.md`
 
 ## Contribution Policy

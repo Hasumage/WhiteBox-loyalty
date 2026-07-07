@@ -4,6 +4,8 @@ import { EmailMessageTargetType } from "@prisma/client";
 import * as nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
+import { EmailProvider } from "./email-provider";
+import { ResendEmailProvider } from "./providers/resend-email.provider";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type SendEmailInput = {
@@ -29,15 +31,20 @@ type SmtpOptionsWithNetworkTuning = SMTPTransport.Options & {
   dnsTimeout?: number;
 };
 
+type EmailLocale = "ru" | "en";
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly transporters = new Map<string, Transporter>();
+  private readonly httpProviders: EmailProvider[];
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    this.httpProviders = [new ResendEmailProvider(this.config)];
+  }
 
   private getFromAddress() {
     return this.config.get<string>("MAIL_FROM") ?? "NearLoy <no-reply@nearloy.local>";
@@ -76,6 +83,26 @@ export class EmailService {
 
   private getRecipientDomain(email: string) {
     return email.trim().toLowerCase().split("@").pop() ?? "";
+  }
+
+  private getRequestedProviderNames() {
+    const raw = this.config.get<string>("EMAIL_PROVIDER")?.trim().toLowerCase() || "auto";
+    const names = raw
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (names.length === 0 || names.includes("auto")) {
+      return ["resend", "smtp"];
+    }
+    return names;
+  }
+
+  private resolveHttpProviders(providerNames: string[]) {
+    return this.httpProviders.filter((provider) => providerNames.includes(provider.name) && provider.isConfigured());
+  }
+
+  private isSmtpRequested(providerNames: string[]) {
+    return providerNames.includes("smtp");
   }
 
   private getSmtpConfig(prefix: string) {
@@ -179,8 +206,10 @@ export class EmailService {
   }
 
   async sendEmail(input: SendEmailInput) {
-    const transports = this.resolveTransports(input.toEmail);
-    const primaryTransport = transports[0] ?? null;
+    const providerNames = this.getRequestedProviderNames();
+    const httpProviders = this.resolveHttpProviders(providerNames);
+    const transports = this.isSmtpRequested(providerNames) ? this.resolveTransports(input.toEmail) : [];
+    const primaryProvider = httpProviders[0]?.name ?? transports[0]?.provider ?? "dev-outbox";
     const message = await this.prisma.emailMessage.create({
       data: {
         targetType: input.targetType ?? EmailMessageTargetType.DIRECT,
@@ -192,13 +221,13 @@ export class EmailService {
         sentByUserId: input.sentByUserId ?? null,
         targetUserId: input.targetUserId ?? null,
         targetCompanyId: input.targetCompanyId ?? null,
-        provider: primaryTransport?.provider ?? "dev-outbox",
+        provider: primaryProvider,
       },
     });
 
-    if (transports.length === 0) {
+    if (httpProviders.length === 0 && transports.length === 0) {
       if (!this.isDevOutboxEnabled()) {
-        const errorText = "Email delivery is not configured: no SMTP transport is available.";
+        const errorText = `Email delivery is not configured: no requested provider is available (${providerNames.join(", ")}).`;
         this.logger.error(`${errorText} Message ${message.uuid} -> ${message.toEmail}`);
         await this.prisma.emailMessage.update({
           where: { id: message.id },
@@ -217,6 +246,28 @@ export class EmailService {
 
     const failures: string[] = [];
     let lastError: unknown = null;
+    for (const provider of httpProviders) {
+      try {
+        const result = await provider.send({
+          from: this.getFromAddress(),
+          toEmail: input.toEmail,
+          toName: input.toName,
+          subject: input.subject,
+          text: input.text,
+          html: input.html,
+        });
+        return this.prisma.emailMessage.update({
+          where: { id: message.id },
+          data: { status: "SENT", sentAt: new Date(), provider: result.provider },
+        });
+      } catch (error) {
+        lastError = error;
+        const errorText = error instanceof Error ? error.message : String(error);
+        failures.push(`${provider.name}: ${errorText}`);
+        this.logger.warn(`Email provider failed (${provider.name}) for ${message.uuid}: ${errorText}`);
+      }
+    }
+
     for (const transport of transports) {
       try {
         const result = await transport.transporter.sendMail({
@@ -268,21 +319,99 @@ export class EmailService {
     toName: string;
     code: string;
     expiresAt: Date;
+    locale?: EmailLocale | string | null;
   }) {
     const minutes = Math.max(1, Math.round((input.expiresAt.getTime() - Date.now()) / 60_000));
-    const subject = "NearLoy: email confirmation code";
-    const text = [
-      `Hello, ${input.toName}!`,
-      "",
-      `Your NearLoy registration code: ${input.code}`,
-      `It is valid for about ${minutes} minutes.`,
-      "If you did not request this email, simply ignore it.",
-    ].join("\n");
+    const locale: EmailLocale = input.locale === "en" ? "en" : "ru";
+    const subject = locale === "ru" ? "NearLoy: код подтверждения email" : "NearLoy: email confirmation code";
+    const text =
+      locale === "ru"
+        ? [
+            `Здравствуйте, ${input.toName}.`,
+            "",
+            `Код для завершения регистрации в NearLoy: ${input.code}`,
+            `Код действует около ${minutes} мин.`,
+            "Если вы не запрашивали это письмо, просто проигнорируйте его.",
+          ].join("\n")
+        : [
+            `Hello, ${input.toName}!`,
+            "",
+            `Your NearLoy registration code: ${input.code}`,
+            `It is valid for about ${minutes} minutes.`,
+            "If you did not request this email, simply ignore it.",
+          ].join("\n");
+    const greeting =
+      locale === "ru"
+        ? `Здравствуйте, ${this.escapeHtml(input.toName)}.`
+        : `Hello, ${this.escapeHtml(input.toName)}.`;
+    const instruction =
+      locale === "ru"
+        ? "Введите этот код, чтобы завершить создание аккаунта NearLoy:"
+        : "Use this code to finish creating your NearLoy account:";
+    const footer =
+      locale === "ru"
+        ? `Код действует около ${minutes} мин. Если вы не запрашивали письмо, его можно проигнорировать.`
+        : `The code is valid for about ${minutes} minutes. If you did not request this, you can ignore this email.`;
     const html = this.wrapHtml(`
-      <p style="margin:0 0 18px;color:#cbd5e1;font-size:16px;line-height:1.6">Hello, ${this.escapeHtml(input.toName)}.</p>
-      <p style="margin:0 0 20px;color:#cbd5e1;font-size:16px;line-height:1.6">Use this code to finish creating your NearLoy account:</p>
+      <p style="margin:0 0 18px;color:#cbd5e1;font-size:16px;line-height:1.6">${greeting}</p>
+      <p style="margin:0 0 20px;color:#cbd5e1;font-size:16px;line-height:1.6">${instruction}</p>
       <div style="letter-spacing:10px;font-size:38px;font-weight:800;color:#ffffff;background:#0b1220;border:1px solid rgba(103,232,249,.35);border-radius:18px;padding:22px 26px;text-align:center">${input.code}</div>
-      <p style="margin:20px 0 0;color:#94a3b8;font-size:14px;line-height:1.6">The code is valid for about ${minutes} minutes. If you did not request this, you can ignore this email.</p>
+      <p style="margin:20px 0 0;color:#94a3b8;font-size:14px;line-height:1.6">${footer}</p>
+    `);
+    return this.sendEmail({
+      toEmail: input.toEmail,
+      toName: input.toName,
+      subject,
+      text,
+      html,
+      targetType: EmailMessageTargetType.DIRECT,
+    });
+  }
+
+  async sendPasswordResetCode(input: {
+    toEmail: string;
+    toName: string;
+    code: string;
+    expiresAt: Date;
+    locale?: EmailLocale | string | null;
+  }) {
+    const minutes = Math.max(1, Math.round((input.expiresAt.getTime() - Date.now()) / 60_000));
+    const locale: EmailLocale = input.locale === "en" ? "en" : "ru";
+    const subject =
+      locale === "ru" ? "NearLoy: код восстановления пароля" : "NearLoy: password reset code";
+    const text =
+      locale === "ru"
+        ? [
+            `Здравствуйте, ${input.toName}.`,
+            "",
+            `Код для смены пароля NearLoy: ${input.code}`,
+            `Код действует около ${minutes} мин.`,
+            "Если вы не запрашивали смену пароля, просто проигнорируйте письмо.",
+          ].join("\n")
+        : [
+            `Hello, ${input.toName}.`,
+            "",
+            `Your NearLoy password reset code: ${input.code}`,
+            `It is valid for about ${minutes} minutes.`,
+            "If you did not request a password reset, simply ignore this email.",
+          ].join("\n");
+    const greeting =
+      locale === "ru"
+        ? `Здравствуйте, ${this.escapeHtml(input.toName)}.`
+        : `Hello, ${this.escapeHtml(input.toName)}.`;
+    const instruction =
+      locale === "ru"
+        ? "Введите этот код, чтобы задать новый пароль NearLoy:"
+        : "Use this code to set a new NearLoy password:";
+    const footer =
+      locale === "ru"
+        ? `Код действует около ${minutes} мин. Если вы не запрашивали смену пароля, письмо можно проигнорировать.`
+        : `The code is valid for about ${minutes} minutes. If you did not request this, you can ignore this email.`;
+    const html = this.wrapHtml(`
+      <p style="margin:0 0 18px;color:#cbd5e1;font-size:16px;line-height:1.6">${greeting}</p>
+      <p style="margin:0 0 20px;color:#cbd5e1;font-size:16px;line-height:1.6">${instruction}</p>
+      <div style="letter-spacing:10px;font-size:38px;font-weight:800;color:#ffffff;background:#0b1220;border:1px solid rgba(103,232,249,.35);border-radius:18px;padding:22px 26px;text-align:center">${input.code}</div>
+      <p style="margin:20px 0 0;color:#94a3b8;font-size:14px;line-height:1.6">${footer}</p>
     `);
     return this.sendEmail({
       toEmail: input.toEmail,

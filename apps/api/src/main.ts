@@ -43,7 +43,7 @@ async function bootstrap() {
   const swaggerConfig = new DocumentBuilder()
     .setTitle("NearLoy API")
     .setDescription(
-      "Authentication (Passport + JWT), user roles (CLIENT / COMPANY / ADMIN), OAuth groundwork. Existing TWA UI targets CLIENT users.",
+      "Authentication (Passport + JWT), user roles (CLIENT / COMPANY / ADMIN), OAuth groundwork. Existing client app UI targets CLIENT users.",
     )
     .setVersion("1.0")
     .addBearerAuth(

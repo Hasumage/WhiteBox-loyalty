@@ -37,10 +37,22 @@ type TelegramWindow = Window & {
   };
 };
 
+const loginCopy = {
+  ru: {
+    forgotPassword: "Забыли пароль?",
+    restoringSession: "Восстанавливаем сессию NearLoy...",
+  },
+  en: {
+    forgotPassword: "Forgot password?",
+    restoringSession: "Restoring NearLoy session...",
+  },
+} as const;
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { locale, setLocale, t } = useI18n("ru");
+  const text = loginCopy[locale] ?? loginCopy.ru;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -197,7 +209,7 @@ export function LoginForm() {
               className="rounded-lg border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-2 text-sm text-cyan-100"
               role="status"
             >
-              Восстанавливаем сессию NearLoy...
+              {text.restoringSession}
             </p>
           )}
           <div className="space-y-2">
@@ -230,6 +242,14 @@ export function LoginForm() {
               minLength={8}
               className="glass border-white/10"
             />
+            <div className="flex justify-end">
+              <Link
+                href="/forgot-password"
+                className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {text.forgotPassword}
+              </Link>
+            </div>
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-3 pt-6">

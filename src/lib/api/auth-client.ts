@@ -3,8 +3,9 @@ const STORAGE_REFRESH = "wb_refresh_token";
 const STORAGE_USER = "wb_user";
 /** Same name as `src/middleware.ts` — allows Edge middleware to verify JWT */
 const ACCESS_COOKIE = "wb_access_token";
+const EMAIL_GUARD_STORAGE = "wb_email_guard_id";
 const CLIENT_HOME = "/app";
-const PUBLIC_AUTH_ROUTES = new Set(["/", "/landing", "/login", "/register", "/company/register"]);
+const PUBLIC_AUTH_ROUTES = new Set(["/", "/landing", "/login", "/register", "/forgot-password", "/company/register"]);
 
 function setAccessCookie(accessToken: string) {
   if (typeof document === "undefined") return;
@@ -67,6 +68,29 @@ export function authenticatedDestination(user: Pick<StoredUser, "role">, request
 function apiBase(): string {
   const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
   return base.replace(/\/$/, "");
+}
+
+function createEmailGuardId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `guard-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+}
+
+function getEmailGuardId() {
+  if (typeof window === "undefined") return createEmailGuardId();
+  const existing = localStorage.getItem(EMAIL_GUARD_STORAGE);
+  if (existing) return existing;
+  const next = createEmailGuardId();
+  localStorage.setItem(EMAIL_GUARD_STORAGE, next);
+  return next;
+}
+
+function emailRequestHeaders(): HeadersInit {
+  return {
+    "Content-Type": "application/json",
+    "X-NearLoy-Email-Guard": getEmailGuardId(),
+  };
 }
 
 export function setStoredSession(data: AuthTokensResponse) {
@@ -142,9 +166,58 @@ export async function requestRegistrationCode(body: {
   email: string;
   password: string;
   confirmPassword: string;
+  locale?: "ru" | "en";
 }): Promise<{ success: true; email: string; expiresAt: string } | { message: string | string[] }> {
   try {
     const res = await fetch(`${apiBase()}/auth/register/request-code`, {
+      method: "POST",
+      headers: emailRequestHeaders(),
+      body: JSON.stringify(body),
+      credentials: "include",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        message: data.message ?? `HTTP ${res.status}`,
+      };
+    }
+    return data as { success: true; email: string; expiresAt: string };
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
+export async function requestPasswordResetCode(body: {
+  email: string;
+  locale?: "ru" | "en";
+}): Promise<{ success: true; email: string; expiresAt: string } | { message: string | string[] }> {
+  try {
+    const res = await fetch(`${apiBase()}/auth/password-reset/request-code`, {
+      method: "POST",
+      headers: emailRequestHeaders(),
+      body: JSON.stringify(body),
+      credentials: "include",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        message: data.message ?? `HTTP ${res.status}`,
+      };
+    }
+    return data as { success: true; email: string; expiresAt: string };
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
+export async function confirmPasswordReset(body: {
+  email: string;
+  code: string;
+  password: string;
+  confirmPassword: string;
+}): Promise<{ success: true } | { message: string | string[] }> {
+  try {
+    const res = await fetch(`${apiBase()}/auth/password-reset/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -155,7 +228,7 @@ export async function requestRegistrationCode(body: {
         message: data.message ?? `HTTP ${res.status}`,
       };
     }
-    return data as { success: true; email: string; expiresAt: string };
+    return { success: true };
   } catch {
     return { message: "API is unavailable. Please check backend connection." };
   }

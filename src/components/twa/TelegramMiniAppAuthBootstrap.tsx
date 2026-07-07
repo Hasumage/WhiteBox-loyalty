@@ -66,9 +66,9 @@ export function TelegramMiniAppAuthBootstrap() {
       }
 
       setAuthing(false);
-      // No scary UI here: unlinked Telegram users can still sign in normally.
+      // No scary UI here: unlinked users can still sign in normally.
       console.info(
-        "NearLoy Telegram Mini App auth skipped:",
+        "NearLoy linked client auth skipped:",
         "message" in result ? result.message : "Unknown response",
       );
     })();
@@ -83,9 +83,9 @@ export function TelegramMiniAppAuthBootstrap() {
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/80 px-6 text-center backdrop-blur-xl">
       <div className="glass max-w-xs rounded-3xl border border-cyan-200/20 p-6 shadow-[0_0_40px_rgba(103,232,249,0.12)]">
-        <p className="text-lg font-semibold text-foreground">Входим через Telegram</p>
+        <p className="text-lg font-semibold text-foreground">Входим в NearLoy</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Проверяем подпись Mini App и открываем вашу NearLoy-сессию.
+          Проверяем вход и открываем вашу NearLoy-сессию.
         </p>
       </div>
     </div>

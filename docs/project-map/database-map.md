@@ -8,29 +8,62 @@ The page is a visual schema explorer for admins/developers. It is not a database
 
 ## Synced Prisma models
 
-The visual map currently includes all Prisma models:
+The visual map should track all Prisma models. Current schema models:
 
 - `User`
+- `ProfileStatus`
+- `UserProfileStatusUnlock`
+- `PlatformCounter`
+- `AdminUserPermission`
 - `Category`
-- `Company`
-- `Subscription`
-- `CompanyLocation`
-- `UserProfilePreference`
 - `UserFavoriteCategory`
+- `Company`
+- `CompanyBillingAccount`
+- `CompanyBillingInvoice`
+- `CompanyBillingPromoCode`
+- `CompanyBillingPromoRedemption`
+- `Payment`
+- `CompanyReferral`
+- `CompanyVerificationApplication`
+- `CompanyKycRecord`
+- `CompanyKycAccessLog`
+- `PassportVerificationFile`
+- `FinanceOperation`
+- `TelegramLinkToken`
+- `CustomerLookupCode`
+- `Subscription`
+- `SubscriptionBundle`
+- `SubscriptionBundleParticipant`
+- `UserSubscriptionBundle`
+- `CompanyLocation`
 - `CompanyCategory`
+- `CompanyMediaAsset`
+- `CompanySpecialOffer`
 - `CompanyLevelRule`
+- `CompanyMember`
+- `CompanyPurchase`
 - `UserCompany`
 - `UserSubscription`
+- `SubscriptionEntitlement`
+- `SubscriptionRedemption`
+- `SubscriptionBundleRedemption`
+- `UserProfilePreference`
 - `PromoCode`
 - `PromoCodeRedemption`
 - `ReferralCampaign`
 - `ReferralInvite`
-- `LoyaltyTransaction`
 - `RefreshToken`
 - `OAuthAccount`
 - `LoginEvent`
+- `LoyaltyTransaction`
 - `EmailChangeRequest`
+- `EmailMessage`
+- `EmailVerificationCode`
 - `AuditEvent`
+- `AdminTask`
+- `LandingLead`
+- `NotificationDelivery`
+- `TelegramMessageQueue`
 
 ## UX features
 
@@ -49,6 +82,9 @@ The visual map currently includes all Prisma models:
 - `Loyalty Structure`: categories, companies, balances, levels and loyalty transactions.
 - `Growth: Promo + Referral`: promo, referral and reward ledger models.
 - `Map + Branches`: company locations, categories and map-related context.
+- `Billing + Payments`: YooKassa payments, company billing account/invoices/promos and finance operations.
+- `Company Public Media`: company slug, logo/hero/gallery assets and special offers.
+- `Operations`: admin tasks, system alerts, landing leads and notification queues.
 
 ## Maintenance rule
 

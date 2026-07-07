@@ -115,7 +115,7 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-/* TWA: Telegram-style dark theme + glassmorphism */
+/* Client app: dark theme + glassmorphism */
 .twa {
   --twa-bg: oklch(0.12 0.01 260);
   --twa-surface: oklch(0.18 0.02 260 / 0.7);
@@ -140,7 +140,7 @@
   }
 }
 
-/* Mobile-first TWA viewport (390px–430px) */
+/* Mobile-first client viewport (390px–430px) */
 .twa-viewport {
   width: 100%;
   max-width: 430px;

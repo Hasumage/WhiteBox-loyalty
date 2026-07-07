@@ -71,6 +71,96 @@ export type CompanyDashboard = {
   }>;
 };
 
+export type CompanyAiMode = "CHAT" | "WORKSPACE_EDITOR" | "LAUNCH_PLAN" | "PROMOTION_DRAFT" | "FINANCE_EXPLAINER" | "LOYALTY_ADVISOR";
+
+export type CompanyAiChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type CompanyAiProfilePatch = {
+    name: string | null;
+    slug: string | null;
+    description: string | null;
+    operatesOnline: boolean | null;
+    categoryNames: string[];
+    reason: string | null;
+};
+
+export type CompanyAiOfferDraft = {
+    title: string | null;
+    description: string | null;
+    code: string | null;
+    cashierPhrase: string | null;
+    imageAlt: string | null;
+    terms: string | null;
+    startsAt: string | null;
+    endsAt: string | null;
+};
+
+export type CompanyAiLoyaltyDraft = {
+    levels: Array<{ name: string; minimumSpend: number; cashbackPercent: number }>;
+    note: string | null;
+};
+
+export type CompanyAiLocationCandidateStatus =
+  | "READY"
+  | "CONFIRMATION_REQUIRED"
+  | "NEEDS_DETAILS"
+  | "DUPLICATE"
+  | "FAILED";
+
+export type CompanyAiLocationCandidate = {
+  input: string;
+  title: string | null;
+  address: string;
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  precision: string | null;
+  status: CompanyAiLocationCandidateStatus;
+  note: string | null;
+  mapPreviewUrl: string | null;
+  openTime: string | null;
+  closeTime: string | null;
+  workingDays: number[] | null;
+};
+
+export type CompanyAiLocationsDraft = {
+  source: "message" | "website";
+  candidates: CompanyAiLocationCandidate[];
+  reviewUrl: string | null;
+  note: string | null;
+};
+
+export type CompanyAiPendingAction = {
+  type: "UPDATE_PROFILE" | "UPDATE_LOGO" | "CREATE_OFFER" | "UPDATE_OFFER" | "UPDATE_LOYALTY" | "CREATE_LOCATIONS";
+  label: string;
+  confirmationText: string;
+  payload: {
+    profilePatch: CompanyAiProfilePatch | null;
+    offerDraft: CompanyAiOfferDraft | null;
+    loyaltyDraft: CompanyAiLoyaltyDraft | null;
+    locationDraft: CompanyAiLocationsDraft | null;
+    targetOfferId: string | null;
+  };
+};
+
+export type CompanyAiAssistResult = {
+  reply: string;
+  intent: "ANSWER" | "NEED_MORE_INFO" | "PROPOSE_ACTION" | "BLOCKED";
+  pendingAction: CompanyAiPendingAction | null;
+  blockedActions: string[];
+  warnings: string[];
+  website: null | {
+    url: string;
+    title: string | null;
+    description: string | null;
+    used: boolean;
+    error: string | null;
+  };
+};
+
 export type CompanyMediaAsset = {
   id: string;
   kind: "LOGO" | "HERO" | "GALLERY";
@@ -100,6 +190,8 @@ export type CompanySpecialOffer = {
   imageHeight: number | null;
   sortOrder: number;
   isActive: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -374,6 +466,13 @@ export function createCompanySpecialOffer(form: FormData) {
   });
 }
 
+export function updateCompanySpecialOffer(id: string, form: FormData) {
+  return nextCompanyRequest<{ offer: CompanySpecialOffer }>(`/api/company/media/offers/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: form,
+  });
+}
+
 export function deleteCompanySpecialOffer(id: string) {
   return nextCompanyRequest<{ ok: true }>(`/api/company/media/offers/${encodeURIComponent(id)}`, {
     method: "DELETE",
@@ -460,6 +559,21 @@ export async function submitCompanyVerification(formData: FormData) {
 
 export function companyDashboard() {
   return request<CompanyDashboard>("/company/dashboard");
+}
+
+export function companyAiAssist(body: {
+  mode: CompanyAiMode;
+  messages?: CompanyAiChatMessage[];
+  prompt?: string;
+  websiteUrl?: string;
+  activeOfferId?: string;
+  imageDataUrl?: string;
+  locale?: "ru" | "en";
+}) {
+  return request<CompanyAiAssistResult>("/company/ai/assist", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function companyClients(query = "") {

@@ -338,25 +338,25 @@ function CompanyBillingContent() {
               <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                 <div className="space-y-2">
                   <h2 className="flex items-center gap-2 text-xl font-semibold">
-                    <Clock3 className="h-5 w-5 text-amber-100" /> ?????? ???????????????
+                    <Clock3 className="h-5 w-5 text-amber-100" /> Платёж зарезервирован
                   </h2>
                   <p className="max-w-3xl text-muted-foreground">
-                    ???????? ????? ?? ???? ??????. ???? ?? ??? ????????, ?????? ????? ??????????? ?? 15 ????? ? ????????? ??? ??????? ??????.
+                    Продолжите оплату по этой ссылке. Если вы уже оплатили, статус может обновляться до 15 минут — проверьте его кнопкой ниже.
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    ?????: {money(activePayment.amount)} ? ??????: {activePayment.status}
-                    {activePayment.expiresAt ? ` ? ?????? ??????? ?? ${formatDate(activePayment.expiresAt)}` : ""}
+                    Сумма: {money(activePayment.amount)} · статус: {activePayment.status}
+                    {activePayment.expiresAt ? ` · оплатить можно до ${formatDate(activePayment.expiresAt)}` : ""}
                   </p>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row lg:shrink-0">
                   <Button asChild type="button">
                     <a href={activePayment.confirmationUrl} target="_blank" rel="noreferrer">
-                      <ExternalLink /> ??????? ??????
+                      <ExternalLink /> Открыть оплату
                     </a>
                   </Button>
                   <Button type="button" variant="secondary" disabled={syncingPayment || checkBlocked} onClick={checkReservedPayment}>
                     <ActionIcon loading={syncingPayment} icon={RefreshCw} />
-                    {checkBlocked ? `???????? ????? ${cooldownLeftMinutes} ???.` : "????????? ??????"}
+                    {checkBlocked ? `Проверить можно через ${cooldownLeftMinutes} мин.` : "Проверить статус"}
                   </Button>
                 </div>
               </div>

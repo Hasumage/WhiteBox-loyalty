@@ -5,7 +5,7 @@ const screens = [
   {
     href: "/season-pass",
     title: "Боевой пропуск",
-    description: "TWA-прототип сезонного loyalty pass: уровни, миссии, reward track.",
+    description: "Клиентский прототип сезонного loyalty pass: уровни, миссии, reward track.",
     icon: Crown,
   },
   {

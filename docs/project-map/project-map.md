@@ -2,12 +2,13 @@
 
 ## Current product shape
 
-NearLoy is a loyalty marketplace with four active surfaces:
+NearLoy is a loyalty and subscription platform with five active surfaces:
 
-- TWA/mobile client app for end users.
+- Client app for end users.
+- Public company cards at `/wallet/[slug]`.
 - Public landing and verified company intake.
-- Admin portal for operations, analytics, growth, database map, backups, audit, support and verification.
-- Company portal placeholder for partner-facing finance/compliance flows.
+- Company portal for partner operations, billing, media, staff, cashier and compliance.
+- Admin portal for operations, payments, tasks, system health, analytics, growth, database map, backups, audit, support and verification.
 
 The runtime is a monorepo:
 
@@ -17,10 +18,11 @@ nearloy/
   prisma/                # Prisma schema, migrations, seed
   src/app/(auth)/        # Login/register/email confirmation
   src/app/company/       # Public company registration and verification intake
-  src/app/(twa)/         # Mobile app routes
+  src/app/(twa)/         # Client mobile routes (historical folder name)
   src/app/(portal)/      # Admin/company desktop portal routes
-  src/components/        # UI, brand, TWA components
+  src/components/        # UI, brand, client components
   src/lib/api/           # Typed API clients
+  src/lib/company-media-storage.ts # Runtime media storage helper for company vitrines
   docs/                  # Architecture, CI/CD, deployment docs
   scripts/               # Railway and local developer helpers
 ```
@@ -37,7 +39,7 @@ nearloy/
 
 ## Important app routes
 
-TWA/mobile:
+Client app:
 
 - `/` dashboard with points balance, active subscriptions and loyalty cards.
 - `/onboarding` first-run tutorial with skip support.
@@ -45,7 +47,7 @@ TWA/mobile:
 - `/loyalty-cards` companies where the user has earned points.
 - `/marketplace` subscription catalog from DB.
 - `/marketplace/[id]` subscription details and activation.
-- `/wallet/[slug]` company loyalty card, levels, subscriptions and addresses.
+- `/wallet/[slug]` company loyalty card. Authenticated clients can favorite/use actions; guests see a public read-only showcase with levels, gallery, offers and NearLoy CTA.
 - `/map` Yandex map with branches, clustering, route presets, user location and filters.
 - `/history` activity + archived subscriptions.
 - `/scan` QR screen.
@@ -55,30 +57,47 @@ TWA/mobile:
 Admin:
 
 - `/admin` dashboard.
+- `/admin/tasks`, `/admin/tasks/[uuid]` operational Kanban, task detail, assignment and archive workflow.
 - `/admin/users`, `/admin/users/[uuid]`, `/admin/users/[uuid]/permissions` user operations and granular permissions.
 - `/admin/categories` category dictionary.
 - `/admin/companies` and `/admin/companies/[uuid]` company users, profile, locations and subscriptions.
 - `/admin/companies/[uuid]/clients` company client analytics.
+- `/admin/companies/[uuid]/payments` company payment ledger and recent billing payments.
+- `/admin/companies/[uuid]/security` company staff/security overview.
+- `/admin/companies/[uuid]/referral` company PR/referral attribution.
 - `/admin/company-verifications` and `/admin/company-verifications/[uuid]` verified partner intake review.
 - `/admin/leads` and `/admin/leads/[uuid]` landing lead inbox with Telegram delivery history.
 - `/admin/telegram` admin Telegram direct-message connection.
 - `/admin/support` support-only workspace.
-- `/admin/finance` finance operations and approval workflow placeholder.
+- `/admin/finance` finance operations, approval queue and payout workflow.
 - `/admin/subscriptions` KPI/SLA/forecast analytics.
+- `/admin/profile-statuses` profile status catalog and icon set.
 - `/admin/growth` promo codes and referral campaign rules.
 - `/admin/database` interactive Prisma schema visualizer.
 - `/admin/audit`, `/admin/audit/new`, `/admin/audit/backups` audit and DB backups.
-- `/admin/payments`, `/admin/compliance` placeholders for future operational modules.
+- `/admin/payments` YooKassa payment ledger with search, filters, status sync context and unfinished payment links.
+- `/admin/system-health` critical alert cockpit fed by system/task sources.
+- `/admin/company-billing-promos` company billing promo codes.
+- `/admin/compliance` future compliance module.
 - `/admin/test-screens/*` design lab screens for gamification experiments.
 
 Public:
 
 - `/landing` dark NearLoy marketing landing with Telegram-backed contact form.
 - `/company/register` multi-step company account request and verification form.
+- `/wallet/[slug]` public read-only company card for sharing outside the app.
 
 Company portal:
 
-- `/company`, `/company/payments`, `/company/compliance`.
+- `/company` dashboard with access warning when NearLoy subscription is inactive.
+- `/company/clients` cashier/customer workspace.
+- `/company/team` staff and local roles.
+- `/company/subscriptions` plans and entitlement rules.
+- `/company/club` partner subscriptions and bundles.
+- `/company/finance`, `/company/payments` finance and payout request surfaces.
+- `/company/billing` NearLoy subscription payment, promo, YooKassa and saved method controls.
+- `/company/settings`, `/company/settings/locations`, `/company/settings/media` profile, addresses, public media and offers.
+- `/company/compliance`, `/company/getting-started`.
 
 ## Key files
 
@@ -86,17 +105,25 @@ Company portal:
 - `prisma/seed.mjs` - professional demo seed data.
 - `apps/api/src/admin/admin.controller.ts` - admin API surface.
 - `apps/api/src/admin/admin.service.ts` - admin business logic.
-- `apps/api/src/registered/registered.controller.ts` - client/TWA API surface.
+- `apps/api/src/registered/registered.controller.ts` - client app API surface.
 - `apps/api/src/registered/registered.service.ts` - DB-backed mobile read models.
 - `apps/api/src/auth/auth.service.ts` - auth, sessions, account freeze/reactivation.
+- `apps/api/src/email/email.service.ts` - production-safe email delivery through Resend/SMTP fallback and message ledger.
+- `apps/api/src/payments/*` - YooKassa checkout, webhook/status sync, payment expiration and saved method encryption.
 - `apps/api/src/maintenance/*` - restore-time maintenance lock.
 - `src/middleware.ts` - web route UX redirection based on JWT role/expiry; API remains the security boundary.
+- `src/app/(portal)/admin/tasks/*` - admin operations Kanban and task detail workflow.
+- `src/app/(portal)/admin/payments/page.tsx` - provider payment ledger.
+- `src/app/(portal)/admin/system-health/page.tsx` - critical incident cockpit.
 - `src/app/(portal)/admin/database/page.tsx` - visual DB map synced with Prisma models.
 - `src/app/(portal)/admin/growth/page.tsx` - promo/referral admin UI.
 - `src/app/(portal)/admin/company-verifications/*` - company verification review and passport cleanup.
 - `src/app/(portal)/admin/leads/*` - landing lead processing and Telegram retry UI.
 - `src/app/(portal)/admin/telegram/page.tsx` - Telegram admin linking screen.
 - `src/app/(portal)/admin/companies/[uuid]/page.tsx` - company profile, addresses and subscriptions.
+- `src/app/(portal)/company/settings/media/page.tsx` - company logo, hero, gallery and special offers.
+- `src/app/(twa)/wallet/[id]/page.tsx` - client/public company card by uuid or slug.
+- `src/app/api/public/company-media/[slug]/route.ts` - public media/offers payload for company cards.
 - `src/app/(twa)/map/page.tsx` - Yandex Maps integration and location UX.
 - `src/lib/i18n/*` - portable RU/EN dictionaries, locale detection and persistence.
 - `src/lib/telegram/*` - Telegram client, webhook handlers, admin linking and delivery tests.
@@ -113,10 +140,14 @@ Company portal:
 
 ## Notes
 
-- User-facing TWA surfaces are DB-backed through `/api/registered/*`; `mockData` is legacy/static fallback only.
+- User-facing client surfaces are DB-backed through `/api/registered/*`; `mockData` is legacy/static fallback only.
 - Points are company-scoped. Promo/referral point rewards require a company context and write normal loyalty ledger rows.
 - Company addresses are stored as `CompanyLocation` with coordinates, hours and active/main flags.
 - Company verification creates a user first and then links/activates company access after admin approval.
 - Passport photos are encrypted in local private storage and removed after approve/reject cleanup.
 - Admin UI uses one global language switcher in the navigation shell; page strings are moving into structured dictionaries.
 - Subscription and company billing payments use YooKassa checkout. Successful provider payments are stored in `Payment` and activate the subscription or billing invoice after status sync/webhook confirmation.
+- Pending YooKassa payments have a 15-minute payment window. Active pending payments are reused to prevent duplicate orders; expired pending payments are finalized as unsuccessful.
+- Saved company YooKassa methods store only encrypted provider method identifiers and card metadata; NearLoy does not store card data.
+- Company media currently uses runtime/local storage. Production needs persistent volume or external object storage before heavy real-world media usage.
+- Recent merged PR context is tracked in `docs/project-map/recent-prs.md`.

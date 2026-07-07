@@ -4,16 +4,17 @@
 
 | Path | Purpose | Access |
 |---|---|---|
-| `/` | TWA dashboard | CLIENT |
+| `/` | Client dashboard | CLIENT |
 | `/login` | Login | Public |
 | `/register` | Registration | Public |
+| `/forgot-password` | Password reset by email code | Public |
 | `/email-change/confirm` | Email change confirmation | Public |
 | `/onboarding` | First-run tutorial with skip | CLIENT |
 | `/companies` | All partners | CLIENT |
 | `/loyalty-cards` | Companies where the user has points/activity | CLIENT |
 | `/marketplace` | Subscription catalog | CLIENT |
 | `/marketplace/[id]` | Subscription detail | CLIENT |
-| `/wallet/[slug]` | Company loyalty card detail | CLIENT |
+| `/wallet/[slug]` | Company loyalty card detail and public read-only showcase | CLIENT/Public |
 | `/map` | Yandex partner map | CLIENT |
 | `/history` | Activity and subscription archive | CLIENT |
 | `/scan` | User QR | CLIENT |
@@ -26,18 +27,27 @@
 | `/company/register` | Company onboarding and verification request | Public |
 | `/company` | Company operational dashboard | COMPANY member |
 | `/company/clients` | Cashier QR, points and subscription redemption workspace | COMPANY member |
+| `/company/ai` | Company AI assistant for launch, offers, finance explanations and loyalty drafts | COMPANY member |
 | `/company/subscriptions` | Plans and entitlement rules | COMPANY member |
 | `/company/club` | Entrepreneur club, partner discovery and paired subscription proposals | COMPANY member |
 | `/company/team` | Local owner/manager/cashier administration | COMPANY owner/manager |
 | `/company/payments` | Forecast and payout requests | COMPANY owner/manager |
+| `/company/billing` | NearLoy subscription payment, YooKassa status and saved payment method | COMPANY owner/manager |
 | `/company/compliance` | Partner profile and verification status | COMPANY member |
+| `/company/settings` | Company profile/settings hub | COMPANY owner/manager |
+| `/company/settings/locations` | Company addresses and map data | COMPANY owner/manager |
+| `/company/settings/media` | Public logo, hero, gallery and special offers | COMPANY owner/manager |
 | `/admin` | Live operations dashboard and priority task queue | ADMIN/MANAGER by permission |
+| `/admin/tasks` | Full operations Kanban with filters, assignment and archive | ADMIN/MANAGER by source permission |
 | `/admin/tasks/[uuid]` | Task resolution workspace and source handoff | ADMIN/MANAGER by source permission |
 | `/admin/users`, `/admin/users/[uuid]` | User operations | ADMIN |
 | `/admin/users/[uuid]/permissions` | Granular user permissions | SUPER_ADMIN |
 | `/admin/categories` | Category CRUD | ADMIN |
 | `/admin/companies`, `/admin/companies/[uuid]` | Company accounts/profile/locations/subscriptions | ADMIN |
 | `/admin/companies/[uuid]/clients` | Company client analytics | ADMIN |
+| `/admin/companies/[uuid]/payments` | Company payment history and billing ledger | ADMIN |
+| `/admin/companies/[uuid]/security` | Company staff/security overview | ADMIN |
+| `/admin/companies/[uuid]/referral` | Company PR/referral attribution | ADMIN |
 | `/admin/company-verifications`, `/admin/company-verifications/[uuid]` | Verified company intake review | ADMIN/MANAGER |
 | `/admin/leads`, `/admin/leads/[uuid]` | Landing lead inbox and Telegram delivery history | ADMIN/MANAGER |
 | `/admin/telegram` | Admin Telegram direct-message link | ADMIN |
@@ -48,6 +58,8 @@
 | `/admin/database` | Prisma schema visualizer | ADMIN |
 | `/admin/audit`, `/admin/audit/new`, `/admin/audit/backups` | Audit and backups | ADMIN |
 | `/admin/payments` | YooKassa payment ledger, statuses and provider identifiers | ADMIN |
+| `/admin/system-health` | Critical system alerts and incident source cockpit | ADMIN |
+| `/admin/company-billing-promos` | Company billing promo code management | SUPER_ADMIN/Admin finance access |
 | `/admin/compliance` | Future compliance module | ADMIN |
 
 ## Layout hierarchy
@@ -64,16 +76,19 @@
 - Locale is persisted in the `wb_locale` cookie and, for authorized users, in `UserProfilePreference.preferredLocale`.
 - New admin pages should not add local language toggles. Add keys to the relevant dictionary namespace and consume them through `useI18n`.
 
-## TWA UX state
+## Client UX state
 
 - QR element is only on `/scan`; it was removed from global/profile surfaces.
 - Bottom nav labels use `Profile` instead of old `Settings` naming where applicable.
 - Favorite categories can be selected in onboarding/settings and are capped at 10 in UI/API validation.
 - Marketplace and partner filters use compact quick chips and extended filter panels.
 - Partner filters respect multi-category companies and hide empty categories where appropriate.
-- TWA API reads use a short-lived client TTL cache for dashboard, marketplace, partners, history, map and profile data. Pages hydrate from the cached snapshot first, then refresh from API when needed, so users do not see zero balances or empty cards during navigation.
+- Client API reads use a short-lived TTL cache for dashboard, marketplace, partners, history, map and profile data. Pages hydrate from the cached snapshot first, then refresh from API when needed, so users do not see zero balances or empty cards during navigation.
 - First-load states use `TwaLoadingScreen` skeletons instead of raw empty/fallback values.
-- `TwaStaleDataNudge` appears after 10 minutes on one TWA route and gently suggests a refresh.
+- `TwaStaleDataNudge` appears after 10 minutes on one client route and gently suggests a refresh.
+- Company cards support slug sharing. Authenticated users can favorite/share/route; unauthenticated visitors see a read-only public card with levels, gallery, offers and NearLoy CTA.
+- The route button hides when a company has no active address and should handle multiple addresses as a route-selection case.
+- The big favorite CTA animates into the header heart; removing favorite does not resurrect the big CTA until reload.
 
 ## Map UX
 
@@ -101,6 +116,10 @@
 - Dashboard figures are DB-backed; its priority queue combines system alerts, company verification requests and finance approvals without duplicated cards.
 - Each task opens a focused resolution screen. Alert tasks can be closed there, while workflow tasks close from their authoritative verification or finance decision.
 - Dashboard and sidebar task counts respect granular permissions, so sensitive queues are not exposed as counters.
+- `/admin/tasks` is the primary view: a compact full-width Kanban, not a help/overview screen.
+- Task cards stay compact; detailed descriptions, reassignment and archive actions live in the modal/detail view.
+- `/admin/system-health` shows critical alerts and sources first. Telegram queue is secondary diagnostics, not the main health object.
+- Company catalog mirrors user-table visual style: filters/chips, search on Enter, hidden UUID column while UUID search still works, long names truncated safely.
 
 ## Company UX
 
@@ -108,25 +127,35 @@
 - Cashiers land on customer operations: QR open, scoped search, fixed point award, purchase cashback and entitlement redemption.
 - Owners and managers maintain plans, usage limits, staff access and payout requests.
 - Finance cards explicitly distinguish monthly forecast from funds approved for payout.
+- Billing uses the word "subscription", not "subscription fee"/"abonent fee" wording. The page explains active/past-due state, pending payment links, status checks and saved YooKassa method controls.
+- Company AI is a draft-only helper. UI keeps prompts short, shows compact JSON-backed results and reminds users that AI cannot change passwords, access, roles, payouts, payment methods or infrastructure.
+- Media settings define fixed standards: logo `512x512`, hero `960x420`, gallery `900x675`, offer image `900x506`. UI should crop/preview/delete before upload.
+- NearLoy does not store card data. Saved payment method UI must say that YooKassa stores the method and NearLoy stores only an encrypted identifier.
 
 ## Key components
 
 - `NearLoyLogo` - portal brand.
-- `BottomNav` - TWA nav.
+- `BottomNav` - client app nav.
 - `CategoryIcon` - shared category icon renderer.
 - `CategoryChipStrip` - horizontal category chips.
 - `select-field`, `category-select`, `category-multi-select` - styled form controls.
 - `FrozenAccountDialog`, `DeleteAccountDialog`, `ChangePasswordDialog` - account state UX.
+- Company card hero/public media components consume `CompanyMediaAsset` and public fallback demo assets.
+- Task modal/dialog components own long descriptions, assignment and archive actions.
 
 ## Manual smoke checklist
 
 - Register client -> onboarding appears -> skip works.
 - Login admin/company/client seed accounts.
 - Admin creates/edits company location and sees coordinates saved.
-- TWA map shows branch marker and route button.
+- Client map shows branch marker and route button.
 - Activate marketplace subscription -> dashboard active subscriptions updates.
 - Earn points for company -> `/loyalty-cards` and `/wallet/[slug]` update.
-- Create points promo -> redeem in TWA -> loyalty transaction appears.
-- Create subscription promo -> redeem in TWA -> active subscription appears.
+- Open `/wallet/[slug]` signed out -> public card shows gallery/offers/levels and no interactive app-only actions.
+- Upload company logo/hero/gallery/offer -> public card media updates and old assets can be deleted.
+- Company billing checkout -> pending payment is reused for 15 minutes and status sync activates billing after provider success.
+- Admin tasks -> create manual task, assign user, move to work/archive and verify dashboard counters.
+- Create points promo -> redeem in the client app -> loyalty transaction appears.
+- Create subscription promo -> redeem in the client app -> active subscription appears.
 - Referral code redeem rewards both sides and blocks self/duplicate redemption.
 - Create backup -> download -> restore status UI updates.

@@ -3,8 +3,8 @@ import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Loyalty Wallet | TWA",
-  description: "Multi-vendor loyalty program - your points, one place",
+  title: "NearLoy — бонусы, подписки и сервис для клиентов",
+  description: "NearLoy помогает клиентам хранить бонусы, подписки, статусы и историю операций в одном удобном интерфейсе.",
   manifest: "/site.webmanifest",
   icons: {
     icon: [

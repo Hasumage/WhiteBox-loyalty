@@ -3,17 +3,24 @@ import { request as httpsRequest } from "node:https";
 import httpsProxyAgentModule from "https-proxy-agent";
 
 const { HttpsProxyAgent } = httpsProxyAgentModule;
-const token = process.env.TELEGRAM_BOT_TOKEN;
+const botMode = process.env.TELEGRAM_LOCAL_BOT || (process.env.TELEGRAM_DEV_BOT_TOKEN ? "dev" : "prod");
+const isDevBot = botMode === "dev";
+const token = isDevBot ? process.env.TELEGRAM_DEV_BOT_TOKEN : process.env.TELEGRAM_BOT_TOKEN;
 const proxyUrl = process.env.TELEGRAM_PROXY_URL;
-const localWebhookUrl = process.env.TELEGRAM_LOCAL_WEBHOOK_URL || "http://127.0.0.1:3000/api/telegram/webhook";
-const secretToken = process.env.TELEGRAM_WEBHOOK_SECRET;
+const defaultLocalWebhookUrl = isDevBot
+  ? "http://127.0.0.1:3000/api/telegram/webhook?bot=dev"
+  : "http://127.0.0.1:3000/api/telegram/webhook";
+const localWebhookUrl = process.env.TELEGRAM_LOCAL_WEBHOOK_URL || defaultLocalWebhookUrl;
+const secretToken = isDevBot
+  ? process.env.TELEGRAM_DEV_WEBHOOK_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET
+  : process.env.TELEGRAM_WEBHOOK_SECRET;
 const once = process.argv.includes("--once");
 const fromNow = process.argv.includes("--from-now");
 const retryDelayMs = Number(process.env.TELEGRAM_LOCAL_POLL_RETRY_MS ?? 3000);
 const privateOnly = process.env.TELEGRAM_LOCAL_POLL_PRIVATE_ONLY !== "false";
 const commandsOnly = process.env.TELEGRAM_LOCAL_POLL_COMMANDS_ONLY !== "false";
 
-if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not set.");
+if (!token) throw new Error(`${isDevBot ? "TELEGRAM_DEV_BOT_TOKEN" : "TELEGRAM_BOT_TOKEN"} is not set.`);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -123,6 +130,7 @@ function shouldForwardUpdate(update) {
 }
 
 async function main() {
+  console.log(`Telegram local polling bot: ${botMode}`);
   console.log(`Telegram local polling -> ${localWebhookUrl}`);
   if (proxyUrl) console.log("Telegram proxy enabled.");
   if (privateOnly) console.log("Local safe mode: non-private chats/comments are skipped.");

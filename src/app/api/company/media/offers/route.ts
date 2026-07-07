@@ -1,5 +1,5 @@
-import { NextResponse, type NextRequest } from "next/server";
 import { CompanyMemberRole } from "@prisma/client";
+import { NextResponse, type NextRequest } from "next/server";
 import { isUserAuthResponse, requireUserSession } from "@/lib/auth/require-user-session";
 import {
   companyMediaUrl,
@@ -17,6 +17,16 @@ function isUploadLike(value: unknown): value is File {
 function numberField(form: FormData, key: string, fallback: number) {
   const value = Number(form.get(key));
   return Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
+}
+
+function dateField(form: FormData, key: string) {
+  const raw = String(form.get(key) ?? "").trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Некорректная дата: ${key}.`);
+  }
+  return date;
 }
 
 async function getCompanyMember(request: NextRequest) {
@@ -49,12 +59,16 @@ function serializeOffer(offer: {
   imageHeight: number | null;
   sortOrder: number;
   isActive: boolean;
+  startsAt: Date | null;
+  endsAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
   return {
     ...offer,
     imageUrl: companyMediaUrl(offer.imageStorageKey),
+    startsAt: offer.startsAt?.toISOString() ?? null,
+    endsAt: offer.endsAt?.toISOString() ?? null,
     createdAt: offer.createdAt.toISOString(),
     updatedAt: offer.updatedAt.toISOString(),
   };
@@ -69,7 +83,13 @@ export async function POST(request: NextRequest) {
     const title = String(form.get("title") ?? "").trim();
     const description = String(form.get("description") ?? "").trim() || null;
     const code = String(form.get("code") ?? "").trim().toUpperCase() || null;
+    const startsAt = dateField(form, "startsAt");
+    const endsAt = dateField(form, "endsAt");
     if (!title) return NextResponse.json({ message: "Укажите название акции." }, { status: 400 });
+    if (startsAt && endsAt && startsAt >= endsAt) {
+      return NextResponse.json({ message: "Дата окончания акции должна быть позже даты начала." }, { status: 400 });
+    }
+
     const upload = form.get("file");
     if (isUploadLike(upload) && upload.size > 0) {
       stored = await storeCompanyMediaFile({
@@ -88,6 +108,8 @@ export async function POST(request: NextRequest) {
         title,
         description,
         code,
+        startsAt,
+        endsAt,
         imageStorageKey: stored?.storageKey ?? null,
         imageFileName: stored?.fileName ?? null,
         imageMimeType: stored?.mimeType ?? null,

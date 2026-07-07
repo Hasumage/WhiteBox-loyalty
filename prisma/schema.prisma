@@ -17,7 +17,7 @@ enum SubscriptionStatus {
   CANCELED
 }
 
-/// Application role: TWA loyalty app users are CLIENT; company portals & admin consoles use COMPANY / admin roles.
+/// Application role: client app users are CLIENT; company portals & admin consoles use COMPANY / admin roles.
 enum UserRole {
   CLIENT
   COMPANY
@@ -277,6 +277,7 @@ enum EmailMessageTargetType {
 
 enum EmailVerificationPurpose {
   REGISTRATION
+  PASSWORD_RESET
 }
 
 enum EmailVerificationStatus {

@@ -27,8 +27,11 @@ function createConfigMock(values: Record<string, string | undefined> = {}) {
 }
 
 describe("EmailService", () => {
+  const fetchMock = jest.fn();
+
   beforeEach(() => {
     jest.clearAllMocks();
+    global.fetch = fetchMock as never;
   });
 
   it("does not mark email as sent in production when SMTP is missing", async () => {
@@ -53,10 +56,11 @@ describe("EmailService", () => {
       where: { id: 10 },
       data: {
         status: "FAILED",
-        error: "Email delivery is not configured: no SMTP transport is available.",
+        error: "Email delivery is not configured: no requested provider is available (resend, smtp).",
       },
     });
     expect(nodemailer.createTransport).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("keeps dev outbox available outside deployed environments", async () => {
@@ -74,6 +78,150 @@ describe("EmailService", () => {
     expect(prisma.emailMessage.update).toHaveBeenCalledWith({
       where: { id: 10 },
       data: { status: "SENT", sentAt: expect.any(Date) },
+    });
+  });
+
+  it("sends through Resend when the HTTP provider is configured", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: jest.fn().mockResolvedValue(JSON.stringify({ id: "resend-message-id" })),
+    });
+    const prisma = createPrismaMock();
+    const service = new EmailService(
+      prisma as never,
+      createConfigMock({
+        NODE_ENV: "production",
+        EMAIL_PROVIDER: "resend",
+        RESEND_API_KEY: "re_test_key",
+        MAIL_FROM: "NearLoy <no-reply@nearloy.ru>",
+      }),
+    );
+
+    await expect(
+      service.sendEmail({
+        toEmail: "client@example.com",
+        toName: "Client User",
+        subject: "Confirm email",
+        text: "Code: 123456",
+        html: "<p>Code: 123456</p>",
+      }),
+    ).resolves.toEqual(expect.objectContaining({ status: "SENT", provider: "resend" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.resend.com/emails",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer re_test_key",
+          "Content-Type": "application/json",
+        }),
+      }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      from: "NearLoy <no-reply@nearloy.ru>",
+      to: ['"Client User" <client@example.com>'],
+      subject: "Confirm email",
+      text: "Code: 123456",
+      html: "<p>Code: 123456</p>",
+    });
+    expect(nodemailer.createTransport).not.toHaveBeenCalled();
+  });
+
+  it("uses Russian registration email copy by default", async () => {
+    const prisma = createPrismaMock();
+    const service = new EmailService(prisma as never, createConfigMock());
+
+    await service.sendRegistrationCode({
+      toEmail: "client@example.com",
+      toName: "Максим",
+      code: "169435",
+      expiresAt: new Date(Date.now() + 15 * 60_000),
+    });
+
+    expect(prisma.emailMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        subject: "NearLoy: код подтверждения email",
+        bodyText: expect.stringContaining("Код для завершения регистрации в NearLoy: 169435"),
+        bodyHtml: expect.stringContaining("Введите этот код"),
+      }),
+    });
+  });
+
+  it("uses English registration email copy when requested", async () => {
+    const prisma = createPrismaMock();
+    const service = new EmailService(prisma as never, createConfigMock());
+
+    await service.sendRegistrationCode({
+      toEmail: "client@example.com",
+      toName: "Max",
+      code: "169435",
+      expiresAt: new Date(Date.now() + 15 * 60_000),
+      locale: "en",
+    });
+
+    expect(prisma.emailMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        subject: "NearLoy: email confirmation code",
+        bodyText: expect.stringContaining("Your NearLoy registration code: 169435"),
+        bodyHtml: expect.stringContaining("Use this code"),
+      }),
+    });
+  });
+
+  it("uses English password reset email copy when requested", async () => {
+    const prisma = createPrismaMock();
+    const service = new EmailService(prisma as never, createConfigMock());
+
+    await service.sendPasswordResetCode({
+      toEmail: "client@example.com",
+      toName: "Max",
+      code: "654321",
+      expiresAt: new Date(Date.now() + 15 * 60_000),
+      locale: "en",
+    });
+
+    expect(prisma.emailMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        subject: "NearLoy: password reset code",
+        bodyText: expect.stringContaining("Your NearLoy password reset code: 654321"),
+        bodyHtml: expect.stringContaining("Use this code"),
+      }),
+    });
+  });
+
+  it("marks email as failed when Resend rejects the request", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 422,
+      statusText: "Unprocessable Entity",
+      text: jest.fn().mockResolvedValue(JSON.stringify({ message: "Domain is not verified" })),
+    });
+    const prisma = createPrismaMock();
+    const service = new EmailService(
+      prisma as never,
+      createConfigMock({
+        NODE_ENV: "production",
+        EMAIL_PROVIDER: "resend",
+        RESEND_API_KEY: "re_test_key",
+        MAIL_FROM: "NearLoy <no-reply@nearloy.ru>",
+      }),
+    );
+
+    await expect(
+      service.sendEmail({
+        toEmail: "client@example.com",
+        subject: "Confirm email",
+        text: "Code: 123456",
+      }),
+    ).rejects.toThrow("Resend email failed");
+
+    expect(prisma.emailMessage.update).toHaveBeenCalledWith({
+      where: { id: 10 },
+      data: {
+        status: "FAILED",
+        error: "resend: Resend email failed (422): Domain is not verified",
+      },
     });
   });
 

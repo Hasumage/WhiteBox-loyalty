@@ -3,7 +3,7 @@ import { IsString, MinLength } from "class-validator";
 
 export class TelegramMiniAppLoginDto {
   @ApiProperty({
-    description: "Raw Telegram Mini App initData string from window.Telegram.WebApp.initData",
+    description: "Raw linked client-session initData string",
   })
   @IsString()
   @MinLength(1)

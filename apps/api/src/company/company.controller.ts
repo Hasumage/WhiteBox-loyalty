@@ -8,7 +8,9 @@ import { CreateCompanySubscriptionDto } from "../admin/dto/create-company-subscr
 import { UpsertCompanyLocationDto } from "../admin/dto/upsert-company-location.dto";
 import { assertSubscriptionsEnabled } from "../common/subscriptions-feature";
 import { PaymentsService } from "../payments/payments.service";
+import { CompanyAiService } from "./company-ai.service";
 import { CompanyService } from "./company.service";
+import { CompanyAiAssistDto } from "./dto/company-ai.dto";
 import {
   AwardCompanyPointsDto,
   ApplyCompanyBillingPromoDto,
@@ -37,6 +39,7 @@ export class CompanyController {
   constructor(
     private readonly companyService: CompanyService,
     private readonly paymentsService: PaymentsService,
+    private readonly companyAiService: CompanyAiService,
   ) {}
 
   @Get("profile")
@@ -81,6 +84,12 @@ export class CompanyController {
   @Get("dashboard")
   dashboard(@CurrentUser() user: RequestUser) {
     return this.companyService.dashboard(user.userId);
+  }
+
+  @Post("ai/assist")
+  @ApiOperation({ summary: "Generate safe AI drafts for the company workspace" })
+  assistWithAi(@CurrentUser() user: RequestUser, @Body() dto: CompanyAiAssistDto) {
+    return this.companyAiService.assist(user.userId, dto);
   }
 
   @Get("clients")

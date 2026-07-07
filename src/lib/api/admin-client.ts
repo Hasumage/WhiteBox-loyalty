@@ -1,4 +1,4 @@
-﻿import { getAccessToken } from "./auth-client";
+import { getAccessToken } from "./auth-client";
 
 export type AdminRole = "CLIENT" | "COMPANY" | "ADMIN" | "SUPER_ADMIN" | "MANAGER" | "SUPPORT";
 
