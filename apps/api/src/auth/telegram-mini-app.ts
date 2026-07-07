@@ -26,13 +26,13 @@ export function verifyTelegramMiniAppInitData(
   options: { maxAgeSeconds?: number; now?: Date } = {},
 ): VerifiedTelegramMiniAppData {
   if (!botToken) {
-    throw new UnauthorizedException("Telegram Mini App auth is not configured.");
+    throw new UnauthorizedException("Linked client sign-in is not configured.");
   }
 
   const params = new URLSearchParams(initData);
   const hash = params.get("hash");
   if (!hash) {
-    throw new UnauthorizedException("Telegram Mini App auth hash is missing.");
+    throw new UnauthorizedException("Linked client sign-in hash is missing.");
   }
 
   const pairs = [...params.entries()]
@@ -41,43 +41,43 @@ export function verifyTelegramMiniAppInitData(
     .map(([key, value]) => `${key}=${value}`);
 
   if (pairs.length === 0) {
-    throw new BadRequestException("Telegram Mini App initData is empty.");
+    throw new BadRequestException("Linked client sign-in data is empty.");
   }
 
   const dataCheckString = pairs.join("\n");
   const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
   const expectedHash = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
   if (!safeCompareHex(hash, expectedHash)) {
-    throw new UnauthorizedException("Telegram Mini App auth signature is invalid.");
+    throw new UnauthorizedException("Linked client sign-in signature is invalid.");
   }
 
   const authDateRaw = params.get("auth_date");
   const authDateSeconds = Number(authDateRaw);
   if (!Number.isFinite(authDateSeconds) || authDateSeconds <= 0) {
-    throw new UnauthorizedException("Telegram Mini App auth date is invalid.");
+    throw new UnauthorizedException("Linked client sign-in date is invalid.");
   }
 
   const nowMs = (options.now ?? new Date()).getTime();
   const authDateMs = authDateSeconds * 1000;
   const maxAgeMs = (options.maxAgeSeconds ?? 24 * 60 * 60) * 1000;
   if (authDateMs > nowMs + 5 * 60 * 1000 || nowMs - authDateMs > maxAgeMs) {
-    throw new UnauthorizedException("Telegram Mini App auth data is expired.");
+    throw new UnauthorizedException("Linked client sign-in data is expired.");
   }
 
   const userRaw = params.get("user");
   if (!userRaw) {
-    throw new UnauthorizedException("Telegram Mini App user payload is missing.");
+    throw new UnauthorizedException("Linked client user payload is missing.");
   }
 
   let user: TelegramMiniAppUser;
   try {
     user = JSON.parse(userRaw) as TelegramMiniAppUser;
   } catch {
-    throw new BadRequestException("Telegram Mini App user payload is invalid.");
+    throw new BadRequestException("Linked client user payload is invalid.");
   }
 
   if (user.id === undefined || user.id === null || `${user.id}`.trim() === "") {
-    throw new UnauthorizedException("Telegram Mini App user id is missing.");
+    throw new UnauthorizedException("Linked client user id is missing.");
   }
 
   return {

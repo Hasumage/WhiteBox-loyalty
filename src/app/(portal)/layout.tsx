@@ -32,6 +32,7 @@ import {
   Send,
   ServerCrash,
   Shield,
+  Sparkles,
   Tag,
   Users,
 } from "lucide-react";
@@ -107,6 +108,7 @@ const adminMenu: AdminMenuSection[] = [
 const companyMenuBase: NavItem[] = [
   { href: "/company", label: "Дашборд", icon: LayoutDashboard },
   { href: "/company/clients", label: "Касса и клиенты", icon: QrCode },
+  { href: "/company/ai", label: "AI помощник", icon: Sparkles },
   { href: "/company/subscriptions", label: "Подписки", icon: Gift },
   { href: "/company/club", label: "Клуб партнёров", icon: Handshake },
   { href: "/company/loyalty", label: "Уровни и баллы", icon: Trophy },

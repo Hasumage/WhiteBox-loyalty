@@ -33,12 +33,16 @@ function redactProxyUrl(proxyUrl) {
 async function main() {
   loadEnvFile(resolve(process.cwd(), ".env"));
 
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const botMode = process.env.TELEGRAM_LOCAL_BOT || (process.env.TELEGRAM_DEV_BOT_TOKEN ? "dev" : "prod");
+  const isDevBot = botMode === "dev";
+  const token = isDevBot ? process.env.TELEGRAM_DEV_BOT_TOKEN : process.env.TELEGRAM_BOT_TOKEN;
   const proxyUrl = process.env.TELEGRAM_PROXY_URL;
 
   if (!token) {
-    throw new Error("TELEGRAM_BOT_TOKEN is not set.");
+    throw new Error(`${isDevBot ? "TELEGRAM_DEV_BOT_TOKEN" : "TELEGRAM_BOT_TOKEN"} is not set.`);
   }
+
+  console.log(`Telegram Bot API ping bot: ${botMode}`);
 
   if (proxyUrl) {
     console.log(`Telegram proxy enabled: ${redactProxyUrl(proxyUrl)}`);

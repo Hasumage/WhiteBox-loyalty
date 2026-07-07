@@ -8,7 +8,35 @@ import { Input } from "@/components/ui/input";
 import { companyProfile, updateCompanyLoyaltySettings } from "@/lib/api/company-client";
 
 type SubscriptionSpendPolicy = "EXCLUDE" | "INCLUDE_NO_BONUS" | "INCLUDE_WITH_BONUS";
-type LevelRule = { levelName: string; minTotalSpend: string; cashbackPercent: string };
+type LevelRule = { rowId: string; levelName: string; minTotalSpend: string; cashbackPercent: string };
+
+const MAX_LEVEL_MIN_TOTAL_SPEND = 10_000_000;
+const MAX_LEVEL_CASHBACK_PERCENT = 100;
+
+let levelRuleDraftCounter = 0;
+
+function createLevelRule(level: Omit<LevelRule, "rowId">): LevelRule {
+  levelRuleDraftCounter += 1;
+  return { rowId: `level-rule-${levelRuleDraftCounter}`, ...level };
+}
+
+function limitNumberInput(value: string, max: number): string {
+  if (value === "") {
+    return "";
+  }
+  const normalized = value.replace(",", ".");
+  const numericValue = Number(normalized);
+  if (!Number.isFinite(numericValue)) {
+    return "";
+  }
+  if (numericValue < 0) {
+    return "0";
+  }
+  if (numericValue > max) {
+    return String(max);
+  }
+  return normalized;
+}
 
 const policyOptions: Array<{ value: SubscriptionSpendPolicy; title: string; detail: string }> = [
   { value: "EXCLUDE", title: "Не учитывать подписки", detail: "Подписки не влияют на уровень клиента и не начисляют баллы." },
@@ -28,7 +56,7 @@ export default function CompanyLoyaltyPage() {
       const profile = await companyProfile();
       setCanManage(profile.member.role !== "CASHIER");
       setPolicy(profile.company.subscriptionSpendPolicy);
-      setLevels(profile.company.levels.map((level) => ({
+      setLevels(profile.company.levels.map((level) => createLevelRule({
         levelName: level.name,
         minTotalSpend: String(level.minimumSpend),
         cashbackPercent: String(level.cashbackPercent),
@@ -55,8 +83,17 @@ export default function CompanyLoyaltyPage() {
       setError("Добавьте хотя бы один уровень лояльности.");
       return;
     }
-    if (normalized.some((level) => !Number.isFinite(level.minTotalSpend) || level.minTotalSpend < 0 || !Number.isFinite(level.cashbackPercent) || level.cashbackPercent < 0 || level.cashbackPercent > 100)) {
-      setError("Порог должен быть положительным, а начисление баллов - от 0 до 100% стоимости покупки.");
+    if (
+      normalized.some((level) =>
+        !Number.isFinite(level.minTotalSpend) ||
+        level.minTotalSpend < 0 ||
+        level.minTotalSpend > MAX_LEVEL_MIN_TOTAL_SPEND ||
+        !Number.isFinite(level.cashbackPercent) ||
+        level.cashbackPercent < 0 ||
+        level.cashbackPercent > MAX_LEVEL_CASHBACK_PERCENT
+      )
+    ) {
+      setError(`Порог должен быть от 0 до ${MAX_LEVEL_MIN_TOTAL_SPEND.toLocaleString("ru-RU")} ₽, а начисление баллов — от 0 до ${MAX_LEVEL_CASHBACK_PERCENT}%.`);
       return;
     }
     if (normalized.some((level, index) => index > 0 && level.cashbackPercent < normalized[index - 1].cashbackPercent)) {
@@ -112,24 +149,24 @@ export default function CompanyLoyaltyPage() {
             <p className="mt-1 text-sm text-muted-foreground">Чем выше уровень клиента, тем больше его сумма покупок и не меньше процент начисляемых баллов.</p>
           </div>
           <div className="overflow-hidden rounded-2xl border border-white/10">
-            <div className="hidden grid-cols-[1fr_190px_180px_52px] gap-3 border-b border-white/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:grid">
+            <div className="hidden grid-cols-[minmax(220px,1fr)_240px_240px_44px] gap-3 border-b border-white/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:grid">
               <span>Название уровня</span><span>Покупки от, ₽</span><span>Начислять баллов, %</span><span />
             </div>
             <div className="space-y-3 p-3">
               {levels.map((level, index) => (
-                <div key={`${index}-${level.levelName}`} className="grid gap-2 rounded-xl bg-white/[0.02] p-2 sm:grid-cols-[1fr_190px_180px_52px] sm:items-center">
-                  <Input disabled={!canManage} value={level.levelName} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, levelName: event.target.value } : row))} placeholder="Например, Серебро" className="h-11 rounded-xl" />
-                  <Input disabled={!canManage} type="number" min={0} value={level.minTotalSpend} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, minTotalSpend: event.target.value } : row))} className="h-11 rounded-xl" />
-                  <div className="space-y-1">
-                    <Input disabled={!canManage} type="number" min={0} max={100} value={level.cashbackPercent} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, cashbackPercent: event.target.value } : row))} className="h-11 rounded-xl" />
-                    {canManage && <div className="flex gap-1">{[1, 5, 10].map((value) => <button key={value} type="button" onClick={() => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, cashbackPercent: String(value) } : row))} className="rounded-md border border-white/10 px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">{value}%</button>)}</div>}
+                <div key={level.rowId} className="grid gap-3 rounded-xl bg-white/[0.02] p-3 sm:grid-cols-[minmax(220px,1fr)_240px_240px_44px] sm:items-start">
+                  <Input disabled={!canManage} value={level.levelName} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, levelName: event.target.value } : row))} placeholder="Например, Серебро" className="h-11 w-full rounded-xl" />
+                  <Input disabled={!canManage} type="number" min={0} max={MAX_LEVEL_MIN_TOTAL_SPEND} step={1} value={level.minTotalSpend} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, minTotalSpend: limitNumberInput(event.target.value, MAX_LEVEL_MIN_TOTAL_SPEND) } : row))} className="h-11 w-full rounded-xl" />
+                  <div className="space-y-2">
+                    <Input disabled={!canManage} type="number" min={0} max={MAX_LEVEL_CASHBACK_PERCENT} step={0.1} value={level.cashbackPercent} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, cashbackPercent: limitNumberInput(event.target.value, MAX_LEVEL_CASHBACK_PERCENT) } : row))} className="h-11 w-full rounded-xl" />
+                    {canManage && <div className="grid grid-cols-3 gap-1">{[1, 5, 10].map((value) => <button key={value} type="button" onClick={() => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, cashbackPercent: String(value) } : row))} className="rounded-lg border border-white/10 px-2 py-1 text-center text-[11px] leading-none text-muted-foreground transition hover:border-cyan-200/30 hover:text-foreground">{value}%</button>)}</div>}
                   </div>
-                  {canManage && <Button type="button" size="icon" variant="ghost" onClick={() => setLevels((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} className="text-red-200 hover:bg-red-300/10 hover:text-red-100"><Trash2 className="h-4 w-4" /></Button>}
+                  {canManage && <Button type="button" size="icon" variant="ghost" onClick={() => setLevels((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} className="mt-1 self-start text-red-200 hover:bg-red-300/10 hover:text-red-100"><Trash2 className="h-4 w-4" /></Button>}
                 </div>
               ))}
             </div>
           </div>
-          {canManage && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setLevels((rows) => [...rows, { levelName: `Уровень ${rows.length + 1}`, minTotalSpend: "0", cashbackPercent: "0" }])}><Plus /> Добавить уровень</Button><Button onClick={() => void save()}><Percent /> Сохранить уровни</Button></div>}
+          {canManage && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setLevels((rows) => [...rows, createLevelRule({ levelName: `Уровень ${rows.length + 1}`, minTotalSpend: "0", cashbackPercent: "0" })])}><Plus /> Добавить уровень</Button><Button onClick={() => void save()}><Percent /> Сохранить уровни</Button></div>}
         </CardContent>
       </Card>
     </div>

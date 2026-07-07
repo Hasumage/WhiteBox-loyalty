@@ -33,44 +33,72 @@ type TelegramMessage = {
 
 type TelegramUpdate = { update_id?: number; callback_query?: TelegramCallbackQuery; message?: TelegramMessage };
 
-const PHONE_KEYBOARD = {
-  keyboard: [
-    [{ text: "Поделиться телефоном", request_contact: true }],
-    [{ text: "Открыть NearLoy", web_app: { url: nearloyWebAppUrl() } }],
-  ],
-  resize_keyboard: true,
-  one_time_keyboard: true,
+type TelegramBotRuntime = {
+  token: string | undefined;
+  source: "telegram-webhook" | "telegram-webhook-dev";
+  webAppBase: string | undefined;
 };
 
-function nearloyWebAppUrl(path = "") {
-  const base = process.env.TELEGRAM_WEB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://nearloy.up.railway.app/";
-  if (!path) return base;
+function nearloyWebAppUrl(base: string | undefined, path = "/app") {
+  const configured = base || process.env.TELEGRAM_WEB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://nearloy.up.railway.app/";
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   try {
-    return new URL(path.replace(/^\//, ""), base.endsWith("/") ? base : `${base}/`).toString();
+    const url = new URL(configured);
+    return new URL(normalizedPath, url.origin).toString();
   } catch {
-    return `${base.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+    return `${configured.replace(/\/$/, "")}${normalizedPath}`;
   }
 }
 
-function nearloyInlineKeyboard() {
+function phoneKeyboard(telegram: TelegramBotRuntime) {
   return {
-    inline_keyboard: [[{ text: "Открыть NearLoy", web_app: { url: nearloyWebAppUrl() } }]],
+    keyboard: [
+      [{ text: "Поделиться телефоном", request_contact: true }],
+      [{ text: "Открыть NearLoy", web_app: { url: nearloyWebAppUrl(telegram.webAppBase) } }],
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: true,
   };
 }
 
-function nearloyStartKeyboard() {
+function nearloyInlineKeyboard(telegram: TelegramBotRuntime) {
+  return {
+    inline_keyboard: [[{ text: "Открыть NearLoy", web_app: { url: nearloyWebAppUrl(telegram.webAppBase) } }]],
+  };
+}
+
+function nearloyStartKeyboard(telegram: TelegramBotRuntime) {
   return {
     inline_keyboard: [
-      [{ text: "Открыть NearLoy", web_app: { url: nearloyWebAppUrl() } }],
-      [{ text: "Помощь", web_app: { url: nearloyWebAppUrl("/help") } }],
+      [{ text: "Открыть NearLoy", web_app: { url: nearloyWebAppUrl(telegram.webAppBase) } }],
+      [{ text: "Помощь", web_app: { url: nearloyWebAppUrl(telegram.webAppBase, "/help") } }],
     ],
   };
 }
 
 function isSecretValid(request: NextRequest) {
-  const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const isDevBot = request.nextUrl.searchParams.get("bot") === "dev";
+  const expected = isDevBot
+    ? process.env.TELEGRAM_DEV_WEBHOOK_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET
+    : process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!expected) return true;
   return request.headers.get("x-telegram-bot-api-secret-token") === expected;
+}
+
+function resolveTelegramRuntime(request: NextRequest): TelegramBotRuntime {
+  if (request.nextUrl.searchParams.get("bot") === "dev") {
+    return {
+      token: process.env.TELEGRAM_DEV_BOT_TOKEN,
+      source: "telegram-webhook-dev",
+      webAppBase: process.env.TELEGRAM_DEV_WEB_APP_URL || process.env.TELEGRAM_WEB_APP_URL,
+    };
+  }
+
+  return {
+    token: process.env.TELEGRAM_BOT_TOKEN,
+    source: "telegram-webhook",
+    webAppBase: process.env.TELEGRAM_WEB_APP_URL,
+  };
 }
 
 function normalizeTelegramPhone(value: string | undefined) {
@@ -84,14 +112,14 @@ function isPhoneFieldUnavailable(error: unknown) {
   return message.includes("phoneNumber") || message.includes("phoneVerifiedAt");
 }
 
-async function answer(callbackQueryId: string | undefined, text: string, showAlert = false) {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+async function answer(telegram: TelegramBotRuntime, callbackQueryId: string | undefined, text: string, showAlert = false) {
+  const botToken = telegram.token;
   if (!botToken || !callbackQueryId) return;
   await answerTelegramCallbackQuery({ botToken, callbackQueryId, text, showAlert, proxyUrl: process.env.TELEGRAM_PROXY_URL });
 }
 
-async function reply(chatId: string | number | undefined, text: string, replyMarkup?: unknown) {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+async function reply(telegram: TelegramBotRuntime, chatId: string | number | undefined, text: string, replyMarkup?: unknown) {
+  const botToken = telegram.token;
   if (!botToken || chatId === undefined) return;
   await sendTelegramMessageQueued({
     botToken,
@@ -99,16 +127,16 @@ async function reply(chatId: string | number | undefined, text: string, replyMar
     text,
     replyMarkup,
     proxyUrl: process.env.TELEGRAM_PROXY_URL,
-    source: "telegram-webhook",
+    source: telegram.source,
     sourceId: String(chatId),
     priority: 10,
     throwOnFailure: false,
   });
 }
 
-async function safeReply(chatId: string | number | undefined, text: string, replyMarkup?: unknown) {
+async function safeReply(telegram: TelegramBotRuntime, chatId: string | number | undefined, text: string, replyMarkup?: unknown) {
   try {
-    await reply(chatId, text, replyMarkup);
+    await reply(telegram, chatId, text, replyMarkup);
   } catch {
     // Telegram errors are persisted by the queue and should not expose internals in webhook responses.
   }
@@ -162,26 +190,28 @@ async function updateUserTelegramPhone(userId: number, phoneNumber: string) {
   }
 }
 
-async function replyTelegramAlreadyConnected(chatId: string | number | undefined) {
+async function replyTelegramAlreadyConnected(telegram: TelegramBotRuntime, chatId: string | number | undefined) {
   await reply(
+    telegram,
     chatId,
     "Telegram уже подключён к аккаунту NearLoy. Если телефон ещё не привязан, нажмите кнопку «Поделиться телефоном».",
-    PHONE_KEYBOARD,
+    phoneKeyboard(telegram),
   );
 }
 
-async function replyTelegramWelcome(chatId: string | number | undefined) {
+async function replyTelegramWelcome(telegram: TelegramBotRuntime, chatId: string | number | undefined) {
   await reply(
+    telegram,
     chatId,
     [
       "Добро пожаловать в NearLoy.",
       "",
       "NearLoy — приложение для подписок, QR-карт, бонусов и партнёрских программ.",
-      "Здесь можно копить баллы, управлять подписками, находить компании рядом и открывать Mini App прямо из Telegram.",
+      "Здесь можно копить баллы, управлять подписками, находить компании рядом и быстро открывать NearLoy.",
       "",
       "Если аккаунт уже привязан к Telegram, NearLoy откроется без ввода пароля.",
     ].join("\n"),
-    nearloyStartKeyboard(),
+    nearloyStartKeyboard(telegram),
   );
 }
 
@@ -192,57 +222,57 @@ async function findUserByTelegramId(telegramId: bigint) {
   });
 }
 
-async function handleTelegramContact(message: TelegramMessage) {
+async function handleTelegramContact(telegram: TelegramBotRuntime, message: TelegramMessage) {
   if (!message.contact) return { skipped: "not_contact" };
   if (!message.from?.id) return { ok: false, message: "missing_sender" };
 
   if (message.chat?.type && message.chat.type !== "private") {
-    await reply(message.chat?.id, "Телефон можно привязать только в личном чате с ботом NearLoy.");
+    await reply(telegram, message.chat?.id, "Телефон можно привязать только в личном чате с ботом NearLoy.");
     return { ok: false, message: "private_chat_required" };
   }
 
   if (message.contact.user_id !== message.from.id) {
-    await reply(message.chat?.id, "Отправьте именно свой контакт через кнопку «Поделиться телефоном». Чужие контакты не привязываются.");
+    await reply(telegram, message.chat?.id, "Отправьте именно свой контакт через кнопку «Поделиться телефоном». Чужие контакты не привязываются.");
     return { ok: false, message: "contact_owner_mismatch" };
   }
 
   const phoneNumber = normalizeTelegramPhone(message.contact.phone_number);
   if (!phoneNumber) {
-    await reply(message.chat?.id, "Telegram не передал номер телефона. Попробуйте нажать кнопку «Поделиться телефоном» ещё раз.");
+    await reply(telegram, message.chat?.id, "Telegram не передал номер телефона. Попробуйте нажать кнопку «Поделиться телефоном» ещё раз.");
     return { ok: false, message: "missing_phone" };
   }
 
   const telegramId = BigInt(message.from.id);
   const user = await findUserByTelegramId(telegramId);
   if (!user) {
-    await reply(message.chat?.id, "Сначала подключите Telegram к аккаунту NearLoy, а потом отправьте телефон.", nearloyInlineKeyboard());
+    await reply(telegram, message.chat?.id, "Сначала подключите Telegram к аккаунту NearLoy, а потом отправьте телефон.", nearloyInlineKeyboard(telegram));
     return { ok: false, message: "telegram_not_linked" };
   }
   if (user.accountStatus !== "ACTIVE") {
-    await reply(message.chat?.id, "Этот аккаунт NearLoy сейчас не активен. Привязка телефона недоступна.");
+    await reply(telegram, message.chat?.id, "Этот аккаунт NearLoy сейчас не активен. Привязка телефона недоступна.");
     return { ok: false, message: "account_not_active" };
   }
 
   const linkedToAnotherUser = await findUserLinkedToPhone(phoneNumber, user.id);
   if (linkedToAnotherUser) {
-    await reply(message.chat?.id, "Этот телефон уже привязан к другому аккаунту NearLoy.");
+    await reply(telegram, message.chat?.id, "Этот телефон уже привязан к другому аккаунту NearLoy.");
     return { ok: false, message: "phone_already_linked" };
   }
 
   await updateUserTelegramPhone(user.id, phoneNumber);
-  await reply(message.chat?.id, "Телефон подтверждён и привязан к аккаунту NearLoy.", { remove_keyboard: true });
-  await reply(message.chat?.id, "Можно открыть NearLoy и продолжить работу.", nearloyInlineKeyboard());
+  await reply(telegram, message.chat?.id, "Телефон подтверждён и привязан к аккаунту NearLoy.", { remove_keyboard: true });
+    await reply(telegram, message.chat?.id, "Можно открыть NearLoy и продолжить работу.", nearloyInlineKeyboard(telegram));
   return { ok: true, phoneLinked: true };
 }
 
-async function handleTelegramLink(message: TelegramMessage) {
+async function handleTelegramLink(telegram: TelegramBotRuntime, message: TelegramMessage) {
   if (!message.from?.id) return { skipped: "not_link_start" };
 
   const match = message.text?.trim().match(/^\/start(?:\s+link_([a-zA-Z0-9_-]+))?$/);
   if (!match) return { skipped: "not_link_start" };
 
   if (message.chat?.type && message.chat.type !== "private") {
-    await reply(message.chat?.id, "Откройте ссылку подключения в личном чате с ботом NearLoy.");
+    await reply(telegram, message.chat?.id, "Откройте ссылку подключения в личном чате с ботом NearLoy.");
     return { ok: false, message: "private_chat_required" };
   }
 
@@ -250,7 +280,7 @@ async function handleTelegramLink(message: TelegramMessage) {
   if (!match[1]) {
     const linkedUser = await findUserByTelegramId(telegramId);
     if (linkedUser) {
-      await replyTelegramWelcome(message.chat?.id);
+      await replyTelegramWelcome(telegram, message.chat?.id);
       return { ok: true, welcome: true, alreadyLinked: true, linkedUserId: linkedUser.id };
     }
   }
@@ -260,22 +290,22 @@ async function handleTelegramLink(message: TelegramMessage) {
     : await findFallbackStartToken();
 
   if (!token && !match[1]) {
-    await replyTelegramWelcome(message.chat?.id);
+    await replyTelegramWelcome(telegram, message.chat?.id);
     return { ok: true, welcome: true };
   }
 
   if (!token) {
-    await reply(message.chat?.id, "Ссылка NearLoy устарела. Создайте новую ссылку в приложении.", nearloyInlineKeyboard());
+    await reply(telegram, message.chat?.id, "Ссылка NearLoy устарела. Создайте новую ссылку в приложении.", nearloyInlineKeyboard(telegram));
     return { ok: false, message: "expired" };
   }
 
   if (token.usedAt || token.expiresAt <= new Date()) {
     const linkedUser = await findUserByTelegramId(telegramId);
     if (linkedUser?.id === token.userId) {
-      await replyTelegramAlreadyConnected(message.chat?.id);
+      await replyTelegramAlreadyConnected(telegram, message.chat?.id);
       return { ok: true, alreadyLinked: true, linkedUserId: token.userId };
     }
-    await reply(message.chat?.id, "Ссылка NearLoy устарела. Создайте новую ссылку в приложении.", nearloyInlineKeyboard());
+    await reply(telegram, message.chat?.id, "Ссылка NearLoy устарела. Создайте новую ссылку в приложении.", nearloyInlineKeyboard(telegram));
     return { ok: false, message: "expired" };
   }
 
@@ -284,12 +314,12 @@ async function handleTelegramLink(message: TelegramMessage) {
     select: { id: true },
   });
   if (linkedToAnotherUser) {
-    await reply(message.chat?.id, "Этот Telegram уже привязан к другому аккаунту NearLoy. Один Telegram можно подключить только к одному аккаунту.");
+    await reply(telegram, message.chat?.id, "Этот Telegram уже привязан к другому аккаунту NearLoy. Один Telegram можно подключить только к одному аккаунту.");
     return { ok: false, message: "telegram_already_linked" };
   }
 
   if ("accountStatus" in token.user && token.user.accountStatus !== "ACTIVE") {
-    await reply(message.chat?.id, "Этот аккаунт NearLoy сейчас не активен. Подключение Telegram недоступно.");
+    await reply(telegram, message.chat?.id, "Этот аккаунт NearLoy сейчас не активен. Подключение Telegram недоступно.");
     return { ok: false, message: "account_not_active" };
   }
 
@@ -300,16 +330,17 @@ async function handleTelegramLink(message: TelegramMessage) {
     ]);
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") {
-      await reply(message.chat?.id, "Этот Telegram уже привязан к другому аккаунту NearLoy. Один Telegram можно подключить только к одному аккаунту.");
+      await reply(telegram, message.chat?.id, "Этот Telegram уже привязан к другому аккаунту NearLoy. Один Telegram можно подключить только к одному аккаунту.");
       return { ok: false, message: "telegram_already_linked" };
     }
     throw error;
   }
 
   await reply(
+    telegram,
     message.chat?.id,
     "Готово: Telegram успешно привязан к аккаунту NearLoy. Теперь нажмите кнопку «Поделиться телефоном», чтобы подтвердить номер.",
-    PHONE_KEYBOARD,
+    phoneKeyboard(telegram),
   );
   return { ok: true, linkedUserId: token.userId };
 }
@@ -317,15 +348,21 @@ async function handleTelegramLink(message: TelegramMessage) {
 export async function POST(request: NextRequest) {
   if (!isSecretValid(request)) return NextResponse.json({ ok: false, message: "Invalid Telegram secret" }, { status: 401 });
 
+  const telegram = resolveTelegramRuntime(request);
+  if (!telegram.token) {
+    return NextResponse.json({ ok: false, message: "Telegram bot token is not configured" }, { status: 503 });
+  }
+
   const update = (await request.json().catch(() => ({}))) as TelegramUpdate;
 
   if (update.message) {
     try {
-      const contactResult = await handleTelegramContact(update.message);
+      const contactResult = await handleTelegramContact(telegram, update.message);
       if (!("skipped" in contactResult)) return NextResponse.json(contactResult);
-      return NextResponse.json(await handleTelegramLink(update.message));
+      return NextResponse.json(await handleTelegramLink(telegram, update.message));
     } catch {
       await safeReply(
+        telegram,
         update.message.chat?.id,
         "Не удалось обработать привязку Telegram. Создайте новую ссылку в NearLoy и попробуйте ещё раз.",
       );
@@ -338,13 +375,13 @@ export async function POST(request: NextRequest) {
 
   const parsed = parseLeadCallbackData(callback.data);
   if (!parsed) {
-    await answer(callback.id, "Неизвестное действие NearLoy", true);
+    await answer(telegram, callback.id, "Неизвестное действие NearLoy", true);
     return NextResponse.json({ ok: true, skipped: "unknown_callback" });
   }
 
   const leadUuid = parsed.leadUuid || extractLeadUuidFromText(callback.message?.text) || extractLeadUuidFromText(callback.message?.caption);
   if (!leadUuid) {
-    await answer(callback.id, "ID заявки не найден. Откройте админку.", true);
+    await answer(telegram, callback.id, "ID заявки не найден. Откройте админку.", true);
     return NextResponse.json({ ok: false, message: "Lead uuid not found" }, { status: 400 });
   }
 
@@ -356,10 +393,10 @@ export async function POST(request: NextRequest) {
       status,
       notes: `Быстрое действие из Telegram: ${labelFromLeadAction(parsed.action)}. Исполнитель: ${actor}`,
     });
-    await answer(callback.id, `Заявка отмечена как ${labelFromLeadAction(parsed.action)}.`);
+    await answer(telegram, callback.id, `Заявка отмечена как ${labelFromLeadAction(parsed.action)}.`);
     return NextResponse.json({ ok: true, leadUuid, status });
   } catch (error) {
-    await answer(callback.id, "Не удалось обновить заявку. Проверьте админку.", true);
+    await answer(telegram, callback.id, "Не удалось обновить заявку. Проверьте админку.", true);
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Failed to update lead" }, { status: 500 });
   }
 }

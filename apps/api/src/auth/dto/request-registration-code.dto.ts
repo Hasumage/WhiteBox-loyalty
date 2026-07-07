@@ -1,6 +1,6 @@
 ﻿import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { UserRole } from "@prisma/client";
-import { IsEmail, IsEnum, IsOptional, IsString, Length, MinLength } from "class-validator";
+import { IsEmail, IsEnum, IsIn, IsOptional, IsString, Length, MinLength } from "class-validator";
 
 export class RequestRegistrationCodeDto {
   @ApiProperty({ example: "Max Pastukhov" })
@@ -26,4 +26,9 @@ export class RequestRegistrationCodeDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  @ApiPropertyOptional({ enum: ["ru", "en"], default: "ru" })
+  @IsOptional()
+  @IsIn(["ru", "en"])
+  locale?: "ru" | "en";
 }

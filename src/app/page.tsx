@@ -26,7 +26,7 @@ const userHighlights: IconItem[] = [
 ];
 
 const steps = [
-  { icon: WalletCards, title: "Откройте NearLoy", text: "Войдите в приложение или Telegram Mini App и получите доступ к своему кошельку." },
+  { icon: WalletCards, title: "Откройте NearLoy", text: "Войдите в NearLoy и получите доступ к своему кошельку." },
   { icon: MapPin, title: "Найдите партнёра", text: "Карта и категории помогают выбрать компанию рядом или онлайн-сервис." },
   { icon: QrCode, title: "Покажите QR", text: "Кассир быстро найдёт профиль, начислит баллы или погасит услугу подписки." },
   { icon: BadgeCheck, title: "Следите за выгодой", text: "История, статусы и подписки остаются прозрачными и доступны в любой момент." },
@@ -230,7 +230,7 @@ export default function HomePage() {
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">Контакт</p>
             <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Хотите попробовать NearLoy?</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
-              Напишите, какой сценарий интересен: бонусы, подписки, карта партнёров, Telegram Mini App или пилот с конкретной компанией.
+              Напишите, какой сценарий интересен: бонусы, подписки, карта партнёров, клиентское приложение или пилот с конкретной компанией.
             </p>
           </div>
           <LandingLeadForm source="user_landing" title="Запросить демонстрацию" />

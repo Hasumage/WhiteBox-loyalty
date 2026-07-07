@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Logger,
   OnModuleDestroy,
   OnModuleInit,
@@ -14,9 +16,11 @@ import * as bcrypt from "bcrypt";
 import { createHash, randomBytes, randomInt } from "crypto";
 import { EmailService } from "../email/email.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { ConfirmPasswordResetDto } from "./dto/confirm-password-reset.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { RequestPasswordResetDto } from "./dto/request-password-reset.dto";
 import { RequestRegistrationCodeDto } from "./dto/request-registration-code.dto";
 import { VerifyRegistrationCodeDto } from "./dto/verify-registration-code.dto";
 import { verifyTelegramMiniAppInitData } from "./telegram-mini-app";
@@ -44,11 +48,27 @@ export type LoginContext = {
   requestId?: string | null;
 };
 
+export type EmailRequestContext = LoginContext & {
+  emailGuardId?: string | null;
+};
+
+type EmailRequestGuardState = {
+  firstSentAt: number;
+  lastSentAt: number;
+  sentCount: number;
+  blockedUntil: number | null;
+};
+
+const EMAIL_REPEAT_DELAY_MS = 90_000;
+const EMAIL_BLOCK_MS = 2 * 60 * 60_000;
+const PASSWORD_RESET_PENDING_HASH = "PASSWORD_RESET_PENDING";
+
 @Injectable()
 export class AuthService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AuthService.name);
   private purgeTimer: NodeJS.Timeout | null = null;
   private purgeInProgress = false;
+  private readonly emailRequestGuards = new Map<string, EmailRequestGuardState>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -88,9 +108,15 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     }
     this.purgeInProgress = true;
     try {
-      const removed = await this.purgeExpiredFrozenAccounts();
-      if (removed > 0) {
-        this.logger.log(`Finalized ${removed} frozen account(s).`);
+      const [removedAccounts, removedCodes] = await Promise.all([
+        this.purgeExpiredFrozenAccounts(),
+        this.purgeExpiredEmailVerificationCodes(),
+      ]);
+      if (removedAccounts > 0) {
+        this.logger.log(`Finalized ${removedAccounts} frozen account(s).`);
+      }
+      if (removedCodes > 0) {
+        this.logger.log(`Purged ${removedCodes} expired email verification code(s).`);
       }
     } catch (error) {
       this.logger.error("Scheduled account purge failed.", error as Error);
@@ -125,6 +151,23 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return finalized;
+  }
+
+  async purgeExpiredEmailVerificationCodes(now = new Date()) {
+    const retentionHoursRaw = Number(this.config.get("EMAIL_VERIFICATION_CODE_RETENTION_HOURS") ?? 24);
+    const retentionHours = Number.isFinite(retentionHoursRaw)
+      ? Math.max(1, Math.floor(retentionHoursRaw))
+      : 24;
+    const retentionCutoff = new Date(now.getTime() - retentionHours * 60 * 60_000);
+    const result = await this.prisma.emailVerificationCode.deleteMany({
+      where: {
+        OR: [
+          { status: "PENDING", expiresAt: { lte: now } },
+          { status: { in: ["CONSUMED", "EXPIRED"] }, updatedAt: { lte: retentionCutoff } },
+        ],
+      },
+    });
+    return result.count;
   }
 
   private deletedName(uuid: string) {
@@ -314,7 +357,90 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async requestRegistrationCode(dto: RequestRegistrationCodeDto) {
+  private emailRateLimitKeys(normalizedEmail: string, ctx: EmailRequestContext) {
+    const keys = [`auth-email:email:${normalizedEmail}`];
+    const ip = ctx.ipAddress?.trim();
+    const guard = ctx.emailGuardId?.trim();
+    if (ip) keys.push(`auth-email:ip:${ip}`);
+    if (guard) keys.push(`auth-email:cookie:${guard}`);
+    return Array.from(new Set(keys));
+  }
+
+  private cleanupEmailRequestGuards(nowMs = Date.now()) {
+    const staleAfterMs = EMAIL_BLOCK_MS * 2;
+    for (const [key, state] of this.emailRequestGuards.entries()) {
+      const reference = state.blockedUntil ?? state.lastSentAt;
+      if (reference + staleAfterMs <= nowMs) {
+        this.emailRequestGuards.delete(key);
+      }
+    }
+  }
+
+  private throwEmailRateLimit(retryAfterMs: number) {
+    const minutes = Math.max(1, Math.ceil(retryAfterMs / 60_000));
+    throw new HttpException(
+      `Слишком много запросов на отправку email. Повторите через ${minutes} мин.`,
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  private assertEmailRequestAllowed(normalizedEmail: string, ctx: EmailRequestContext = {}) {
+    const nowMs = Date.now();
+    this.cleanupEmailRequestGuards(nowMs);
+    const keys = this.emailRateLimitKeys(normalizedEmail, ctx);
+    const states = keys
+      .map((key) => this.emailRequestGuards.get(key))
+      .filter((state): state is EmailRequestGuardState => Boolean(state));
+
+    const blockedUntil = states.reduce(
+      (max, state) => Math.max(max, state.blockedUntil && state.blockedUntil > nowMs ? state.blockedUntil : 0),
+      0,
+    );
+    if (blockedUntil > nowMs) {
+      this.throwEmailRateLimit(blockedUntil - nowMs);
+    }
+
+    const twoSentState = states.find((state) => state.sentCount >= 2);
+    if (twoSentState) {
+      const blockedUntilMs = nowMs + EMAIL_BLOCK_MS;
+      keys.forEach((key) => {
+        const state = this.emailRequestGuards.get(key) ?? twoSentState;
+        this.emailRequestGuards.set(key, {
+          ...state,
+          blockedUntil: blockedUntilMs,
+          lastSentAt: nowMs,
+          sentCount: Math.max(2, state.sentCount),
+        });
+      });
+      this.throwEmailRateLimit(EMAIL_BLOCK_MS);
+    }
+
+    const oneSentState = states.find((state) => state.sentCount === 1);
+    if (oneSentState) {
+      const waitMs = oneSentState.lastSentAt + EMAIL_REPEAT_DELAY_MS - nowMs;
+      if (waitMs > 0) {
+        this.throwEmailRateLimit(waitMs);
+      }
+      const nextState: EmailRequestGuardState = {
+        firstSentAt: oneSentState.firstSentAt,
+        lastSentAt: nowMs,
+        sentCount: 2,
+        blockedUntil: nowMs + EMAIL_BLOCK_MS,
+      };
+      keys.forEach((key) => this.emailRequestGuards.set(key, nextState));
+      return;
+    }
+
+    const firstState: EmailRequestGuardState = {
+      firstSentAt: nowMs,
+      lastSentAt: nowMs,
+      sentCount: 1,
+      blockedUntil: null,
+    };
+    keys.forEach((key) => this.emailRequestGuards.set(key, firstState));
+  }
+
+  async requestRegistrationCode(dto: RequestRegistrationCodeDto, ctx: EmailRequestContext = {}) {
     if (dto.password !== dto.confirmPassword) {
       throw new BadRequestException("Passwords do not match");
     }
@@ -322,6 +448,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     this.assertPublicRegistrationRole(role);
 
     const email = dto.email.trim().toLowerCase();
+    this.assertEmailRequestAllowed(email, ctx);
     const existing = await this.prisma.user.findUnique({
       where: { email },
       select: { id: true, name: true, role: true, emailVerifiedAt: true, accountStatus: true },
@@ -337,7 +464,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
 
     await this.prisma.$transaction(async (tx) => {
       await tx.emailVerificationCode.updateMany({
-        where: { normalizedEmail: email, status: "PENDING", consumedAt: null },
+        where: { normalizedEmail: email, status: "PENDING", purpose: "REGISTRATION", consumedAt: null },
         data: { status: "EXPIRED" },
       });
       await tx.emailVerificationCode.create({
@@ -358,6 +485,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       toName: target.name,
       code,
       expiresAt,
+      locale: dto.locale ?? "ru",
     });
 
     return {
@@ -365,6 +493,140 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       email,
       expiresAt: expiresAt.toISOString(),
     };
+  }
+
+  async requestPasswordResetCode(dto: RequestPasswordResetDto, ctx: EmailRequestContext = {}) {
+    const email = dto.email.trim().toLowerCase();
+    this.assertEmailRequestAllowed(email, ctx);
+
+    const ttlMinutes = Number(this.config.get("PASSWORD_RESET_EMAIL_CODE_TTL_MINUTES") ?? 15);
+    const expiresAt = new Date(Date.now() + Math.max(5, ttlMinutes) * 60_000);
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        accountStatus: true,
+        passwordHash: true,
+      },
+    });
+
+    const generic = {
+      success: true as const,
+      email,
+      expiresAt: expiresAt.toISOString(),
+    };
+    if (!user || user.accountStatus === "BLOCKED" || !user.passwordHash) {
+      return generic;
+    }
+
+    const code = String(randomInt(100000, 1_000_000));
+    const codeHash = await bcrypt.hash(code, 12);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.emailVerificationCode.updateMany({
+        where: { normalizedEmail: email, status: "PENDING", purpose: "PASSWORD_RESET", consumedAt: null },
+        data: { status: "EXPIRED" },
+      });
+      await tx.emailVerificationCode.create({
+        data: {
+          email: user.email,
+          normalizedEmail: email,
+          name: user.name,
+          passwordHash: PASSWORD_RESET_PENDING_HASH,
+          role: user.role,
+          purpose: "PASSWORD_RESET",
+          codeHash,
+          expiresAt,
+        },
+      });
+    });
+
+    await this.email.sendPasswordResetCode({
+      toEmail: user.email,
+      toName: user.name,
+      code,
+      expiresAt,
+      locale: dto.locale ?? "ru",
+    });
+
+    return generic;
+  }
+
+  async confirmPasswordReset(dto: ConfirmPasswordResetDto) {
+    if (dto.password !== dto.confirmPassword) {
+      throw new BadRequestException("Passwords do not match");
+    }
+    const email = dto.email.trim().toLowerCase();
+    const pending = await this.prisma.emailVerificationCode.findFirst({
+      where: {
+        normalizedEmail: email,
+        status: "PENDING",
+        purpose: "PASSWORD_RESET",
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!pending) {
+      throw new BadRequestException("Password reset code is invalid or expired");
+    }
+    if (pending.attempts >= 5) {
+      await this.prisma.emailVerificationCode.update({
+        where: { id: pending.id },
+        data: { status: "EXPIRED" },
+      });
+      throw new BadRequestException("Too many attempts. Request a new code.");
+    }
+
+    const ok = await bcrypt.compare(dto.code, pending.codeHash);
+    if (!ok) {
+      await this.prisma.emailVerificationCode.update({
+        where: { id: pending.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new BadRequestException("Password reset code is invalid or expired");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, accountStatus: true },
+    });
+    if (!user || user.accountStatus === "BLOCKED") {
+      await this.prisma.emailVerificationCode.update({
+        where: { id: pending.id },
+        data: { status: "EXPIRED" },
+      });
+      throw new BadRequestException("Password reset code is invalid or expired");
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { passwordHash, emailVerifiedAt: new Date() },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.emailVerificationCode.update({
+        where: { id: pending.id },
+        data: { status: "CONSUMED", consumedAt: new Date() },
+      });
+      await tx.emailVerificationCode.updateMany({
+        where: {
+          normalizedEmail: email,
+          status: "PENDING",
+          purpose: "PASSWORD_RESET",
+          id: { not: pending.id },
+        },
+        data: { status: "EXPIRED" },
+      });
+    });
+
+    return { success: true as const };
   }
 
   async verifyRegistrationCode(dto: VerifyRegistrationCodeDto) {
@@ -507,6 +769,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     return this.issueTokens(user);
   }
 
+
   async loginWithTelegramMiniApp(initData: string, ctx: LoginContext = {}) {
     const maxAgeSecondsRaw = Number(
       this.config.get("TELEGRAM_MINI_APP_AUTH_MAX_AGE_SECONDS") ?? 24 * 60 * 60,
@@ -525,12 +788,12 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     try {
       telegramId = BigInt(String(verified.user.id));
     } catch {
-      throw new UnauthorizedException("Telegram Mini App user id is invalid.");
+      throw new UnauthorizedException("Linked client user id is invalid.");
     }
 
     const user = await this.prisma.user.findUnique({ where: { telegramId } });
     if (!user) {
-      throw new UnauthorizedException("Telegram account is not linked to NearLoy.");
+      throw new UnauthorizedException("Account is not linked to NearLoy.");
     }
 
     const now = new Date();
@@ -540,7 +803,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       user.deletionScheduledAt <= now
     ) {
       await this.finalizeExpiredFrozenAccount(user.id, now, user.uuid);
-      throw new UnauthorizedException("Telegram account is not linked to an active NearLoy account.");
+      throw new UnauthorizedException("Account is not linked to an active NearLoy account.");
     }
     if (user.accountStatus === "BLOCKED") {
       throw new UnauthorizedException("Account is blocked.");
@@ -548,7 +811,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
 
     await this.recordLoginEvent(user.id, {
       ...ctx,
-      deviceLabel: ctx.deviceLabel ?? "Telegram Mini App",
+      deviceLabel: ctx.deviceLabel ?? "Linked client session",
     });
     return this.issueTokens(user);
   }

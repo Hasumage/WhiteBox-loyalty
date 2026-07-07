@@ -42,7 +42,15 @@ function redirectToLogin(request: NextRequest) {
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  if (path === "/" || path === "/business" || path === "/landing" || path === "/login" || path === "/register" || path === "/company/register") {
+  if (
+    path === "/" ||
+    path === "/business" ||
+    path === "/landing" ||
+    path === "/login" ||
+    path === "/register" ||
+    path === "/forgot-password" ||
+    path === "/company/register"
+  ) {
     return responseWithLocale(request);
   }
 
@@ -109,6 +117,7 @@ export const config = {
     "/landing",
     "/login",
     "/register",
+    "/forgot-password",
     "/app",
     "/company/register",
     "/map",

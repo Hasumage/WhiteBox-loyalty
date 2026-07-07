@@ -102,7 +102,7 @@ export default function RegisterPage() {
 
       setLoading(true);
       try {
-        const response = await requestRegistrationCode({ name, email, password, confirmPassword });
+        const response = await requestRegistrationCode({ name, email, password, confirmPassword, locale });
         if (!("success" in response)) {
           setError(responseMessage(response, t("client.auth.registrationFailed")));
           return;

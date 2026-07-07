@@ -20,7 +20,7 @@ export class RegisterDto {
   @ApiPropertyOptional({
     enum: UserRole,
     description:
-      "Defaults to CLIENT (loyalty TWA). COMPANY for partner portals. ADMIN cannot be self-registered.",
+      "Defaults to CLIENT. COMPANY for partner portals. ADMIN cannot be self-registered.",
   })
   @IsOptional()
   @IsEnum(UserRole)

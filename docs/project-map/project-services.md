@@ -2,7 +2,7 @@
 
 ## Data strategy
 
-NearLoy now uses PostgreSQL-backed read models for the TWA. Mock data is legacy/static fallback only.
+NearLoy now uses PostgreSQL-backed read models for the client app. Mock data is legacy/static fallback only.
 
 Important principles:
 
@@ -16,12 +16,13 @@ Important principles:
 
 - `src/lib/api/auth-client.ts` - login/register/session/account actions.
 - `src/lib/api/categories-client.ts` - categories and favorite categories.
-- `src/lib/api/admin-client.ts` - admin users, companies, categories, subscriptions, growth, audit and backups.
-- `src/lib/api/company-client.ts` - company dashboard, cashier, team, plans, entitlements, redemptions and payouts.
-- `src/lib/api/twa-client.ts` - TWA profile, dashboard, marketplace, companies, wallet, map/history/subscriptions, QR, promo/referral.
+- `src/lib/api/admin-client.ts` - admin users, companies, payments, tasks, system health, categories, subscriptions, growth, audit and backups.
+- `src/lib/api/company-client.ts` - company dashboard, billing, media, cashier, team, plans, entitlements, redemptions and payouts.
+- `src/lib/api/twa-client.ts` - client profile, dashboard, marketplace, companies, wallet/public card, map/history/subscriptions, QR, promo/referral.
 - `src/lib/i18n/*` - locale detection, persistence and portable dictionaries.
 - `src/lib/telegram/*` - Telegram Bot API delivery, proxy support, webhook parsing and admin account linking.
 - `src/lib/admin/admin-tasks.ts` - signal-to-task routing, source deduplication and automatic workflow task closure.
+- `src/lib/company-media-storage.ts` - local/runtime file storage for company public media.
 
 ## Admin API surface
 
@@ -39,7 +40,9 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/users/:uuid/email-change-request` | POST | Create secure email-change token/link |
 | `/api/admin/users/:uuid/force-logout` | POST | Revoke active refresh sessions |
 | `/api/admin/users/:uuid/reactivate-account` | POST | Clear frozen deletion status |
+| `/api/admin/users/:uuid/company-assignment` | POST | Create or attach company membership when role/account ownership changes |
 | `/api/admin/dashboard` | GET | Live operating metrics and permission-filtered priority queue |
+| `/api/admin/tasks` | GET/POST | Kanban tasks; list, filter and create manual operational tasks |
 | `/api/admin/tasks/:uuid` | GET/PATCH | Read/take/resolve a work item and route to its source |
 | `/api/admin/system-health` | GET/POST | System incident cockpit; open/resolve task-linked alerts |
 | `/api/admin/subscriptions/stats` | GET | KPI/SLA/forecast stats payload |
@@ -52,13 +55,23 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/categories` | GET/POST | List/create categories |
 | `/api/admin/categories/:id` | PATCH/DELETE | Update/delete category |
 | `/api/admin/company-users` | GET | List company-role users |
+| `/api/admin/company-profiles` | GET | Search selectable company profiles for assignment/reassignment |
 | `/api/admin/company-users/:uuid` | GET/PATCH/DELETE | Company account operations |
+| `/api/admin/company-users/:uuid/overview` | GET | Operational company stats: billing, subscriptions, balance, clients and recent payments |
+| `/api/admin/company-users/:uuid/payments` | GET | Company payment ledger |
+| `/api/admin/company-users/:uuid/security` | GET | Staff, roles and security summary |
+| `/api/admin/company-users/:uuid/referral` | GET/PUT/DELETE | Company PR/referral attribution |
 | `/api/admin/company-users/:uuid/company-profile` | PUT | Upsert company profile |
 | `/api/admin/company-users/:uuid/locations` | POST | Create geocoded company address |
 | `/api/admin/company-users/:uuid/locations/:locationUuid` | PATCH/DELETE | Update/delete company address |
 | `/api/admin/company-users/:uuid/subscriptions` | GET/POST | List/create company subscriptions |
 | `/api/admin/company-users/:uuid/subscriptions/:subscriptionUuid` | PATCH/DELETE | Update/delete company subscription |
 | `/api/admin/company-users/:uuid/clients` | GET | Company clients, loyalty stats and levels |
+| `/api/admin/payments` | GET | Search/filter provider payment ledger |
+| `/api/admin/finance-operations` | GET/POST | Finance operation queue and manual operation creation |
+| `/api/admin/finance-operations/:uuid` | PATCH | Approve/reject/update finance operation status |
+| `/api/admin/company-billing-promos` | GET/POST | List/create company billing promo codes |
+| `/api/admin/company-billing-promos/:uuid` | PATCH | Edit/pause company billing promo code |
 | `/api/admin/audit` | GET/POST | Audit feed and manual audit events |
 | `/api/admin/backups` | GET/POST | List/create DB snapshots |
 | `/api/admin/backups/:backupId/file` | GET | Download snapshot JSON |
@@ -95,6 +108,14 @@ All `/api/company/*` routes require an active company membership. Platform role 
 | `/api/company/team/:uuid/status` | PATCH | Enable/disable staff access |
 | `/api/company/finance` | GET | Monthly-normalized subscription forecast and operation history |
 | `/api/company/finance/payouts` | POST | Create payout request for approval |
+| `/api/company/billing` | GET | NearLoy subscription state, invoice, balance, saved payment method and history |
+| `/api/company/billing/promo` | POST | Apply a company billing promo code |
+| `/api/company/billing/pay` | POST | Pay current NearLoy invoice from company balance |
+| `/api/company/billing/checkout` | POST | Create or reuse YooKassa checkout for company NearLoy billing |
+| `/api/company/billing/payment-method/pay` | POST | Pay using saved YooKassa payment method |
+| `/api/company/billing/payment-method` | DELETE | Delete saved YooKassa payment method metadata |
+| `/api/company/billing/payments/:uuid` | GET | Sync/read company billing payment status |
+| `/api/company/ai/assist` | POST | Generate safe company AI drafts for launch, promotions, finance explanations and loyalty levels |
 | `/api/company/subscriptions` | GET/POST | Read or create company tariff plans |
 | `/api/company/subscriptions/:uuid/entitlements` | POST | Configure controlled service issuance |
 | `/api/company/subscriptions/redemptions` | POST | Consume an entitlement under its allowance |
@@ -103,6 +124,11 @@ All `/api/company/*` routes require an active company membership. Platform role 
 | `/api/company/club/bundles/:uuid/approve` | POST | Approve own company participation and activate when all sides approved |
 | `/api/company/club/bundles/:uuid/reject` | POST | Reject and archive a paired subscription proposal |
 | `/api/company/club/bundles/redemptions` | POST | Redeem only the current company participant benefit |
+| `/api/company/media` | GET/POST | List/upload company logo, hero and gallery assets |
+| `/api/company/media/assets/:id` | DELETE | Delete a media asset |
+| `/api/company/media/offers` | POST | Create a public special offer with optional image |
+| `/api/company/media/offers/:id` | DELETE | Delete a public special offer |
+| `/api/company/media/files/:key` | GET | Serve stored company media file |
 
 ## Registered API surface
 
@@ -123,6 +149,7 @@ All `/api/registered/*` routes require `CLIENT`.
 | `/api/registered/marketplace` | GET | Active subscription catalog; optional category filter |
 | `/api/registered/companies` | GET | Partner list with points, levels and locations |
 | `/api/registered/wallet` | GET | Loyalty cards where user has activity |
+| `/api/registered/companies/:id/favorite` | PUT | Favorite/unfavorite company through the registered API surface |
 | `/api/registered/qr` | GET | UUID-based QR payload |
 | `/api/registered/history` | GET | Points activity and subscription archive |
 | `/api/registered/subscriptions/active` | GET | Active subscriptions |
@@ -138,38 +165,53 @@ All `/api/registered/*` routes require `CLIENT`.
 | `/api/admin/payments` | GET | Search and filter provider payment ledger |
 | `/api/company/billing/checkout` | POST | Create YooKassa checkout for company NearLoy billing |
 | `/api/company/billing/payments/:uuid` | GET | Sync/read company billing payment status |
+| `/api/company/billing/payment-method/pay` | POST | Charge saved YooKassa method for company billing |
+| `/api/company/billing/payment-method` | DELETE | Remove saved method metadata |
+
+## Public API surface
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/public/company-media/:slug` | GET | Public logo, hero, gallery and special offers for shared company cards |
 
 ## Backend responsibilities
 
-- `AuthService`: registration, login, refresh, password change, freeze/reactivate, login events and email confirmation.
+- `AuthService`: registration, login, refresh, password change, freeze/reactivate, login events, email confirmation and reset-code cleanup.
 - `AdminService`: users, companies, categories, locations, subscriptions, growth, audit, backups and analytics.
-- `RegisteredService`: DB-backed TWA read models, profile preferences, favorites, promo/referral redemption, QR and subscription activation.
-- `CompanyService`: local staff roles, cashier operations, tier cashback, entitlements/redemptions, revenue forecast and payout requests.
+- `RegisteredService`: DB-backed client app read models, profile preferences, favorites, promo/referral redemption, QR and subscription activation.
+- `CompanyService`: local staff roles, cashier operations, tier cashback, entitlements/redemptions, billing, media, revenue forecast and payout requests.
+- `PaymentsService`: YooKassa checkout creation/reuse, status sync, webhook handling, payment expiration and activation side effects.
+- `EmailService`: persisted email messages, Resend HTTP provider, SMTP routing/fallback and production-safe failure handling.
+- `CompanyAiService`: server-side OpenAI Responses API integration for company-only draft advice; sends a small safe context, uses JSON schema output, and never exposes critical account/security mutations as tools.
 - `MaintenanceStateService`: restore progress state machine.
 - `MaintenanceGuard`: API lock during restore.
 - Landing lead services: contact intake, duplicate/spam checks, Telegram delivery history and retries.
 - Company onboarding services: user-first company registration, identity verification modes, encrypted passport file lifecycle and admin review.
 - Telegram services: Bot API proxy support, direct-message admin linking and webhook command handling.
 - Admin task services: translate audit fires, verification reviews and finance approvals into deduplicated, permission-scoped resolution cards.
+- Company media services: store public assets/offers and expose read-only media payloads by slug.
 - i18n services: locale cookie, user preference persistence and structured translation dictionaries.
 
 ## Security and privacy responsibilities
 
 - Passwords remain write-only and are never exposed through admin UI.
+- Company AI can only return draft text and next-step advice. It must not mutate passwords, roles, access, payouts, saved payment methods, provider settings or infrastructure.
 - Email changes use secure request links rather than direct admin edits.
 - Passport photos are stored encrypted in private local storage, then removed after approve/reject cleanup.
 - Support users are restricted away from finance, passport review and privileged verification actions.
 - Critical admin actions write audit records where applicable.
+- Finance operations must be backed by available company/PR balance; arbitrary internal payout requests are intentionally not the long-term model.
 - Customer text search in the company workspace is restricted to customers already related to that company; QR may open a new customer without disclosing email.
 - Purchase cashback and limited entitlement redemption use serializable transactions to prevent double issuance and tier races; `UNLIMITED` entitlements record visits without enforcing a usage cap.
 - Admin tasks never expand an operator's access: each task is visible and actionable only when its source permission permits the same operation.
+- Production email sending must be configured with a reachable provider. Deployed environments fail loudly when no provider can deliver.
 
 ## Map/geocoder responsibilities
 
 - Admin calls location endpoints with human-readable address.
 - API resolves address through Yandex Geocoder and stores coordinates/precision metadata.
 - API rejects duplicate addresses for the same company.
-- TWA `/map` renders active locations with custom category markers and zoom-aware clustering.
+- Client `/map` renders active locations with custom category markers and zoom-aware clustering.
 - Route links are generated client-side for Yandex Maps; geolocation is included when user allowed it.
 
 ## CI/CD responsibilities

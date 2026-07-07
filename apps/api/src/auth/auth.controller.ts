@@ -1,19 +1,25 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { User } from "@prisma/client";
-import type { Request } from "express";
-import { AuthService, type LoginContext } from "./auth.service";
+import { randomBytes } from "crypto";
+import type { Request, Response } from "express";
+import { AuthService, type EmailRequestContext, type LoginContext } from "./auth.service";
 import { CurrentUser, type RequestUser } from "./decorators/current-user.decorator";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ConfirmEmailChangeDto } from "./dto/confirm-email-change.dto";
+import { ConfirmPasswordResetDto } from "./dto/confirm-password-reset.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { RequestPasswordResetDto } from "./dto/request-password-reset.dto";
 import { RequestRegistrationCodeDto } from "./dto/request-registration-code.dto";
 import { TelegramMiniAppLoginDto } from "./dto/telegram-mini-app-login.dto";
 import { VerifyRegistrationCodeDto } from "./dto/verify-registration-code.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+
+const EMAIL_GUARD_COOKIE = "wb_email_guard";
+const EMAIL_GUARD_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 function loginContextFromRequest(req: Request): LoginContext {
   const forwardedFor = req.headers["x-forwarded-for"];
@@ -36,6 +42,55 @@ function loginContextFromRequest(req: Request): LoginContext {
   };
 }
 
+function parseCookieHeader(header: string | undefined) {
+  const result = new Map<string, string>();
+  if (!header) return result;
+  for (const part of header.split(";")) {
+    const [rawName, ...rawValue] = part.trim().split("=");
+    if (!rawName || rawValue.length === 0) continue;
+    try {
+      result.set(rawName, decodeURIComponent(rawValue.join("=")));
+    } catch {
+      result.set(rawName, rawValue.join("="));
+    }
+  }
+  return result;
+}
+
+function headerValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function cleanGuardId(value: string | null | undefined) {
+  const cleaned = value?.trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+  return cleaned || null;
+}
+
+function emailRequestContextFromRequest(req: Request, res: Response): EmailRequestContext {
+  const cookies = parseCookieHeader(req.headers.cookie);
+  const cookieGuard = cleanGuardId(cookies.get(EMAIL_GUARD_COOKIE));
+  const headerGuard = cleanGuardId(headerValue(req.headers["x-nearloy-email-guard"]));
+  const emailGuardId = cookieGuard ?? headerGuard ?? randomBytes(18).toString("base64url");
+  const forwardedProto = headerValue(req.headers["x-forwarded-proto"]);
+  const secure =
+    process.env.NODE_ENV === "production" ||
+    Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID) ||
+    forwardedProto === "https";
+
+  res.cookie(EMAIL_GUARD_COOKIE, emailGuardId, {
+    httpOnly: true,
+    maxAge: EMAIL_GUARD_MAX_AGE_MS,
+    path: "/",
+    sameSite: secure ? "none" : "lax",
+    secure,
+  });
+
+  return {
+    ...loginContextFromRequest(req),
+    emailGuardId,
+  };
+}
+
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
@@ -46,7 +101,7 @@ export class AuthController {
   @ApiOperation({
     summary: "Register",
     description:
-      "Creates a user with password hash (bcrypt). Default role is CLIENT (TWA). COMPANY allowed; ADMIN is rejected (provision separately).",
+      "Creates a user with password hash (bcrypt). Default role is CLIENT. COMPANY allowed; ADMIN is rejected (provision separately).",
   })
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
@@ -59,8 +114,12 @@ export class AuthController {
     description:
       "Stores a pending registration request and sends a six-digit code to the email. The user is created only after code verification.",
   })
-  requestRegistrationCode(@Body() dto: RequestRegistrationCodeDto) {
-    return this.auth.requestRegistrationCode(dto);
+  requestRegistrationCode(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() dto: RequestRegistrationCodeDto,
+  ) {
+    return this.auth.requestRegistrationCode(dto, emailRequestContextFromRequest(req, res));
   }
 
   @Post("register/verify")
@@ -71,6 +130,28 @@ export class AuthController {
   })
   verifyRegistrationCode(@Body() dto: VerifyRegistrationCodeDto) {
     return this.auth.verifyRegistrationCode(dto);
+  }
+
+  @Post("password-reset/request-code")
+  @ApiBody({ type: RequestPasswordResetDto })
+  @ApiOperation({
+    summary: "Request password reset code",
+    description:
+      "Sends a six-digit password reset code when the account exists. Response is generic to avoid email enumeration.",
+  })
+  requestPasswordResetCode(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() dto: RequestPasswordResetDto,
+  ) {
+    return this.auth.requestPasswordResetCode(dto, emailRequestContextFromRequest(req, res));
+  }
+
+  @Post("password-reset/confirm")
+  @ApiBody({ type: ConfirmPasswordResetDto })
+  @ApiOperation({ summary: "Confirm password reset code and set a new password" })
+  confirmPasswordReset(@Body() dto: ConfirmPasswordResetDto) {
+    return this.auth.confirmPasswordReset(dto);
   }
 
   @Post("login")
@@ -86,9 +167,9 @@ export class AuthController {
   @Post("telegram-mini-app")
   @ApiBody({ type: TelegramMiniAppLoginDto })
   @ApiOperation({
-    summary: "Login from Telegram Mini App",
+    summary: "Login from linked client session",
     description:
-      "Validates Telegram Mini App initData with the bot token, finds a linked NearLoy account by telegramId, and issues the regular access + refresh tokens.",
+      "Validates a linked client-session payload and issues regular access + refresh tokens.",
   })
   telegramMiniAppLogin(@Req() req: Request, @Body() dto: TelegramMiniAppLoginDto) {
     return this.auth.loginWithTelegramMiniApp(dto.initData, loginContextFromRequest(req));

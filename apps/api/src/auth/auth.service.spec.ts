@@ -36,7 +36,7 @@ describe("AuthService", () => {
     profileStatus: { findUnique: jest.Mock };
     platformCounter: { upsert: jest.Mock };
     userProfileStatusUnlock: { upsert: jest.Mock };
-    refreshToken: { findFirst: jest.Mock; create: jest.Mock; update: jest.Mock };
+    refreshToken: { findFirst: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
     loginEvent: {
       create: jest.Mock;
       deleteMany: jest.Mock;
@@ -45,12 +45,18 @@ describe("AuthService", () => {
       update: jest.Mock;
     };
     emailChangeRequest: { findUnique: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
-    emailVerificationCode: { create: jest.Mock; findFirst: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
+    emailVerificationCode: {
+      create: jest.Mock;
+      deleteMany: jest.Mock;
+      findFirst: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
     $transaction: jest.Mock;
     userFavoriteCategory: { count: jest.Mock };
   };
   let jwt: { signAsync: jest.Mock };
-  let email: { sendRegistrationCode: jest.Mock };
+  let email: { sendRegistrationCode: jest.Mock; sendPasswordResetCode: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -72,6 +78,7 @@ describe("AuthService", () => {
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       loginEvent: {
         create: jest.fn(),
@@ -87,6 +94,7 @@ describe("AuthService", () => {
       },
       emailVerificationCode: {
         create: jest.fn(),
+        deleteMany: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
@@ -97,7 +105,10 @@ describe("AuthService", () => {
       },
     };
     jwt = { signAsync: jest.fn().mockResolvedValue("access.jwt.token") };
-    email = { sendRegistrationCode: jest.fn().mockResolvedValue({ id: "email-message-id" }) };
+    email = {
+      sendRegistrationCode: jest.fn().mockResolvedValue({ id: "email-message-id" }),
+      sendPasswordResetCode: jest.fn().mockResolvedValue({ id: "reset-email-message-id" }),
+    };
 
     const testingModule: TestingModule = await Test.createTestingModule({
       providers: [
@@ -151,6 +162,25 @@ describe("AuthService", () => {
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
+  it("purgeExpiredEmailVerificationCodes removes expired pending and stale finalized codes", async () => {
+    const now = new Date("2026-07-05T12:00:00.000Z");
+    prisma.emailVerificationCode.deleteMany.mockResolvedValue({ count: 3 });
+
+    await expect(service.purgeExpiredEmailVerificationCodes(now)).resolves.toBe(3);
+
+    expect(prisma.emailVerificationCode.deleteMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { status: "PENDING", expiresAt: { lte: now } },
+          {
+            status: { in: ["CONSUMED", "EXPIRED"] },
+            updatedAt: { lte: new Date("2026-07-04T12:00:00.000Z") },
+          },
+        ],
+      },
+    });
+  });
+
   it("requestRegistrationCode stores a pending verification and emails a 6-digit code", async () => {
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.emailVerificationCode.updateMany.mockResolvedValue({ count: 0 });
@@ -166,7 +196,12 @@ describe("AuthService", () => {
     expect(result.success).toBe(true);
     expect(result.email).toBe("new.client@example.com");
     expect(prisma.emailVerificationCode.updateMany).toHaveBeenCalledWith({
-      where: { normalizedEmail: "new.client@example.com", status: "PENDING", consumedAt: null },
+      where: {
+        normalizedEmail: "new.client@example.com",
+        status: "PENDING",
+        purpose: "REGISTRATION",
+        consumedAt: null,
+      },
       data: { status: "EXPIRED" },
     });
     expect(prisma.emailVerificationCode.create).toHaveBeenCalledWith({
@@ -185,6 +220,7 @@ describe("AuthService", () => {
       toName: "New Client",
       code: expect.stringMatching(/^\d{6}$/),
       expiresAt: expect.any(Date),
+      locale: "ru",
     });
   });
 
@@ -204,6 +240,7 @@ describe("AuthService", () => {
       email: "Existing@Example.COM",
       password: "password12",
       confirmPassword: "password12",
+      locale: "en",
     });
 
     expect(result.success).toBe(true);
@@ -220,6 +257,144 @@ describe("AuthService", () => {
       toName: "Existing Client",
       code: expect.stringMatching(/^\d{6}$/),
       expiresAt: expect.any(Date),
+      locale: "en",
+    });
+  });
+
+  it("requestRegistrationCode rate-limits repeated account creation emails", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.emailVerificationCode.updateMany.mockResolvedValue({ count: 0 });
+    prisma.emailVerificationCode.create.mockResolvedValue({ id: "pending-code" });
+
+    const payload = {
+      name: "New Client",
+      email: "clicker@example.com",
+      password: "password12",
+      confirmPassword: "password12",
+    };
+    const context = { ipAddress: "10.0.0.3", emailGuardId: "guard-register-click" };
+
+    await service.requestRegistrationCode(payload, context);
+
+    await expect(service.requestRegistrationCode(payload, context)).rejects.toThrow(
+      "Слишком много запросов",
+    );
+    expect(email.sendRegistrationCode).toHaveBeenCalledTimes(1);
+  });
+
+  it("requestPasswordResetCode stores a reset code and sends email without exposing account state", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 77,
+      name: "Reset User",
+      email: "reset@example.com",
+      role: UserRole.CLIENT,
+      accountStatus: "ACTIVE",
+      passwordHash: "existing-hash",
+    });
+    prisma.emailVerificationCode.updateMany.mockResolvedValue({ count: 0 });
+    prisma.emailVerificationCode.create.mockResolvedValue({ id: "reset-code" });
+
+    const result = await service.requestPasswordResetCode(
+      { email: "Reset@Example.COM", locale: "ru" },
+      { ipAddress: "10.0.0.1", emailGuardId: "guard-reset" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.email).toBe("reset@example.com");
+    expect(prisma.emailVerificationCode.updateMany).toHaveBeenCalledWith({
+      where: {
+        normalizedEmail: "reset@example.com",
+        status: "PENDING",
+        purpose: "PASSWORD_RESET",
+        consumedAt: null,
+      },
+      data: { status: "EXPIRED" },
+    });
+    expect(prisma.emailVerificationCode.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        email: "reset@example.com",
+        normalizedEmail: "reset@example.com",
+        name: "Reset User",
+        role: UserRole.CLIENT,
+        purpose: "PASSWORD_RESET",
+        passwordHash: "PASSWORD_RESET_PENDING",
+        codeHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      }),
+    });
+    expect(email.sendPasswordResetCode).toHaveBeenCalledWith({
+      toEmail: "reset@example.com",
+      toName: "Reset User",
+      code: expect.stringMatching(/^\d{6}$/),
+      expiresAt: expect.any(Date),
+      locale: "ru",
+    });
+  });
+
+  it("requestPasswordResetCode rate-limits repeated email requests", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 77,
+      name: "Reset User",
+      email: "reset@example.com",
+      role: UserRole.CLIENT,
+      accountStatus: "ACTIVE",
+      passwordHash: "existing-hash",
+    });
+    prisma.emailVerificationCode.updateMany.mockResolvedValue({ count: 0 });
+    prisma.emailVerificationCode.create.mockResolvedValue({ id: "reset-code" });
+
+    await service.requestPasswordResetCode(
+      { email: "reset@example.com" },
+      { ipAddress: "10.0.0.2", emailGuardId: "guard-click" },
+    );
+
+    await expect(
+      service.requestPasswordResetCode(
+        { email: "reset@example.com" },
+        { ipAddress: "10.0.0.2", emailGuardId: "guard-click" },
+      ),
+    ).rejects.toThrow("Слишком много запросов");
+  });
+
+  it("confirmPasswordReset updates password and revokes active refresh tokens", async () => {
+    const codeHash = await bcrypt.hash("654321", 4);
+    prisma.emailVerificationCode.findFirst.mockResolvedValue({
+      id: "reset-code",
+      normalizedEmail: "reset@example.com",
+      codeHash,
+      attempts: 0,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 77,
+      accountStatus: "ACTIVE",
+    });
+    prisma.user.update.mockResolvedValue({ id: 77 });
+    prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
+    prisma.emailVerificationCode.update.mockResolvedValue({ id: "reset-code" });
+    prisma.emailVerificationCode.updateMany.mockResolvedValue({ count: 0 });
+
+    const result = await service.confirmPasswordReset({
+      email: "Reset@Example.COM",
+      code: "654321",
+      password: "new-password-123",
+      confirmPassword: "new-password-123",
+    });
+
+    expect(result.success).toBe(true);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 77 },
+      data: {
+        passwordHash: expect.any(String),
+        emailVerifiedAt: expect.any(Date),
+      },
+    });
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { userId: 77, revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(prisma.emailVerificationCode.update).toHaveBeenCalledWith({
+      where: { id: "reset-code" },
+      data: { status: "CONSUMED", consumedAt: expect.any(Date) },
     });
   });
 
@@ -363,7 +538,7 @@ describe("AuthService", () => {
     );
   });
 
-  it("logs in from Telegram Mini App for a linked active user", async () => {
+  it("logs in from a linked client session for an active user", async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 13,
       uuid: "13131313-1313-4313-8313-131313131313",
@@ -399,13 +574,14 @@ describe("AuthService", () => {
         data: expect.objectContaining({
           userId: 13,
           userAgent: "TelegramWebView",
-          deviceLabel: "Telegram Mini App",
+          deviceLabel: "Linked client session",
         }),
       }),
     );
   });
 
-  it("rejects Telegram Mini App login when the signature is invalid", async () => {
+
+  it("rejects linked client session login when the signature is invalid", async () => {
     const params = new URLSearchParams({
       auth_date: String(Math.floor(Date.now() / 1000)),
       user: JSON.stringify({ id: 1348887499 }),
@@ -413,17 +589,17 @@ describe("AuthService", () => {
     });
 
     await expect(service.loginWithTelegramMiniApp(params.toString())).rejects.toThrow(
-      "Telegram Mini App auth signature is invalid",
+      "Linked client sign-in signature is invalid",
     );
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
-  it("rejects Telegram Mini App login when Telegram is not linked", async () => {
+  it("rejects linked client session login when account is not linked", async () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
     await expect(
       service.loginWithTelegramMiniApp(signedTelegramInitData({ id: 1348887499 })),
-    ).rejects.toThrow("Telegram account is not linked to NearLoy");
+    ).rejects.toThrow("Account is not linked to NearLoy");
   });
 
   it("rotates a valid refresh token and issues a restored session", async () => {

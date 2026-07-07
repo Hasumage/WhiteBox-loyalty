@@ -11,7 +11,7 @@ import { UpdateProfilePreferencesDto } from "./dto/update-profile-preferences.dt
 import { RegisteredService } from "./registered.service";
 
 /**
- * TWA client–only API surface (same audience as Home / Map / History / Profile).
+ * Client app API surface (same audience as Home / Map / History / Profile).
  * `JwtAuthMiddleware` + **CLIENT** role only.
  */
 @ApiTags("registered")
@@ -92,20 +92,20 @@ export class RegisteredController {
   }
 
   @Get("dashboard")
-  @ApiOperation({ summary: "TWA dashboard data from database" })
+  @ApiOperation({ summary: "Client dashboard data from database" })
   dashboard(@CurrentUser() user: RequestUser) {
     return this.registeredService.dashboard(user.userId);
   }
 
   @Get("marketplace")
-  @ApiOperation({ summary: "TWA marketplace categories and active subscription plans" })
+  @ApiOperation({ summary: "Client marketplace categories and active subscription plans" })
   @ApiQuery({ name: "category", required: false, type: String })
   marketplace(@CurrentUser() user: RequestUser, @Query("category") category?: string) {
     return this.registeredService.marketplace(user.userId, category);
   }
 
   @Get("companies")
-  @ApiOperation({ summary: "TWA partner companies with user points and level progress" })
+  @ApiOperation({ summary: "Partner companies with user points and level progress" })
   companies(@CurrentUser() user: RequestUser) {
     return this.registeredService.listCompanies(user.userId);
   }
@@ -122,7 +122,7 @@ export class RegisteredController {
   }
 
   @Get("wallet")
-  @ApiOperation({ summary: "TWA wallet cards and total point balance" })
+  @ApiOperation({ summary: "Client wallet cards and total point balance" })
   wallet(@CurrentUser() user: RequestUser) {
     return this.registeredService.wallet(user.userId);
   }
@@ -140,7 +140,7 @@ export class RegisteredController {
   }
 
   @Get("history")
-  @ApiOperation({ summary: "TWA operation history and archived subscriptions" })
+  @ApiOperation({ summary: "Client operation history and archived subscriptions" })
   history(@CurrentUser() user: RequestUser) {
     return this.registeredService.history(user.userId);
   }
