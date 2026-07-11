@@ -57,6 +57,7 @@ Client app:
 Admin:
 
 - `/admin` dashboard.
+- `/admin/ai` permission-scoped admin AI assistant for operational questions, safe proposals and confirmed actions.
 - `/admin/tasks`, `/admin/tasks/[uuid]` operational Kanban, task detail, assignment and archive workflow.
 - `/admin/users`, `/admin/users/[uuid]`, `/admin/users/[uuid]/permissions` user operations and granular permissions.
 - `/admin/categories` category dictionary.
@@ -69,7 +70,7 @@ Admin:
 - `/admin/leads` and `/admin/leads/[uuid]` landing lead inbox with Telegram delivery history.
 - `/admin/telegram` admin Telegram direct-message connection.
 - `/admin/support` support-only workspace.
-- `/admin/finance` finance operations, approval queue and payout workflow.
+- `/admin/finance` finance operations, approval queue, YooKassa test payouts, manual payout closure and company/PR balance coverage.
 - `/admin/subscriptions` KPI/SLA/forecast analytics.
 - `/admin/profile-statuses` profile status catalog and icon set.
 - `/admin/growth` promo codes and referral campaign rules.
@@ -109,10 +110,14 @@ Company portal:
 - `apps/api/src/registered/registered.service.ts` - DB-backed mobile read models.
 - `apps/api/src/auth/auth.service.ts` - auth, sessions, account freeze/reactivation.
 - `apps/api/src/email/email.service.ts` - production-safe email delivery through Resend/SMTP fallback and message ledger.
+- `apps/api/src/ai-gateway/*` - protected OpenAI Responses gateway for local development environments that cannot call OpenAI directly.
 - `apps/api/src/payments/*` - YooKassa checkout, webhook/status sync, payment expiration and saved method encryption.
 - `apps/api/src/maintenance/*` - restore-time maintenance lock.
 - `src/middleware.ts` - web route UX redirection based on JWT role/expiry; API remains the security boundary.
 - `src/app/(portal)/admin/tasks/*` - admin operations Kanban and task detail workflow.
+- `src/app/(portal)/admin/ai/page.tsx` - admin AI chat UI with permission-scoped context and optional image attachment.
+- `src/lib/admin-ai/*` - modular admin AI context, OpenAI integration, permissions and safe action application.
+- `src/lib/finance/payout-operations.ts` and `src/lib/finance/yookassa-payouts.ts` - payout target resolution, checklist/coverage and YooKassa payout integration.
 - `src/app/(portal)/admin/payments/page.tsx` - provider payment ledger.
 - `src/app/(portal)/admin/system-health/page.tsx` - critical incident cockpit.
 - `src/app/(portal)/admin/database/page.tsx` - visual DB map synced with Prisma models.
@@ -149,5 +154,9 @@ Company portal:
 - Subscription and company billing payments use YooKassa checkout. Successful provider payments are stored in `Payment` and activate the subscription or billing invoice after status sync/webhook confirmation.
 - Pending YooKassa payments have a 15-minute payment window. Active pending payments are reused to prevent duplicate orders; expired pending payments are finalized as unsuccessful.
 - Saved company YooKassa methods store only encrypted provider method identifiers and card metadata; NearLoy does not store card data.
+- Finance payouts can be sent through the YooKassa test payout gateway or closed manually after a real external transfer. Manual closure stays available for the launch model.
+- Admin AI is modular and permission-scoped. It may answer, summarize and prepare supported safe actions, but never expands an operator's permissions.
+- Protected auth pages use fetch-level session recovery: on expired access tokens the UI shows a recovery overlay and attempts refresh before redirecting.
+- Daily Telegram reports can be delivered by `scripts/daily-report-scheduler.mjs` at the configured Moscow time.
 - Company media currently uses runtime/local storage. Production needs persistent volume or external object storage before heavy real-world media usage.
 - Recent merged PR context is tracked in `docs/project-map/recent-prs.md`.

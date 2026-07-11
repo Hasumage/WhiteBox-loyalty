@@ -22,10 +22,13 @@ function moneyToString(value: number) {
   return value.toFixed(2);
 }
 
-async function expireStaleCompanyPayments(companyId: number) {
+async function expireStaleCompanyPayments(companyId: number, ownerUserId: number) {
   await prisma.payment.updateMany({
     where: {
-      companyId,
+      OR: [
+        { companyId },
+        { userId: ownerUserId, purpose: "COMPANY_NEARLOY_SUBSCRIPTION" },
+      ],
       status: { in: ["PENDING", "WAITING_FOR_CAPTURE"] },
       createdAt: { lt: new Date(Date.now() - paymentCheckoutTtlMs) },
     },
@@ -69,13 +72,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const companyId = owner.managedCompany.id;
-  await expireStaleCompanyPayments(companyId);
+  await expireStaleCompanyPayments(companyId, owner.id);
 
   const [incomingPayments, outgoingOperations] = await Promise.all([
     prisma.payment.findMany({
       where: {
         OR: [
           { companyId },
+          { userId: owner.id, purpose: "COMPANY_NEARLOY_SUBSCRIPTION" },
           { subscription: { companyId } },
           { subscriptionBundle: { participants: { some: { companyId } } } },
         ],

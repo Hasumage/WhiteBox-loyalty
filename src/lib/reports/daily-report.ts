@@ -2,6 +2,8 @@
 import { adminTelegramRecipients } from "@/lib/telegram/admin-chat";
 import { sendTelegramMessageQueued } from "@/lib/telegram/telegram-queue";
 
+const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
+
 export type DailyReportSnapshot = {
   generatedAt: Date;
   usersTotal: number;
@@ -68,8 +70,17 @@ export type DailyReportDelivery = {
   errors: string[];
 };
 
-function startOfLocalDay(now: Date) {
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+function startOfMoscowDay(now: Date) {
+  const moscowDate = new Date(now.getTime() + MOSCOW_UTC_OFFSET_MS);
+  return new Date(
+    Date.UTC(moscowDate.getUTCFullYear(), moscowDate.getUTCMonth(), moscowDate.getUTCDate()) -
+      MOSCOW_UTC_OFFSET_MS,
+  );
+}
+
+function startOfMoscowMonth(now: Date) {
+  const moscowDate = new Date(now.getTime() + MOSCOW_UTC_OFFSET_MS);
+  return new Date(Date.UTC(moscowDate.getUTCFullYear(), moscowDate.getUTCMonth(), 1) - MOSCOW_UTC_OFFSET_MS);
 }
 
 function toNumber(value: unknown) {
@@ -78,6 +89,15 @@ function toNumber(value: unknown) {
   if (typeof value === "string") return Number(value);
   if (typeof value === "object" && "toString" in value) return Number(value.toString());
   return 0;
+}
+
+function dailyReportBotToken() {
+  const mode = process.env.DAILY_REPORT_BOT;
+  if (mode === "dev") return process.env.TELEGRAM_DEV_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+  if (mode === "prod") return process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_DEV_BOT_TOKEN;
+  if (process.env.NODE_ENV === "production") return process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_DEV_BOT_TOKEN;
+  if (process.env.TELEGRAM_LOCAL_BOT === "dev") return process.env.TELEGRAM_DEV_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+  return process.env.TELEGRAM_DEV_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
 }
 
 export function formatRub(value: number) {
@@ -158,8 +178,8 @@ export function formatDailyReport(snapshot: DailyReportSnapshot) {
 }
 
 export async function buildDailyReportSnapshot(now = new Date()): Promise<DailyReportSnapshot> {
-  const dayStart = startOfLocalDay(now);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const dayStart = startOfMoscowDay(now);
+  const monthStart = startOfMoscowMonth(now);
   const soon = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
   const [
@@ -352,7 +372,7 @@ export async function sendDailyReport(now = new Date()): Promise<DailyReportDeli
   const snapshot = await buildDailyReportSnapshot(now);
   const text = formatDailyReport(snapshot);
   const recipients = adminTelegramRecipients();
-  const botToken = process.env.TELEGRAM_DEV_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+  const botToken = dailyReportBotToken();
 
   if (!botToken) {
     return {

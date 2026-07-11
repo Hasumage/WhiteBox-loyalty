@@ -2,7 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { CompanyMemberRole, LoyaltyTransactionType, SubscriptionStatus } from "@prisma/client";
+import { CompanyMemberRole, LoyaltyTransactionType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CompanyAiLocationsService } from "./ai-locations/company-ai-locations.service";
 import type { CompanyAiLocationsDraft } from "./ai-locations/company-ai-locations.types";
@@ -336,6 +336,11 @@ export class CompanyAiService {
 
   async assist(userId: number, dto: CompanyAiAssistDto): Promise<CompanyAiAssistResult> {
     const locale = dto.locale ?? "ru";
+    const deterministicGreeting = this.deterministicGreetingReply(dto, locale);
+    if (deterministicGreeting) {
+      return { ...deterministicGreeting, website: null };
+    }
+
     const deterministicLoyaltyDraft = this.deterministicLoyaltyDraft(dto, locale);
     if (deterministicLoyaltyDraft) {
       return { ...deterministicLoyaltyDraft, website: null };
@@ -355,8 +360,9 @@ export class CompanyAiService {
     }
 
     const apiKey = this.config.get<string>("OPENAI_API_KEY")?.trim();
-    if (!apiKey) {
-      throw new ServiceUnavailableException("OpenAI API key is not configured.");
+    const gatewayUrl = this.config.get<string>("OPENAI_GATEWAY_URL")?.trim();
+    if (!apiKey && !gatewayUrl) {
+      return { ...this.aiUnavailableReply(locale), website: this.websiteInfo(website) };
     }
 
     const imageDataUrl = this.safeImageDataUrl(dto.imageDataUrl);
@@ -383,14 +389,8 @@ export class CompanyAiService {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), COMPANY_AI_TIMEOUT_MS);
     try {
-      const response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const response = await this.fetchOpenAiResponses(
+        {
           model,
           store: false,
           max_output_tokens: maxOutputTokens,
@@ -413,12 +413,14 @@ export class CompanyAiService {
               schema: RESULT_SCHEMA,
             },
           },
-        }),
-      });
+        },
+        apiKey,
+        controller.signal,
+      );
 
       const payload = (await response.json().catch(() => null)) as OpenAiResponsePayload | null;
       if (!response.ok) {
-        throw new ServiceUnavailableException(payload?.error?.message ?? `OpenAI request failed with HTTP ${response.status}.`);
+        throw new ServiceUnavailableException(`OpenAI request failed with HTTP ${response.status}.`);
       }
 
       const result = this.normalizePendingAction(this.parseResult(payload));
@@ -429,14 +431,79 @@ export class CompanyAiService {
         website: this.websiteInfo(website),
       };
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) throw error;
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new ServiceUnavailableException("OpenAI request timed out.");
-      }
-      throw new ServiceUnavailableException("OpenAI request failed.");
+      console.warn("[company-ai] OpenAI request failed", error instanceof Error ? error.message : error);
+      return { ...this.aiUnavailableReply(locale), website: this.websiteInfo(website) };
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private deterministicGreetingReply(
+    dto: CompanyAiAssistDto,
+    locale: "ru" | "en",
+  ): Omit<CompanyAiAssistResult, "website"> | null {
+    const text = this.latestUserText(dto).toLowerCase().replace(/[!?.]+/g, "").trim();
+    if (!/^(привет|здравствуй|здравствуйте|добрый день|добрый вечер|доброе утро|hi|hello|hey)$/i.test(text)) {
+      return null;
+    }
+
+    return {
+      intent: "ANSWER",
+      reply:
+        locale === "ru"
+          ? "Привет! Я рядом: могу показать статистику, подготовить изменения карточки компании, помочь с акциями, уровнями, локациями и сайтом. Просто напишите задачу обычными словами."
+          : "Hi! I can show stats, prepare company profile changes, help with offers, loyalty levels, locations, and website details. Just describe the task in plain language.",
+      pendingAction: null,
+      warnings: [],
+      blockedActions: [],
+    };
+  }
+
+  private aiUnavailableReply(locale: "ru" | "en"): Omit<CompanyAiAssistResult, "website"> {
+    return {
+      intent: "NEED_MORE_INFO",
+      reply:
+        locale === "ru"
+          ? "Сейчас не могу подключиться к AI. Попробуйте ещё раз через пару минут — вашу компанию это не затрагивает, просто помощник временно не получил ответ."
+          : "I cannot reach AI right now. Please try again in a couple of minutes — your company data is safe, the assistant just did not receive a response.",
+      pendingAction: null,
+      warnings: [locale === "ru" ? "AI временно недоступен." : "AI is temporarily unavailable."],
+      blockedActions: [],
+    };
+  }
+
+  private fetchOpenAiResponses(body: Record<string, unknown>, apiKey: string | undefined, signal: AbortSignal) {
+    const gatewayUrl = this.config.get<string>("OPENAI_GATEWAY_URL")?.trim();
+    if (gatewayUrl) {
+      const gatewaySecret = this.config.get<string>("OPENAI_GATEWAY_SECRET")?.trim();
+      if (!gatewaySecret) {
+        throw new ServiceUnavailableException("AI gateway secret is not configured.");
+      }
+      return fetch(gatewayUrl, {
+        method: "POST",
+        signal,
+        headers: {
+          "Content-Type": "application/json",
+          "x-ai-gateway-secret": gatewaySecret,
+        },
+        body: JSON.stringify(body),
+      });
+    }
+
+    if (!apiKey) {
+      throw new ServiceUnavailableException("OpenAI API key is not configured.");
+    }
+
+    const baseUrl = (this.config.get<string>("OPENAI_BASE_URL")?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
+    return fetch(`${baseUrl}/responses`, {
+      method: "POST",
+      signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
   }
 
   private systemPrompt(locale: "ru" | "en") {

@@ -141,6 +141,7 @@ Operations:
 - `Subscription 1:N PromoCode` for activation promos.
 - `PromoCode 1:N PromoCodeRedemption`.
 - `Payment` can target user subscriptions, user subscription bundles or company NearLoy billing invoices depending on `PaymentPurpose`.
+- `FinanceOperation` tracks company/PR payout requests, approvals and closures. Provider payout fields store YooKassa payout id/status, idempotence key, destination type/label, provider payload and provider request/sync timestamps.
 - `EmailVerificationCode` is reused for registration and password-reset codes through `EmailVerificationPurpose`.
 
 ## Company-specific points
@@ -162,6 +163,16 @@ Company NearLoy billing is represented by:
 - `Payment` with `PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION` for YooKassa provider transactions.
 
 Provider card data is never stored in NearLoy. Saved company payment methods store encrypted YooKassa method identifiers plus display metadata such as card brand/last4.
+
+## Finance operations and payouts
+
+`FinanceOperation` is the operational payout ledger:
+
+- Company payouts must be covered by the company's available payout balance.
+- PR-agent payouts must be covered by earned unpaid referral commission.
+- YooKassa payout metadata is optional and currently intended for test-gateway validation.
+- Manual closure remains a first-class path for launch: admins can record method/reference/comment after an external transfer.
+- Provider status changes notify the shared admin chat but are not treated as critical system-fire tasks by default.
 
 ## Public company media
 

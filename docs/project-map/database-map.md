@@ -82,7 +82,7 @@ The visual map should track all Prisma models. Current schema models:
 - `Loyalty Structure`: categories, companies, balances, levels and loyalty transactions.
 - `Growth: Promo + Referral`: promo, referral and reward ledger models.
 - `Map + Branches`: company locations, categories and map-related context.
-- `Billing + Payments`: YooKassa payments, company billing account/invoices/promos and finance operations.
+- `Billing + Payments`: YooKassa payments, company billing account/invoices/promos, finance operations and payout provider metadata.
 - `Company Public Media`: company slug, logo/hero/gallery assets and special offers.
 - `Operations`: admin tasks, system alerts, landing leads and notification queues.
 

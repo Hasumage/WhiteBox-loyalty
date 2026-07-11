@@ -1,4 +1,5 @@
 import { getAccessToken } from "./auth-client";
+import { fetchWithAuthRecovery } from "./authenticated-fetch";
 
 export type CompanyMemberRole = "OWNER" | "MANAGER" | "CASHIER";
 export type EntitlementWindow = "DAY" | "WEEK" | "MONTH" | "TERM" | "UNLIMITED";
@@ -394,7 +395,7 @@ function normalizeCompanyApiMessage(message: unknown) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBase()}${path}`, {
+  const response = await fetchWithAuthRecovery(`${apiBase()}${path}`, {
     cache: "no-store",
     ...init,
     headers: { ...headers(Boolean(init?.body)), ...init?.headers },
@@ -408,7 +409,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function nextCompanyRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetchWithAuthRecovery(path, {
     cache: "no-store",
     ...init,
     headers: { Authorization: `Bearer ${getAccessToken() ?? ""}`, ...init?.headers },
@@ -541,7 +542,7 @@ export async function companyDeleteCompanyLocation(locationUuid: string) {
 }
 
 export async function submitCompanyVerification(formData: FormData) {
-  const response = await fetch("/api/company/verification", {
+  const response = await fetchWithAuthRecovery("/api/company/verification", {
     method: "POST",
     headers: { Authorization: `Bearer ${getAccessToken() ?? ""}` },
     body: formData,
@@ -886,7 +887,7 @@ export function getCompanyBillingPayment(uuid: string) {
 }
 
 export async function requestCompanyPayout(body: { amount: number; details?: string }) {
-  const response = await fetch("/api/company/finance/payouts", {
+  const response = await fetchWithAuthRecovery("/api/company/finance/payouts", {
     method: "POST",
     cache: "no-store",
     headers: headers(true),

@@ -39,7 +39,9 @@ import {
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { PageTransition } from "@/components/PageTransition";
+import { AuthRecoveryOverlay } from "@/components/auth/AuthRecoveryOverlay";
 import { clearStoredSession, getStoredUser } from "@/lib/api/auth-client";
+import { fetchWithAuthRecovery } from "@/lib/api/authenticated-fetch";
 import { companyBilling, type CompanyBillingData } from "@/lib/api/company-client";
 import { getCompanyBillingWarning } from "@/lib/company-billing-warning";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
@@ -63,6 +65,7 @@ const adminMenu: AdminMenuSection[] = [
     items: [
       { href: "/admin", labelKey: "admin.nav.dashboard", icon: LayoutDashboard },
       { href: "/admin/tasks", labelKey: "admin.nav.tasks", icon: ClipboardList },
+      { href: "/admin/ai", labelKey: "admin.nav.aiAssistant", icon: Sparkles },
     ],
   },
   {
@@ -237,7 +240,7 @@ export default function PortalLayout({
 
     async function loadNotifications() {
       try {
-        const res = await fetch("/api/admin/menu-notifications", { cache: "no-store" });
+        const res = await fetchWithAuthRecovery("/api/admin/menu-notifications", { cache: "no-store" });
         if (!res.ok) return;
         const data = (await res.json()) as MenuNotifications;
         if (active) setNotifications({ items: data.items ?? {}, sections: data.sections ?? {} });
@@ -548,6 +551,7 @@ export default function PortalLayout({
           </div>
         </div>
       )}
+      <AuthRecoveryOverlay />
     </div>
   );
 }
