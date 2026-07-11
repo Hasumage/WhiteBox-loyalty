@@ -76,4 +76,28 @@ describe("admin task signal routing", () => {
       }),
     );
   });
+
+  it("does not keep routine finance status changes as critical audit tasks", async () => {
+    mockedPrisma.auditEvent.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "audit-finance-status-1" }] as never);
+    mockedPrisma.companyVerificationApplication.findMany.mockResolvedValue([] as never);
+    mockedPrisma.financeOperation.findMany.mockResolvedValue([] as never);
+
+    await syncAdminTasksFromSignals();
+
+    expect(mockedPrisma.adminTask.upsert).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { sourceKey: "audit:audit-finance-status-1" } }),
+    );
+    expect(mockedPrisma.adminTask.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          source: "AUDIT",
+          sourceKey: { in: ["audit:audit-finance-status-1"] },
+          status: { in: ["OPEN", "IN_PROGRESS"] },
+        }),
+        data: expect.objectContaining({ status: "RESOLVED" }),
+      }),
+    );
+  });
 });

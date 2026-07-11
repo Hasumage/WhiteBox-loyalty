@@ -21,6 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const owner = await prisma.user.findUnique({
     where: { uuid },
     select: {
+      id: true,
       uuid: true,
       name: true,
       email: true,
@@ -115,7 +116,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       _sum: { amount: true },
     }).catch(() => []),
     prisma.payment.findMany({
-      where: { companyId: company.id },
+      where: {
+        OR: [
+          { companyId: company.id },
+          { userId: owner.id, purpose: "COMPANY_NEARLOY_SUBSCRIPTION" },
+        ],
+      },
       orderBy: { createdAt: "desc" },
       take: 5,
       select: {
@@ -162,6 +168,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       item.expiresAt <= new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
   ).length;
   const invoice = billingInvoices[0] ?? null;
+  const account =
+    billingAccount
+      ? {
+          status: billingAccount.status,
+          trialStartedAt: billingAccount.trialStartedAt,
+          trialEndsAt: billingAccount.trialEndsAt,
+          currentPeriodStartsAt: billingAccount.currentPeriodStartsAt,
+          currentPeriodEndsAt: billingAccount.currentPeriodEndsAt,
+        }
+      : invoice && (invoice.status === "PAID" || invoice.status === "WAIVED") && invoice.periodEndsAt > now
+        ? {
+            status: "ACTIVE" as const,
+            trialStartedAt: null,
+            trialEndsAt: null,
+            currentPeriodStartsAt: invoice.periodStartsAt,
+            currentPeriodEndsAt: invoice.periodEndsAt,
+          }
+        : null;
   const pointsEarned = loyaltyTotals.find((row) => row.type === "EARN")?._sum.amount ?? 0;
   const pointsSpent = loyaltyTotals.find((row) => row.type === "SPEND")?._sum.amount ?? 0;
 
@@ -171,15 +195,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       profile: { id: company.id, name: company.name, slug: company.slug, isActive: company.isActive },
     },
     billing: {
-      account: billingAccount
-        ? {
-            status: billingAccount.status,
-            trialStartedAt: billingAccount.trialStartedAt,
-            trialEndsAt: billingAccount.trialEndsAt,
-            currentPeriodStartsAt: billingAccount.currentPeriodStartsAt,
-            currentPeriodEndsAt: billingAccount.currentPeriodEndsAt,
-          }
-        : null,
+      account,
       invoice: invoice
         ? {
             uuid: invoice.uuid,

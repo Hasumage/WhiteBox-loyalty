@@ -806,6 +806,15 @@ model FinanceOperation {
   companyId      Int?
   title          String
   details        String?                @db.Text
+  payoutProvider PaymentProvider?
+  providerPayoutId String?              @unique
+  providerPayoutStatus String?
+  providerIdempotenceKey String?        @unique
+  providerPayload Json?
+  payoutDestinationType String?
+  payoutDestinationLabel String?
+  payoutProviderRequestedAt DateTime?
+  payoutProviderSyncedAt DateTime?
   requestedById  Int?
   approvedById   Int?
   requestedAt    DateTime?
@@ -821,6 +830,7 @@ model FinanceOperation {
   @@index([status, createdAt])
   @@index([companyId, createdAt])
   @@index([requestedById, createdAt])
+  @@index([payoutProvider, providerPayoutStatus])
 }
 
 model TelegramLinkToken {

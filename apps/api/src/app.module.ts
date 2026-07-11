@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { join } from "path";
+import { AiGatewayModule } from "./ai-gateway/ai-gateway.module";
 import { AdminController } from "./admin/admin.controller";
 import { AdminModule } from "./admin/admin.module";
 import { AuthModule } from "./auth/auth.module";
@@ -31,6 +32,7 @@ import { RegisteredModule } from "./registered/registered.module";
     PrismaModule,
     AuthModule,
     AdminModule,
+    AiGatewayModule,
     CompanyModule,
     RegisteredModule,
     PaymentsModule,

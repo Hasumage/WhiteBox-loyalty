@@ -92,8 +92,18 @@ PAYMENT_RECONCILIATION_LOOKBACK_HOURS=24
 PAYMENT_RECONCILIATION_BATCH_SIZE=50
 PAYMENT_METHOD_ENCRYPTION_KEY=<long-random-secret-min-32-chars>
 OPENAI_API_KEY=<openai-api-key>
+OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-5.4-nano
 OPENAI_COMPANY_ASSISTANT_MAX_OUTPUT_TOKENS=420
+OPENAI_ADMIN_ASSISTANT_MODEL=gpt-5.4-nano
+OPENAI_ADMIN_ASSISTANT_MAX_OUTPUT_TOKENS=680
+AI_GATEWAY_SECRET=<long-random-secret-for-server-to-server-ai-gateway>
+DAILY_REPORT_SCHEDULER_ENABLED=true
+DAILY_REPORT_TIME_MSK=23:00
+DAILY_REPORT_SECRET=<same-secret-used-by-admin-daily-report-endpoint>
+YOOKASSA_PAYOUT_AGENT_ID=<yookassa-payout-agent-id>
+YOOKASSA_PAYOUT_SECRET_KEY=<yookassa-payout-secret-key>
+YOOKASSA_PAYOUT_ALLOW_RAW_CARD=false
 ```
 
 Email delivery is mandatory in production. Use an HTTP provider such as Resend on Railway Hobby because outbound SMTP is
@@ -105,6 +115,16 @@ For provider-specific SMTP routing you may also configure
 
 The company AI assistant is optional. Keep `OPENAI_API_KEY` only on the API service. The default `gpt-5.4-nano`
 model and compact output token cap keep the four company helper actions inexpensive; raise `OPENAI_MODEL` only when quality is not enough.
+The admin AI assistant uses the same OpenAI key unless `OPENAI_ADMIN_ASSISTANT_MODEL` is overridden. It is permission-scoped in the app and still needs regular admin JWT/auth checks.
+If local development cannot call OpenAI directly, route local API/web calls through the deployed API gateway:
+`OPENAI_GATEWAY_URL=https://<api-domain>/api/internal/ai/responses` and `OPENAI_GATEWAY_SECRET=<same value as AI_GATEWAY_SECRET>`.
+Do not set `OPENAI_GATEWAY_URL` on the API service itself, otherwise it can recursively call its own gateway.
+
+Daily Telegram reporting is not automatic unless the scheduler process is running. For Railway, add a small worker/service that runs
+`npm run reports:daily:scheduler` with `DAILY_REPORT_SCHEDULER_ENABLED=true`, or trigger `npm run reports:daily:send` from an external scheduler.
+
+YooKassa payouts are currently intended for the test gateway and manual operational validation. Keep manual payout closure enabled for launch;
+do not enable raw-card payout mode for real production cards.
 
 The API health endpoint is:
 

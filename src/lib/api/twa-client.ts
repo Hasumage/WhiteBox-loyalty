@@ -1,4 +1,5 @@
 import { getAccessToken } from "./auth-client";
+import { fetchWithAuthRecovery } from "./authenticated-fetch";
 import { clearTwaCache, readTwaCache, writeTwaCache } from "./twa-cache";
 import type { ApiCategory } from "./categories-client";
 
@@ -361,7 +362,7 @@ async function getJson<T>(path: string, fallback: T, ttlMs = TWA_CACHE_TTL_MS, f
   if (!force && cached.hit && !cached.expired) return cached.data;
 
   try {
-    const res = await fetch(`${apiBase()}${path}`, {
+    const res = await fetchWithAuthRecovery(`${apiBase()}${path}`, {
       method: "GET",
       headers: authHeaders(),
       cache: "no-store",
@@ -377,7 +378,7 @@ async function getJson<T>(path: string, fallback: T, ttlMs = TWA_CACHE_TTL_MS, f
 
 async function postJson<T>(path: string, body: unknown, fallbackMessage: string) {
   try {
-    const res = await fetch(`${apiBase()}${path}`, {
+    const res = await fetchWithAuthRecovery(`${apiBase()}${path}`, {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify(body),
@@ -396,7 +397,7 @@ async function postJson<T>(path: string, body: unknown, fallbackMessage: string)
 
 async function putJson<T>(path: string, body: unknown, fallbackMessage: string) {
   try {
-    const res = await fetch(`${apiBase()}${path}`, {
+    const res = await fetchWithAuthRecovery(`${apiBase()}${path}`, {
       method: "PUT",
       headers: authHeaders(),
       body: JSON.stringify(body),
@@ -415,7 +416,7 @@ async function putJson<T>(path: string, body: unknown, fallbackMessage: string) 
 
 async function nextApiJson<T>(path: string, options: RequestInit, fallbackMessage: string) {
   try {
-    const res = await fetch(path, {
+    const res = await fetchWithAuthRecovery(path, {
       ...options,
       headers: {
         ...authHeaders(),
@@ -656,7 +657,7 @@ export function getArchivedTwaSubscriptions() {
 }
 
 export async function activateTwaSubscription(uuid: string) {
-  const res = await fetch(`${apiBase()}/registered/subscriptions/${uuid}/activate`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/registered/subscriptions/${uuid}/activate`, {
     method: "POST",
     headers: authHeaders(),
     cache: "no-store",
@@ -672,7 +673,7 @@ export async function activateTwaSubscription(uuid: string) {
 }
 
 export async function createTwaSubscriptionCheckout(uuid: string) {
-  const res = await fetch(`${apiBase()}/registered/payments/subscriptions/${uuid}/checkout`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/registered/payments/subscriptions/${uuid}/checkout`, {
     method: "POST",
     headers: authHeaders(),
     cache: "no-store",
@@ -687,7 +688,7 @@ export async function createTwaSubscriptionCheckout(uuid: string) {
 }
 
 export async function getTwaPayment(uuid: string) {
-  const res = await fetch(`${apiBase()}/registered/payments/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/registered/payments/${uuid}`, {
     headers: authHeaders(),
     cache: "no-store",
   });

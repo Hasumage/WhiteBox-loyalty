@@ -38,6 +38,7 @@
 | `/company/settings/locations` | Company addresses and map data | COMPANY owner/manager |
 | `/company/settings/media` | Public logo, hero, gallery and special offers | COMPANY owner/manager |
 | `/admin` | Live operations dashboard and priority task queue | ADMIN/MANAGER by permission |
+| `/admin/ai` | Permission-scoped admin AI assistant with safe confirmed actions | ADMIN/MANAGER by permission |
 | `/admin/tasks` | Full operations Kanban with filters, assignment and archive | ADMIN/MANAGER by source permission |
 | `/admin/tasks/[uuid]` | Task resolution workspace and source handoff | ADMIN/MANAGER by source permission |
 | `/admin/users`, `/admin/users/[uuid]` | User operations | ADMIN |
@@ -51,7 +52,7 @@
 | `/admin/company-verifications`, `/admin/company-verifications/[uuid]` | Verified company intake review | ADMIN/MANAGER |
 | `/admin/leads`, `/admin/leads/[uuid]` | Landing lead inbox and Telegram delivery history | ADMIN/MANAGER |
 | `/admin/telegram` | Admin Telegram direct-message link | ADMIN |
-| `/admin/finance` | Finance operations and approval workflow | MANAGER/SUPER_ADMIN |
+| `/admin/finance` | Finance operations, payout coverage, YooKassa test payouts and manual closure | MANAGER/SUPER_ADMIN |
 | `/admin/support` | Support-only workspace | SUPPORT |
 | `/admin/subscriptions` | Subscription analytics | ADMIN |
 | `/admin/growth` | Promo/referral management | ADMIN |
@@ -120,6 +121,10 @@
 - Task cards stay compact; detailed descriptions, reassignment and archive actions live in the modal/detail view.
 - `/admin/system-health` shows critical alerts and sources first. Telegram queue is secondary diagnostics, not the main health object.
 - Company catalog mirrors user-table visual style: filters/chips, search on Enter, hidden UUID column while UUID search still works, long names truncated safely.
+- `/admin/ai` is a full-height chat surface, not a quick-command panel. It uses plain-language prompts, optional image paste/upload and permission-scoped context.
+- Admin AI output should read like an operational assistant: concise greeting, concrete findings, tables for finance/PR debt when useful, and explicit confirmation before supported safe actions.
+- `/admin/finance` stays dense: the operator sees the queue immediately, selects a payout, then uses the side inspector for checklist, payout/company details, YooKassa test payout or manual close. Long company/payout names are truncated with full values in tooltips.
+- Finance scrollbars are styled to the dark UI; raw browser-white scrollbars should not appear in the payout workspace.
 
 ## Company UX
 

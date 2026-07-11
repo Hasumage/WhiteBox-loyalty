@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { resolveEffectivePermission } from "@/lib/admin/access-control";
-import { calculateCompanyReferralPayoutCoverage, COMPANY_REFERRAL_PAYOUT_TITLE } from "@/lib/company-referrals/company-referrals";
+import { calculateCompanyReferralPayoutCoverage } from "@/lib/company-referrals/company-referrals";
 import { calculateCompanyFinancialSnapshot, evaluatePayoutCoverage } from "@/lib/finance/company-finance";
+import { buildPayoutChecklist, isReferralPayout, resolvePayoutTarget } from "@/lib/finance/payout-operations";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -30,10 +31,6 @@ function financeAccess(actor: Awaited<ReturnType<typeof actorFromSession>>) {
   return resolveEffectivePermission(actor?.role ?? "CLIENT", explicit, "FINANCE");
 }
 
-function isReferralPayout(item: { companyId: number | null; requestedById: number | null; title: string; type: string }) {
-  return item.type === "PAYOUT_REQUEST" && !item.companyId && Boolean(item.requestedById) && item.title.startsWith(COMPANY_REFERRAL_PAYOUT_TITLE);
-}
-
 export async function GET(request: NextRequest) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
@@ -46,7 +43,18 @@ export async function GET(request: NextRequest) {
     orderBy: { createdAt: "desc" },
     take: 80,
     include: {
-      company: { select: { id: true, slug: true, name: true } },
+      company: {
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          payoutBankName: true,
+          payoutBik: true,
+          payoutAccount: true,
+          payoutCorrespondentAccount: true,
+          payoutCardLast4: true,
+        },
+      },
       requestedBy: { select: { id: true, uuid: true, email: true, name: true } },
       approvedBy: { select: { id: true, uuid: true, email: true, name: true } },
     },
@@ -100,15 +108,20 @@ export async function GET(request: NextRequest) {
   );
 
   return NextResponse.json({
-    items: items.map((item) => ({
-      ...item,
-      payoutTarget: item.companyId ? "COMPANY" : isReferralPayout(item) ? "PR_AGENT" : "UNLINKED",
-      companySnapshot:
+    items: items.map((item) => {
+      const companySnapshot =
         item.companyId && snapshots.has(item.companyId)
           ? evaluatePayoutCoverage(snapshots.get(item.companyId)!, item)
-          : null,
-      referralSnapshot: referralCoverages.get(item.uuid) ?? null,
-    })),
+          : null;
+      const referralSnapshot = referralCoverages.get(item.uuid) ?? null;
+      return {
+        ...item,
+        payoutTarget: resolvePayoutTarget(item),
+        payoutChecklist: buildPayoutChecklist(item, companySnapshot, referralSnapshot),
+        companySnapshot,
+        referralSnapshot,
+      };
+    }),
   });
 }
 

@@ -1,4 +1,5 @@
 import { getAccessToken } from "./auth-client";
+import { fetchWithAuthRecovery } from "./authenticated-fetch";
 import { clearTwaCache, readTwaCache, writeTwaCache } from "./twa-cache";
 
 export type ApiCategory = {
@@ -36,7 +37,7 @@ export async function getRegisteredCategories(): Promise<ApiCategory[]> {
   if (cached.hit && !cached.expired) return cached.data;
 
   try {
-    const res = await fetch(`${apiBase()}/registered/categories`, {
+    const res = await fetchWithAuthRecovery(`${apiBase()}/registered/categories`, {
       method: "GET",
       headers: authHeaders(),
     });
@@ -58,7 +59,7 @@ export async function getFavoriteCategorySlugs(): Promise<string[]> {
   if (cached.hit && !cached.expired) return cached.data;
 
   try {
-    const res = await fetch(`${apiBase()}/registered/favorite-categories`, {
+    const res = await fetchWithAuthRecovery(`${apiBase()}/registered/favorite-categories`, {
       method: "GET",
       headers: authHeaders(),
     });
@@ -72,7 +73,7 @@ export async function getFavoriteCategorySlugs(): Promise<string[]> {
 }
 
 export async function saveFavoriteCategorySlugs(categorySlugs: string[]) {
-  const res = await fetch(`${apiBase()}/registered/favorite-categories`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/registered/favorite-categories`, {
     method: "PUT",
     headers: authHeaders(),
     body: JSON.stringify({ categorySlugs }),

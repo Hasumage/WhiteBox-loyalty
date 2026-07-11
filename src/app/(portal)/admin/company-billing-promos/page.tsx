@@ -5,6 +5,7 @@ import { BadgePercent, CalendarClock, Power, Sparkles, TicketPercent } from "luc
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getAccessToken } from "@/lib/api/auth-client";
+import { fetchWithAuthRecovery } from "@/lib/api/authenticated-fetch";
 
 type Promo = {
   uuid: string;
@@ -18,7 +19,7 @@ type Promo = {
 };
 
 async function api(path = "", init?: RequestInit) {
-  const response = await fetch(`/api/admin/company-billing-promos${path}`, {
+  const response = await fetchWithAuthRecovery(`/api/admin/company-billing-promos${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",

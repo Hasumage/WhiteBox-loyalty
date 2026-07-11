@@ -21,7 +21,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { clearStoredSession, getAccessToken, refreshStoredSession } from "@/lib/api/auth-client";
+import { getAccessToken } from "@/lib/api/auth-client";
+import { fetchWithAuthRecovery } from "@/lib/api/authenticated-fetch";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
 
@@ -74,28 +75,7 @@ function localAdminHeaders(): HeadersInit {
 }
 
 async function fetchAdminRoute(input: RequestInfo | URL, init: RequestInit = {}) {
-  const requestInit: RequestInit = {
-    ...init,
-    credentials: "include",
-    headers: {
-      ...localAdminHeaders(),
-      ...(init.headers ?? {}),
-    },
-  };
-  const first = await fetch(input, requestInit);
-  if (first.status !== 401) return first;
-
-  const refreshed = await refreshStoredSession();
-  if (!refreshed) {
-    clearStoredSession();
-    if (typeof window !== "undefined") {
-      const next = `${window.location.pathname}${window.location.search}`;
-      window.location.assign(`/login?next=${encodeURIComponent(next)}`);
-    }
-    return first;
-  }
-
-  return fetch(input, {
+  return fetchWithAuthRecovery(input, {
     ...init,
     credentials: "include",
     headers: {

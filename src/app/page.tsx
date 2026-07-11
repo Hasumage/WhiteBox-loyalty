@@ -94,8 +94,8 @@ export default function HomePage() {
             Храните бонусы, подписки, уровни и историю операций в телефоне. Показывайте QR на кассе, получайте сервис быстрее и используйте преимущества партнёров без пластиковых карт.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href="/register" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-base font-semibold text-[#07101e] shadow-[0_0_34px_rgba(255,255,255,0.18)] transition hover:bg-white/90">
-              Создать аккаунт
+            <Link href="/login" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-base font-semibold text-[#07101e] shadow-[0_0_34px_rgba(255,255,255,0.18)] transition hover:bg-white/90">
+              Войти
               <ArrowRight className="h-5 w-5" />
             </Link>
             <Link href="/business" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/7 px-6 text-base font-semibold text-white transition hover:bg-white/12">

@@ -327,3 +327,131 @@ export async function calculateCompanyReferralPayoutCoverage(
   };
 }
 
+export async function getCompanyReferralLiabilityReport(db: PrismaLike = prisma) {
+  const [referrals, payouts] = await Promise.all([
+    db.companyReferral.findMany({
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      include: {
+        referrer: { select: { id: true, uuid: true, name: true, email: true } },
+        company: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            isActive: true,
+            verificationStatus: true,
+            platformCommissionPercent: true,
+            commissionFreeMonthlyTurnover: true,
+            commissionGraceEndsAt: true,
+            supportManagerId: true,
+            subscriptions: {
+              select: {
+                id: true,
+                price: true,
+                userPlans: {
+                  where: { status: { in: ["ACTIVE", "EXPIRED"] } },
+                  select: { status: true, activatedAt: true, expiresAt: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    db.financeOperation.findMany({
+      where: {
+        companyId: null,
+        type: "PAYOUT_REQUEST",
+        title: { startsWith: COMPANY_REFERRAL_PAYOUT_TITLE },
+        status: { in: ["PENDING_APPROVAL", "APPROVED", "PAID"] },
+        requestedById: { not: null },
+      },
+      select: { requestedById: true, amount: true, status: true },
+    }),
+  ]);
+
+  const summary = calculatePlatformRevenueSummary(toRevenueRows(referrals));
+  const byAgent = new Map<
+    number,
+    {
+      userId: number;
+      uuid: string;
+      name: string;
+      email: string;
+      companies: number;
+      activeCompanies: number;
+      recognizedGross: number;
+      referralCommission: number;
+      reserved: number;
+      paid: number;
+      availableBalance: number;
+      unpaidTotal: number;
+    }
+  >();
+
+  for (const referral of referrals) {
+    const existing = byAgent.get(referral.referrerUserId);
+    if (existing) {
+      existing.companies += 1;
+      existing.activeCompanies += referral.status === "ACTIVE" && referral.company.isActive ? 1 : 0;
+      continue;
+    }
+    byAgent.set(referral.referrerUserId, {
+      userId: referral.referrerUserId,
+      uuid: referral.referrer.uuid,
+      name: referral.referrer.name || referral.referrer.email,
+      email: referral.referrer.email,
+      companies: 1,
+      activeCompanies: referral.status === "ACTIVE" && referral.company.isActive ? 1 : 0,
+      recognizedGross: 0,
+      referralCommission: 0,
+      reserved: 0,
+      paid: 0,
+      availableBalance: 0,
+      unpaidTotal: 0,
+    });
+  }
+
+  for (const company of summary.companies) {
+    if (!company.referralUserId) continue;
+    const agent = byAgent.get(company.referralUserId);
+    if (!agent) continue;
+    agent.recognizedGross = money(agent.recognizedGross + company.recognizedGross);
+    agent.referralCommission = money(agent.referralCommission + company.referralCommission);
+  }
+
+  for (const payout of payouts) {
+    if (!payout.requestedById) continue;
+    const agent = byAgent.get(payout.requestedById);
+    if (!agent) continue;
+    if (payout.status === "PAID") {
+      agent.paid = money(agent.paid + Number(payout.amount));
+    } else {
+      agent.reserved = money(agent.reserved + Number(payout.amount));
+    }
+  }
+
+  const agents = [...byAgent.values()]
+    .map((agent) => ({
+      ...agent,
+      availableBalance: money(Math.max(0, agent.referralCommission - agent.reserved - agent.paid)),
+      unpaidTotal: money(Math.max(0, agent.referralCommission - agent.paid)),
+    }))
+    .filter((agent) => agent.unpaidTotal > 0)
+    .sort((left, right) => right.unpaidTotal - left.unpaidTotal);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    agentsWithDebt: agents.length,
+    totalUnpaid: money(agents.reduce((sum, agent) => sum + agent.unpaidTotal, 0)),
+    totalAvailableBalance: money(agents.reduce((sum, agent) => sum + agent.availableBalance, 0)),
+    totalReserved: money(agents.reduce((sum, agent) => sum + agent.reserved, 0)),
+    totalPaid: money(agents.reduce((sum, agent) => sum + agent.paid, 0)),
+    topAgents: agents.slice(0, 20).map((agent) => ({
+      ...agent,
+      userUrl: `/admin/users/${agent.uuid}`,
+      financeUrl: "/admin/finance",
+    })),
+  };
+}
+

@@ -1,6 +1,21 @@
 # Recent merged PRs
 
-This document summarizes the last five merged PRs that define the current NearLoy product state.
+This document summarizes the recent product PRs and the current pending update that define the current NearLoy product state.
+
+## Current update — Admin AI, finance payouts, auth recovery and operations polish
+
+- Admin AI assistant was added under `/admin/ai` with permission-scoped context modules for overview, companies, users, finance, payments, PR, tasks, audit, Telegram and verification.
+- Admin AI uses OpenAI when configured, can attach/paste images, keeps chat context client-side for the current page session, and may only propose/apply safe actions allowed by the admin's own permissions.
+- Admin AI can prepare safe follow-up actions such as creating admin tasks or extending company NearLoy access; it must not bypass passwords, roles, payouts, provider secrets or permission gates.
+- Company AI was hardened with a protected gateway path for local environments where direct OpenAI access is blocked; API keys remain server-side only.
+- `/admin/finance` was rebuilt into a compact payout cockpit: action queue, selected-operation inspector, company/PR balance coverage, YooKassa test payout, manual payout closure, checklist, translated template reasons and styled scrollbars.
+- Finance operations now store provider payout metadata, destination labels, provider timestamps and status, with a Prisma migration and finance payout seed data for manual testing.
+- YooKassa payouts are available as a test-gateway path, while manual closure stays available for the self-employed launch model.
+- Company pages gained manual NearLoy subscription extension by admins with month/day duration support and optional Telegram notifications for company owners.
+- Authentication recovery now retries refresh-token login from protected pages and shows a friendly overlay instead of dumping users into a raw unauthorized state.
+- Landing header was rearranged around login-first CTAs and a compact mobile menu.
+- Daily Telegram reports gained a scheduler script and Railway/local wiring so the 23:00 Moscow report can run outside manual endpoint calls.
+- Production email/runtime docs now describe Resend, SMTP fallback, AI gateway configuration and Railway-specific environment expectations.
 
 ## PR #21 — Hotfix production email delivery handling
 

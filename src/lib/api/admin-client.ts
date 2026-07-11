@@ -1,4 +1,5 @@
 import { getAccessToken } from "./auth-client";
+import { fetchWithAuthRecovery } from "./authenticated-fetch";
 
 export type AdminRole = "CLIENT" | "COMPANY" | "ADMIN" | "SUPER_ADMIN" | "MANAGER" | "SUPPORT";
 
@@ -278,6 +279,70 @@ export type AdminTasksBoardResponse = {
   assignees: Array<{ id: number; uuid: string; name: string; email: string; role: string }>;
 };
 
+export type AdminAiChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type AdminAiImageAttachment = {
+  dataUrl: string;
+};
+
+export type AdminAiPendingAction =
+  | {
+      type: "EXTEND_COMPANY_BILLING";
+      title: string;
+      description: string;
+      payload: {
+        ownerUserUuid: string;
+        companyName: string;
+        months: number;
+        comment?: string;
+        notificationText?: string;
+        notifyTelegram: boolean;
+      };
+    }
+  | {
+      type: "CREATE_ADMIN_TASK";
+      title: string;
+      description: string;
+      payload: {
+        title: string;
+        description?: string;
+        priority: AdminTaskPriority;
+        source: AdminTaskSource;
+      };
+    };
+
+export type AdminAiTable = {
+  title: string;
+  summary?: string;
+  columns: Array<{
+    key: string;
+    label: string;
+    align?: "left" | "right";
+  }>;
+  rows: Array<Record<string, string | number | null>>;
+  totalRows?: number;
+};
+
+export type AdminAiAssistResponse = {
+  reply: string;
+  intent: string;
+  data?: Record<string, unknown>;
+  table?: AdminAiTable;
+  pendingAction?: AdminAiPendingAction | null;
+  suggestions?: string[];
+};
+
+export type AdminAiMetaResponse = {
+  actor: {
+    role: string;
+    permissions: Array<{ scope: string; canView: boolean; canEdit: boolean; canApprove: boolean }>;
+  };
+  popularQueries: string[];
+};
+
 export type AdminDashboardResponse = {
   generatedAt: string;
   metrics: {
@@ -476,20 +541,60 @@ export type AdminFinanceOperation = {
   currency: string;
   title: string;
   details: string | null;
+  payoutProvider: "YOOKASSA" | null;
+  providerPayoutId: string | null;
+  providerPayoutStatus: string | null;
+  providerIdempotenceKey: string | null;
+  providerPayload: unknown | null;
+  payoutDestinationType: string | null;
+  payoutDestinationLabel: string | null;
+  payoutProviderRequestedAt: string | null;
+  payoutProviderSyncedAt: string | null;
   requestedAt: string | null;
   approvedAt: string | null;
   processedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  company: { id: number; slug: string; name: string } | null;
+  company: {
+    id: number;
+    slug: string;
+    name: string;
+    payoutBankName?: string | null;
+    payoutBik?: string | null;
+    payoutAccount?: string | null;
+    payoutCorrespondentAccount?: string | null;
+    payoutCardLast4?: string | null;
+  } | null;
   requestedBy: { id: number; uuid: string; email: string; name: string } | null;
   approvedBy: { id: number; uuid: string; email: string; name: string } | null;
   payoutTarget?: "COMPANY" | "PR_AGENT" | "UNLINKED";
+  payoutChecklist?: {
+    target: "COMPANY" | "PR_AGENT" | "UNLINKED";
+    targetLabel: string;
+      settlementMode: "MANUAL_OR_YOOKASSA";
+    providerLabel: string;
+    nextAction: string;
+    canApprove: boolean;
+    canMarkPaid: boolean;
+    requiresManualReference: boolean;
+    warnings: string[];
+    requisites: {
+      bankName: string | null;
+      bik: string | null;
+      accountMasked: string | null;
+      correspondentAccountMasked: string | null;
+      cardLast4: string | null;
+    } | null;
+  };
   companySnapshot?: {
     subscriptionGross: number;
     recognizedRevenue: number;
     potentialRevenue: number;
     dailyRevenue: number;
+    whiteBoxCommission: number;
+    referralCommission: number;
+    supportManagerCommission: number;
+    companyRecognizedRevenue: number;
     activeSubscriptions: number;
     reservedPayouts: number;
     paidPayouts: number;
@@ -777,6 +882,28 @@ export type AdminCompanyOverview = {
     paidAt: string | null;
     createdAt: string;
   }>;
+};
+
+export type AdminCompanyBillingExtensionInput = {
+  months?: number;
+  days?: number;
+  comment?: string;
+  notificationText?: string;
+  notifyTelegram?: boolean;
+};
+
+export type AdminCompanyBillingExtensionResponse = {
+  company: AdminCompanyOverview["company"];
+  billing: AdminCompanyOverview["billing"];
+  notification: {
+    text: string;
+    telegram: {
+      attempted: number;
+      delivered: number;
+      queued: number;
+      skipped: number;
+    };
+  };
 };
 
 export type AdminCompanySecurity = {
@@ -1228,7 +1355,7 @@ export async function adminListUsers(options?: {
   if (options?.sortDir) params.set("sortDir", options.sortDir);
   const suffix = params.toString() ? `?${params}` : "";
   try {
-    const res = await fetch(`${apiBase()}/admin/users${suffix}`, { headers: authHeaders() });
+    const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users${suffix}`, { headers: authHeaders() });
     if (!res.ok) return null;
     return (await res.json()) as AdminUsersResponse;
   } catch {
@@ -1242,7 +1369,7 @@ export async function adminCreateAccount(input: {
   password: string;
   role: AdminRole;
 }) {
-  const res = await fetch(`${apiBase()}/admin/accounts`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/accounts`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1258,7 +1385,7 @@ export async function adminGetUser(uuid: string): Promise<
   | { ok: true; data: AdminUserDetail }
   | { ok: false; status: number; message: string }
 > {
-  const res = await fetch(`${apiBase()}/admin/users/${uuid}`, { headers: authHeaders() });
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}`, { headers: authHeaders() });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     const message = Array.isArray(data.message) ? data.message.join(", ") : data.message ?? "Request failed";
@@ -1268,7 +1395,7 @@ export async function adminGetUser(uuid: string): Promise<
 }
 
 export async function adminUpdateUser(uuid: string, input: AdminUpdateUserInput) {
-  const res = await fetch(`${apiBase()}/admin/users/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1281,7 +1408,7 @@ export async function adminUpdateUser(uuid: string, input: AdminUpdateUserInput)
 }
 
 export async function adminUpdateUserRole(uuid: string, role: AdminRole) {
-  const res = await fetch(`${apiBase()}/admin/users/${uuid}/role`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/role`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify({ role }),
@@ -1294,7 +1421,7 @@ export async function adminUpdateUserRole(uuid: string, role: AdminRole) {
 }
 
 export async function adminDeleteUser(uuid: string) {
-  const res = await fetch(`${apiBase()}/admin/users/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}`, {
     method: "DELETE",
     headers: authHeaders(),
   });
@@ -1306,7 +1433,7 @@ export async function adminDeleteUser(uuid: string) {
 }
 
 export async function adminForceLogoutUser(uuid: string) {
-  const res = await fetch(`${apiBase()}/admin/users/${uuid}/force-logout`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/force-logout`, {
     method: "POST",
     headers: authHeaders(),
   });
@@ -1318,7 +1445,7 @@ export async function adminForceLogoutUser(uuid: string) {
 }
 
 export async function adminReactivateUser(uuid: string) {
-  const res = await fetch(`${apiBase()}/admin/users/${uuid}/reactivate-account`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/reactivate-account`, {
     method: "POST",
     headers: authHeaders(),
   });
@@ -1330,7 +1457,7 @@ export async function adminReactivateUser(uuid: string) {
 }
 
 export async function adminRequestEmailChange(uuid: string, newEmail: string) {
-  const res = await fetch(`${apiBase()}/admin/users/${uuid}/email-change-request`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/email-change-request`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ newEmail }),
@@ -1357,7 +1484,7 @@ export async function adminSendEmail(input: {
   subject: string;
   message: string;
 }) {
-  const res = await fetch(`${apiBase()}/admin/email/send`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/email/send`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1376,7 +1503,7 @@ export async function adminListProfileStatuses(userUuid?: string) {
   const params = new URLSearchParams();
   if (userUuid) params.set("userUuid", userUuid);
   const suffix = params.toString() ? `?${params}` : "";
-  const res = await fetch(`/api/admin/profile-statuses${suffix}`, { headers: authHeaders() });
+  const res = await fetchWithAuthRecovery(`/api/admin/profile-statuses${suffix}`, { headers: authHeaders() });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     return { ok: false as const, message: data.message ?? "Failed to load profile statuses" };
@@ -1391,7 +1518,7 @@ export async function adminCreateProfileStatus(input: {
   icon?: string;
   slug?: string;
 }) {
-  const res = await fetch("/api/admin/profile-statuses", {
+  const res = await fetchWithAuthRecovery("/api/admin/profile-statuses", {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1404,7 +1531,7 @@ export async function adminCreateProfileStatus(input: {
 }
 
 export async function adminGrantProfileStatus(userUuid: string, statusId: string) {
-  const res = await fetch(`/api/admin/users/${userUuid}/profile-statuses`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/users/${userUuid}/profile-statuses`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ statusId }),
@@ -1417,7 +1544,7 @@ export async function adminGrantProfileStatus(userUuid: string, statusId: string
 }
 
 export async function adminListCategories() {
-  const res = await fetch(`${apiBase()}/admin/categories`, { headers: authHeaders() });
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/categories`, { headers: authHeaders() });
   if (!res.ok) return [];
   return (await res.json()) as AdminCategory[];
 }
@@ -1428,7 +1555,7 @@ export async function adminCreateCategory(input: {
   description?: string;
   icon: string;
 }) {
-  const res = await fetch(`${apiBase()}/admin/categories`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/categories`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1441,7 +1568,7 @@ export async function adminCreateCategory(input: {
 }
 
 export async function adminUpdateCategory(id: number, input: Partial<Pick<AdminCategory, "slug" | "name" | "description" | "icon">>) {
-  const res = await fetch(`${apiBase()}/admin/categories/${id}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/categories/${id}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1454,7 +1581,7 @@ export async function adminUpdateCategory(id: number, input: Partial<Pick<AdminC
 }
 
 export async function adminDeleteCategory(id: number) {
-  const res = await fetch(`${apiBase()}/admin/categories/${id}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/categories/${id}`, {
     method: "DELETE",
     headers: authHeaders(),
   });
@@ -1470,7 +1597,7 @@ export async function adminListCompanyUsers(query?: string) {
   if (query) params.set("query", query);
   const suffix = params.toString() ? `?${params}` : "";
   try {
-    const res = await fetch(`${apiBase()}/admin/company-users${suffix}`, { headers: authHeaders() });
+    const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users${suffix}`, { headers: authHeaders() });
     if (!res.ok) return [];
     return (await res.json()) as AdminCompanyUser[];
   } catch {
@@ -1483,7 +1610,7 @@ export async function adminListCompanyProfiles(query?: string) {
   if (query) params.set("query", query);
   const suffix = params.toString() ? `?${params}` : "";
   try {
-    const res = await fetch(`${apiBase()}/admin/company-profiles${suffix}`, { headers: authHeaders() });
+    const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-profiles${suffix}`, { headers: authHeaders() });
     if (!res.ok) return [];
     return (await res.json()) as AdminCompanyProfileOption[];
   } catch {
@@ -1500,7 +1627,7 @@ export async function adminAssignUserCompany(
     deactivatePreviousMemberships?: boolean;
   },
 ) {
-  const res = await fetch(`${apiBase()}/admin/users/${uuid}/company-assignment`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/company-assignment`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1515,7 +1642,7 @@ export async function adminAssignUserCompany(
 
 export async function adminGetCompanyUser(uuid: string) {
   try {
-    const res = await fetch(`${apiBase()}/admin/company-users/${uuid}`, { headers: authHeaders() });
+    const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}`, { headers: authHeaders() });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
@@ -1532,7 +1659,7 @@ export async function adminGetCompanyUser(uuid: string) {
 }
 
 export async function adminGetCompanyPayments(uuid: string) {
-  const res = await fetch(`/api/admin/company-users/${uuid}/payments`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/company-users/${uuid}/payments`, {
     headers: authHeaders(),
     cache: "no-store",
   });
@@ -1545,7 +1672,7 @@ export async function adminGetCompanyPayments(uuid: string) {
 
 export async function adminGetCompanyOverview(uuid: string) {
   try {
-    const res = await fetch(`/api/admin/company-users/${uuid}/overview`, {
+    const res = await fetchWithAuthRecovery(`/api/admin/company-users/${uuid}/overview`, {
       headers: authHeaders(),
       cache: "no-store",
     });
@@ -1563,9 +1690,22 @@ export async function adminGetCompanyOverview(uuid: string) {
   }
 }
 
+export async function adminExtendCompanyBilling(uuid: string, input: AdminCompanyBillingExtensionInput) {
+  const res = await fetchWithAuthRecovery(`/api/admin/company-users/${uuid}/billing-extension`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to extend company billing" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminCompanyBillingExtensionResponse };
+}
+
 export async function adminGetCompanySecurity(uuid: string) {
   try {
-    const res = await fetch(`/api/admin/company-users/${uuid}/security`, {
+    const res = await fetchWithAuthRecovery(`/api/admin/company-users/${uuid}/security`, {
       headers: authHeaders(),
       cache: "no-store",
     });
@@ -1588,7 +1728,7 @@ export async function adminGetCompanyReferral(uuid: string, query?: string) {
   if (query) params.set("query", query);
   const suffix = params.toString() ? `?${params}` : "";
   try {
-    const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/referral${suffix}`, {
+    const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/referral${suffix}`, {
       headers: authHeaders(),
     });
     if (!res.ok) {
@@ -1614,7 +1754,7 @@ export async function adminUpsertCompanyReferral(uuid: string, input: {
   source?: string;
   notes?: string;
 }) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/referral`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/referral`, {
     method: "PUT",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1628,7 +1768,7 @@ export async function adminUpsertCompanyReferral(uuid: string, input: {
 }
 
 export async function adminEndCompanyReferral(uuid: string) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/referral`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/referral`, {
     method: "DELETE",
     headers: authHeaders(),
   });
@@ -1646,7 +1786,7 @@ export async function adminUpdateCompanyUser(uuid: string, input: {
   emailVerifiedAt?: string | null;
   createdAt?: string | null;
 }) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1659,7 +1799,7 @@ export async function adminUpdateCompanyUser(uuid: string, input: {
 }
 
 export async function adminDeleteCompanyUser(uuid: string) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}`, {
     method: "DELETE",
     headers: authHeaders(),
   });
@@ -1682,7 +1822,7 @@ export async function adminCreateCompanyLocation(uuid: string, input: {
   isMain?: boolean;
   isActive?: boolean;
 }) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/locations`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/locations`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1707,7 +1847,7 @@ export async function adminUpdateCompanyLocation(uuid: string, locationUuid: str
   isMain?: boolean;
   isActive?: boolean;
 }) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/locations/${locationUuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/locations/${locationUuid}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1721,7 +1861,7 @@ export async function adminUpdateCompanyLocation(uuid: string, locationUuid: str
 }
 
 export async function adminDeleteCompanyLocation(uuid: string, locationUuid: string) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/locations/${locationUuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/locations/${locationUuid}`, {
     method: "DELETE",
     headers: authHeaders(),
   });
@@ -1750,7 +1890,7 @@ export async function adminListCompanyClients(
   if (options?.sortBy) params.set("sortBy", options.sortBy);
   if (options?.sortDir) params.set("sortDir", options.sortDir);
   const suffix = params.toString() ? `?${params}` : "";
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/clients${suffix}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/clients${suffix}`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -1776,7 +1916,7 @@ export async function adminUpsertCompanyProfile(uuid: string, input: {
   isActive?: boolean;
   operatesOnline?: boolean;
 }) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/company-profile`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/company-profile`, {
     method: "PUT",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1807,7 +1947,7 @@ export async function adminCreateCompanySubscription(uuid: string, input: {
     windowUnit: "DAY" | "WEEK" | "MONTH" | "TERM" | "UNLIMITED";
   }>;
 }) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/subscriptions`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/subscriptions`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1836,7 +1976,7 @@ export async function adminUpdateCompanySubscription(
     categoryId: number;
   }>,
 ) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/subscriptions/${subscriptionUuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/subscriptions/${subscriptionUuid}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1849,7 +1989,7 @@ export async function adminUpdateCompanySubscription(
 }
 
 export async function adminDeleteCompanySubscription(uuid: string, subscriptionUuid: string) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/subscriptions/${subscriptionUuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/subscriptions/${subscriptionUuid}`, {
     method: "DELETE",
     headers: authHeaders(),
   });
@@ -1871,7 +2011,7 @@ export async function adminCreateCompanySubscriptionEntitlement(
     windowUnit: "DAY" | "WEEK" | "MONTH" | "TERM" | "UNLIMITED";
   },
 ) {
-  const res = await fetch(`${apiBase()}/admin/company-users/${uuid}/subscriptions/${subscriptionUuid}/entitlements`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/company-users/${uuid}/subscriptions/${subscriptionUuid}/entitlements`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1885,7 +2025,7 @@ export async function adminCreateCompanySubscriptionEntitlement(
 
 export async function adminSubscriptionStats() {
   try {
-    const res = await fetch(`${apiBase()}/admin/subscriptions/stats`, {
+    const res = await fetchWithAuthRecovery(`${apiBase()}/admin/subscriptions/stats`, {
       headers: authHeaders(),
     });
     if (!res.ok) return null;
@@ -1908,7 +2048,7 @@ export async function adminListPayments(options?: {
   if (options?.limit) params.set("limit", String(options.limit));
   const suffix = params.toString() ? `?${params}` : "";
   try {
-    const res = await fetch(`/api/admin/payments${suffix}`, {
+    const res = await fetchWithAuthRecovery(`/api/admin/payments${suffix}`, {
       headers: authHeaders(),
       cache: "no-store",
     });
@@ -1928,7 +2068,7 @@ export async function adminListPayments(options?: {
 }
 
 export async function adminFindSubscriptionByUuid(uuid: string) {
-  const res = await fetch(`${apiBase()}/admin/subscriptions/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/subscriptions/${uuid}`, {
     headers: authHeaders(),
   });
   if (!res.ok) return null;
@@ -1944,7 +2084,7 @@ export async function adminSearchSubscriptions(query: string) {
   const params = new URLSearchParams();
   if (query.trim()) params.set("query", query.trim());
   const suffix = params.toString() ? `?${params}` : "";
-  const res = await fetch(`${apiBase()}/admin/subscriptions/search${suffix}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/subscriptions/search${suffix}`, {
     headers: authHeaders(),
   });
   if (!res.ok) return [];
@@ -1953,7 +2093,7 @@ export async function adminSearchSubscriptions(query: string) {
 }
 
 export async function adminListPairedSubscriptions() {
-  const res = await fetch(`${apiBase()}/admin/subscriptions/bundles`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/subscriptions/bundles`, {
     headers: authHeaders(),
   });
   if (!res.ok) return [];
@@ -1978,7 +2118,7 @@ export async function adminCreatePairedSubscription(input: {
     revenueSharePercent: number;
   }>;
 }) {
-  const res = await fetch(`${apiBase()}/admin/subscriptions/bundles`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/subscriptions/bundles`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -1993,7 +2133,7 @@ export async function adminCreatePairedSubscription(input: {
 
 export async function adminListPromoCodes() {
   try {
-    const res = await fetch(`${apiBase()}/admin/promo-codes`, { headers: authHeaders() });
+    const res = await fetchWithAuthRecovery(`${apiBase()}/admin/promo-codes`, { headers: authHeaders() });
     if (!res.ok) return [];
     return (await res.json()) as AdminPromoCode[];
   } catch {
@@ -2013,7 +2153,7 @@ export async function adminCreatePromoCode(input: {
   expiresAt?: string | null;
   isActive?: boolean;
 }) {
-  const res = await fetch(`${apiBase()}/admin/promo-codes`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/promo-codes`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -2038,7 +2178,7 @@ export async function adminUpdatePromoCode(id: number, input: Partial<{
   expiresAt: string | null;
   isActive: boolean;
 }>) {
-  const res = await fetch(`${apiBase()}/admin/promo-codes/${id}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/promo-codes/${id}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -2053,7 +2193,7 @@ export async function adminUpdatePromoCode(id: number, input: Partial<{
 
 export async function adminGetReferralCampaign() {
   try {
-    const res = await fetch(`${apiBase()}/admin/referral-campaign`, { headers: authHeaders() });
+    const res = await fetchWithAuthRecovery(`${apiBase()}/admin/referral-campaign`, { headers: authHeaders() });
     if (!res.ok) return null;
     return (await res.json()) as AdminReferralCampaign;
   } catch {
@@ -2065,7 +2205,7 @@ export async function adminUpdateReferralCampaign(input: Partial<Pick<
   AdminReferralCampaign,
   "title" | "inviterBonusPoints" | "invitedBonusPoints" | "isActive"
 >> & { bonusCompanyUuid?: string | null }) {
-  const res = await fetch(`${apiBase()}/admin/referral-campaign`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/referral-campaign`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -2092,7 +2232,7 @@ export async function adminListAuditEvents(options?: {
   if (options?.page) params.set("page", String(options.page));
   if (options?.limit) params.set("limit", String(options.limit));
   const suffix = params.toString() ? `?${params}` : "";
-  const res = await fetch(`${apiBase()}/admin/audit${suffix}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/audit${suffix}`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -2116,7 +2256,7 @@ export async function adminCreateAuditEvent(input: {
   linkUrl?: string;
   linkLabel?: string;
 }) {
-  const res = await fetch(`${apiBase()}/admin/audit`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/audit`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -2129,7 +2269,7 @@ export async function adminCreateAuditEvent(input: {
 }
 
 export async function adminListBackups() {
-  const res = await fetch(`${apiBase()}/admin/backups`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/backups`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -2143,7 +2283,7 @@ export async function adminCreateBackup(input?: {
   label?: string;
   kind?: "CURRENT" | "SEED" | "MANUAL";
 }) {
-  const res = await fetch(`${apiBase()}/admin/backups`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/backups`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input ?? {}),
@@ -2156,7 +2296,7 @@ export async function adminCreateBackup(input?: {
 }
 
 export async function adminRestoreBackup(backupId: string) {
-  const res = await fetch(`${apiBase()}/admin/backups/${backupId}/restore`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/backups/${backupId}/restore`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ confirm: true }),
@@ -2173,7 +2313,7 @@ export async function adminRestoreBackup(backupId: string) {
 }
 
 export async function adminRestoreStatus() {
-  const res = await fetch(`${apiBase()}/admin/backups/restore-status`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/backups/restore-status`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -2185,7 +2325,7 @@ export async function adminRestoreStatus() {
 }
 
 export async function adminDeleteBackup(backupId: string) {
-  const res = await fetch(`${apiBase()}/admin/backups/${backupId}`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/backups/${backupId}`, {
     method: "DELETE",
     headers: authHeaders(),
   });
@@ -2197,7 +2337,7 @@ export async function adminDeleteBackup(backupId: string) {
 }
 
 export async function adminDownloadBackup(backupId: string) {
-  const res = await fetch(`${apiBase()}/admin/backups/${backupId}/file`, {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/backups/${backupId}/file`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -2234,7 +2374,7 @@ export async function adminListLandingLeads(options?: {
   if (options?.page) params.set("page", String(options.page));
   if (options?.limit) params.set("limit", String(options.limit));
   const suffix = params.toString() ? `?${params}` : "";
-  const res = await fetch(`/api/admin/landing-leads${suffix}`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/landing-leads${suffix}`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -2245,7 +2385,7 @@ export async function adminListLandingLeads(options?: {
 }
 
 export async function adminGetLandingLead(uuid: string) {
-  const res = await fetch(`/api/admin/landing-leads/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/landing-leads/${uuid}`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -2259,7 +2399,7 @@ export async function adminUpdateLandingLead(uuid: string, input: {
   status: AdminLandingLeadStatus;
   notes?: string;
 }) {
-  const res = await fetch(`/api/admin/landing-leads/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/landing-leads/${uuid}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -2272,7 +2412,7 @@ export async function adminUpdateLandingLead(uuid: string, input: {
 }
 
 export async function adminRetryLandingLead(uuid: string) {
-  const res = await fetch(`/api/admin/landing-leads/${uuid}/retry`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/landing-leads/${uuid}/retry`, {
     method: "POST",
     headers: authHeaders(),
   });
@@ -2284,7 +2424,7 @@ export async function adminRetryLandingLead(uuid: string) {
 }
 
 export async function adminRetryDueLandingLeads() {
-  const res = await fetch("/api/admin/landing-leads/retry-due", {
+  const res = await fetchWithAuthRecovery("/api/admin/landing-leads/retry-due", {
     method: "POST",
     headers: authHeaders(),
   });
@@ -2299,7 +2439,7 @@ export async function adminRetryDueLandingLeads() {
 }
 
 export async function adminGetSystemHealth() {
-  const res = await fetch("/api/admin/system-health", {
+  const res = await fetchWithAuthRecovery("/api/admin/system-health", {
     headers: authHeaders(),
     cache: "no-store",
   });
@@ -2311,7 +2451,7 @@ export async function adminGetSystemHealth() {
 }
 
 export async function adminGetDashboard() {
-  const res = await fetch("/api/admin/dashboard", {
+  const res = await fetchWithAuthRecovery("/api/admin/dashboard", {
     headers: authHeaders(),
     cache: "no-store",
   });
@@ -2322,8 +2462,46 @@ export async function adminGetDashboard() {
   return { ok: true as const, data: (await res.json()) as AdminDashboardResponse };
 }
 
+export async function adminGetAiMeta() {
+  const res = await fetchWithAuthRecovery("/api/admin/ai/assist", {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to fetch admin AI meta" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminAiMetaResponse };
+}
+
+export async function adminAskAi(input: { message: string; messages: AdminAiChatMessage[]; imageDataUrl?: string }) {
+  const res = await fetchWithAuthRecovery("/api/admin/ai/assist", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to ask admin AI" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminAiAssistResponse };
+}
+
+export async function adminApplyAiAction(action: AdminAiPendingAction) {
+  const res = await fetchWithAuthRecovery("/api/admin/ai/apply", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, message: data.message ?? "Failed to apply admin AI action" };
+  }
+  return { ok: true as const, data: (await res.json()) as { reply: string; data?: unknown } };
+}
+
 export async function adminGetTask(uuid: string) {
-  const res = await fetch(`/api/admin/tasks/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/tasks/${uuid}`, {
     headers: authHeaders(),
     cache: "no-store",
   });
@@ -2335,7 +2513,7 @@ export async function adminGetTask(uuid: string) {
 }
 
 export async function adminGetTasksBoard() {
-  const res = await fetch("/api/admin/tasks", {
+  const res = await fetchWithAuthRecovery("/api/admin/tasks", {
     headers: authHeaders(),
     cache: "no-store",
   });
@@ -2347,7 +2525,7 @@ export async function adminGetTasksBoard() {
 }
 
 export async function adminUpdateTask(uuid: string, action: "start" | "resolve" | "reopen" | "archive" | "assign", assignedToId?: number | null) {
-  const res = await fetch(`/api/admin/tasks/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/tasks/${uuid}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify({ action, ...(action === "assign" ? { assignedToId } : {}) }),
@@ -2368,7 +2546,7 @@ export async function adminCreateTask(input: {
   source: AdminTaskSource;
   assignedToId?: number | null;
 }) {
-  const res = await fetch("/api/admin/tasks", {
+  const res = await fetchWithAuthRecovery("/api/admin/tasks", {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -2381,7 +2559,7 @@ export async function adminCreateTask(input: {
 }
 
 export async function adminRetryTelegramQueue() {
-  const res = await fetch("/api/admin/telegram/retry-queue", {
+  const res = await fetchWithAuthRecovery("/api/admin/telegram/retry-queue", {
     method: "POST",
     headers: authHeaders(),
   });
@@ -2399,7 +2577,7 @@ export async function adminRetryTelegramQueue() {
 }
 
 export async function adminResolveSystemHealthIncident(id: string) {
-  const res = await fetch("/api/admin/system-health", {
+  const res = await fetchWithAuthRecovery("/api/admin/system-health", {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ action: "resolveDeveloperIncident", id }),
@@ -2423,7 +2601,7 @@ export async function adminListCompanyVerifications(options?: {
   if (options?.page) params.set("page", String(options.page));
   if (options?.limit) params.set("limit", String(options.limit));
   const suffix = params.toString() ? `?${params}` : "";
-  const res = await fetch(`/api/admin/company-verifications${suffix}`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/company-verifications${suffix}`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -2434,7 +2612,7 @@ export async function adminListCompanyVerifications(options?: {
 }
 
 export async function adminGetCompanyVerification(uuid: string) {
-  const res = await fetch(`/api/admin/company-verifications/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/company-verifications/${uuid}`, {
     headers: authHeaders(),
   });
   if (!res.ok) {
@@ -2447,7 +2625,7 @@ export async function adminGetCompanyVerification(uuid: string) {
 export async function adminUpdateCompanyVerification(uuid: string, input: {
   status: Exclude<AdminCompanyVerificationStatus, "DRAFT">;
 }) {
-  const res = await fetch(`/api/admin/company-verifications/${uuid}`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/company-verifications/${uuid}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(input),
@@ -2460,7 +2638,7 @@ export async function adminUpdateCompanyVerification(uuid: string, input: {
 }
 
 export async function adminRevealCompanyVerificationKyc(uuid: string, reason?: string) {
-  const res = await fetch(`/api/admin/company-verifications/${uuid}/kyc/reveal`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/company-verifications/${uuid}/kyc/reveal`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ reason }),
@@ -2479,7 +2657,7 @@ export async function adminRevealCompanyVerificationKyc(uuid: string, reason?: s
 }
 
 export async function adminDeleteCompanyVerificationKycPhoto(uuid: string) {
-  const res = await fetch(`/api/admin/company-verifications/${uuid}/kyc/passport-photo`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/company-verifications/${uuid}/kyc/passport-photo`, {
     method: "DELETE",
     headers: authHeaders(),
   });
@@ -2491,7 +2669,7 @@ export async function adminDeleteCompanyVerificationKycPhoto(uuid: string) {
 }
 
 export async function adminSyncPassportStorage() {
-  const res = await fetch("/api/admin/company-verifications/passport-storage/sync", {
+  const res = await fetchWithAuthRecovery("/api/admin/company-verifications/passport-storage/sync", {
     method: "POST",
     headers: authHeaders(),
   });
@@ -2514,7 +2692,7 @@ export async function adminSyncPassportStorage() {
 }
 
 export async function adminGetUserPermissions(uuid: string) {
-  const res = await fetch(`/api/admin/users/${uuid}/permissions`, { headers: authHeaders() });
+  const res = await fetchWithAuthRecovery(`/api/admin/users/${uuid}/permissions`, { headers: authHeaders() });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     return { ok: false as const, message: data.message ?? "Failed to fetch user permissions" };
@@ -2523,7 +2701,7 @@ export async function adminGetUserPermissions(uuid: string) {
 }
 
 export async function adminUpdateUserPermissions(uuid: string, permissions: AdminUserPermissionRow[]) {
-  const res = await fetch(`/api/admin/users/${uuid}/permissions`, {
+  const res = await fetchWithAuthRecovery(`/api/admin/users/${uuid}/permissions`, {
     method: "PUT",
     headers: authHeaders(),
     body: JSON.stringify({ permissions }),
@@ -2536,7 +2714,7 @@ export async function adminUpdateUserPermissions(uuid: string, permissions: Admi
 }
 
 export async function adminListFinanceOperations() {
-  const res = await fetch("/api/admin/finance-operations", { headers: authHeaders() });
+  const res = await fetchWithAuthRecovery("/api/admin/finance-operations", { headers: authHeaders() });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     return { ok: false as const, message: data.message ?? "Failed to fetch finance operations" };
@@ -2544,11 +2722,27 @@ export async function adminListFinanceOperations() {
   return { ok: true as const, data: (await res.json()) as { items: AdminFinanceOperation[] } };
 }
 
-export async function adminUpdateFinanceOperation(uuid: string, status: AdminFinanceOperation["status"]) {
-  const res = await fetch(`/api/admin/finance-operations/${uuid}`, {
+export type AdminFinanceOperationUpdate =
+  | AdminFinanceOperation["status"]
+  | {
+      status?: AdminFinanceOperation["status"];
+      providerAction?: "SYNC";
+      payoutMode?: "MANUAL" | "YOOKASSA";
+      destinationType?: "bank_card" | "yoo_money";
+      cardNumber?: string;
+      yooMoneyWallet?: string;
+      manualMethod?: string;
+      manualReference?: string;
+      manualComment?: string;
+      processedAt?: string;
+    };
+
+export async function adminUpdateFinanceOperation(uuid: string, update: AdminFinanceOperationUpdate) {
+  const body = typeof update === "string" ? { status: update } : update;
+  const res = await fetchWithAuthRecovery(`/api/admin/finance-operations/${uuid}`, {
     method: "PATCH",
     headers: authHeaders(),
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -2556,5 +2750,3 @@ export async function adminUpdateFinanceOperation(uuid: string, status: AdminFin
   }
   return { ok: true as const, data: (await res.json()) as AdminFinanceOperation };
 }
-
-

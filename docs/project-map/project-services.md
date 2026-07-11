@@ -60,6 +60,7 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/company-users/:uuid/overview` | GET | Operational company stats: billing, subscriptions, balance, clients and recent payments |
 | `/api/admin/company-users/:uuid/payments` | GET | Company payment ledger |
 | `/api/admin/company-users/:uuid/security` | GET | Staff, roles and security summary |
+| `/api/admin/company-users/:uuid/billing-extension` | POST | Extend company NearLoy access without payment and optionally notify company owners in Telegram |
 | `/api/admin/company-users/:uuid/referral` | GET/PUT/DELETE | Company PR/referral attribution |
 | `/api/admin/company-users/:uuid/company-profile` | PUT | Upsert company profile |
 | `/api/admin/company-users/:uuid/locations` | POST | Create geocoded company address |
@@ -68,8 +69,10 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/company-users/:uuid/subscriptions/:subscriptionUuid` | PATCH/DELETE | Update/delete company subscription |
 | `/api/admin/company-users/:uuid/clients` | GET | Company clients, loyalty stats and levels |
 | `/api/admin/payments` | GET | Search/filter provider payment ledger |
-| `/api/admin/finance-operations` | GET/POST | Finance operation queue and manual operation creation |
-| `/api/admin/finance-operations/:uuid` | PATCH | Approve/reject/update finance operation status |
+| `/api/admin/finance-operations` | GET/POST | Finance operation queue with company/PR payout coverage and checklist |
+| `/api/admin/finance-operations/:uuid` | PATCH | Approve/reject payout, create/sync YooKassa test payout or close the payout manually |
+| `/api/admin/ai/assist` | GET/POST | Permission-scoped admin AI assistant with optional image context |
+| `/api/admin/ai/apply` | POST | Apply an explicit safe admin AI action after confirmation |
 | `/api/admin/company-billing-promos` | GET/POST | List/create company billing promo codes |
 | `/api/admin/company-billing-promos/:uuid` | PATCH | Edit/pause company billing promo code |
 | `/api/admin/audit` | GET/POST | Audit feed and manual audit events |
@@ -182,7 +185,10 @@ All `/api/registered/*` routes require `CLIENT`.
 - `CompanyService`: local staff roles, cashier operations, tier cashback, entitlements/redemptions, billing, media, revenue forecast and payout requests.
 - `PaymentsService`: YooKassa checkout creation/reuse, status sync, webhook handling, payment expiration and activation side effects.
 - `EmailService`: persisted email messages, Resend HTTP provider, SMTP routing/fallback and production-safe failure handling.
-- `CompanyAiService`: server-side OpenAI Responses API integration for company-only draft advice; sends a small safe context, uses JSON schema output, and never exposes critical account/security mutations as tools.
+- `CompanyAiService`: server-side OpenAI Responses API integration for company-only draft advice; sends a small safe context, supports protected AI gateway routing for local development, uses JSON schema output, and never exposes critical account/security mutations as tools.
+- `AdminAiService`: permission-scoped OpenAI assistant for admin operations; composes modular context from finance, payments, companies, users, tasks, PR, audit, Telegram and verification without expanding the actor's access.
+- Admin AI modules: each major domain lives in `src/lib/admin-ai/modules/*`, so features can be replaced or tightened without rewriting the whole assistant.
+- AI gateway: `apps/api/src/ai-gateway/*` proxies OpenAI Responses API from trusted server-to-server callers for local environments where direct OpenAI access is unavailable.
 - `MaintenanceStateService`: restore progress state machine.
 - `MaintenanceGuard`: API lock during restore.
 - Landing lead services: contact intake, duplicate/spam checks, Telegram delivery history and retries.
@@ -190,6 +196,7 @@ All `/api/registered/*` routes require `CLIENT`.
 - Telegram services: Bot API proxy support, direct-message admin linking and webhook command handling.
 - Admin task services: translate audit fires, verification reviews and finance approvals into deduplicated, permission-scoped resolution cards.
 - Company media services: store public assets/offers and expose read-only media payloads by slug.
+- Finance payout services: build company/PR payout checklists, verify available balance, store provider payout metadata, support YooKassa test payouts and allow manual closure for launch.
 - i18n services: locale cookie, user preference persistence and structured translation dictionaries.
 
 ## Security and privacy responsibilities
@@ -201,6 +208,8 @@ All `/api/registered/*` routes require `CLIENT`.
 - Support users are restricted away from finance, passport review and privileged verification actions.
 - Critical admin actions write audit records where applicable.
 - Finance operations must be backed by available company/PR balance; arbitrary internal payout requests are intentionally not the long-term model.
+- YooKassa payout metadata may store provider IDs, destination labels and masks; raw card data must not be persisted and raw-card test mode must not be enabled for real production payouts.
+- Admin AI can summarize and propose actions only inside the actor's existing permissions. It must not change passwords, grants, provider credentials, direct payout status or infrastructure settings outside explicit supported safe actions.
 - Customer text search in the company workspace is restricted to customers already related to that company; QR may open a new customer without disclosing email.
 - Purchase cashback and limited entitlement redemption use serializable transactions to prevent double issuance and tier races; `UNLIMITED` entitlements record visits without enforcing a usage cap.
 - Admin tasks never expand an operator's access: each task is visible and actionable only when its source permission permits the same operation.

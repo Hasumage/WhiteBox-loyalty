@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export const ACTIVE_ADMIN_TASK_STATUSES = ["OPEN", "IN_PROGRESS"] as const;
 const RESOLVED_TAG = "RESOLVED";
+const ROUTINE_FINANCE_STATUS_ACTION = "Finance operation status changed";
 
 type AuditSignal = Pick<
   AuditEvent,
@@ -105,11 +106,27 @@ async function closeInactiveDomainTasks(source: "COMPANY_VERIFICATION" | "FINANC
   });
 }
 
+async function closeRoutineFinanceStatusAuditTasks(eventIds: string[], now = new Date()) {
+  if (eventIds.length === 0) return;
+
+  await prisma.adminTask.updateMany({
+    where: {
+      source: "AUDIT",
+      sourceKey: { in: eventIds.map((id) => `audit:${id}`) },
+      status: { in: [...ACTIVE_ADMIN_TASK_STATUSES] },
+    },
+    data: { status: "RESOLVED", resolvedAt: now },
+  });
+}
+
 export async function syncAdminTasksFromSignals() {
-  const [auditSignals, applications, financeOperations] = await Promise.all([
+  const [auditSignals, routineFinanceAuditEvents, applications, financeOperations] = await Promise.all([
     prisma.auditEvent.findMany({
       where: {
-        NOT: { tags: { has: RESOLVED_TAG } },
+        NOT: [
+          { tags: { has: RESOLVED_TAG } },
+          { category: "BILLING", action: ROUTINE_FINANCE_STATUS_ACTION },
+        ],
         OR: [
           { level: "CRITICAL" },
           { tags: { has: "TELEGRAM_FIRE" } },
@@ -119,6 +136,15 @@ export async function syncAdminTasksFromSignals() {
       },
       orderBy: { createdAt: "desc" },
       take: 100,
+    }),
+    prisma.auditEvent.findMany({
+      where: {
+        category: "BILLING",
+        action: ROUTINE_FINANCE_STATUS_ACTION,
+      },
+      select: { id: true },
+      orderBy: { createdAt: "desc" },
+      take: 500,
     }),
     prisma.companyVerificationApplication.findMany({
       where: { status: { in: ["SUBMITTED", "REVIEWING"] } },
@@ -135,6 +161,7 @@ export async function syncAdminTasksFromSignals() {
   ]);
 
   await Promise.all([
+    closeRoutineFinanceStatusAuditTasks(routineFinanceAuditEvents.map((event) => event.id)),
     ...auditSignals.map((event) => upsertAdminTaskForAuditEvent(event)),
     ...applications.map((application) => upsertAdminTaskForVerification(application)),
     ...financeOperations.map((operation) => upsertAdminTaskForFinance(operation)),

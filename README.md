@@ -91,6 +91,11 @@ Admin routes (`/api/admin/*`, ADMIN only):
 - `GET /api/admin/company-users/:uuid/overview` - company operational stats
 - `GET /api/admin/company-users/:uuid/payments` - company payment ledger
 - `GET /api/admin/company-users/:uuid/security` - company staff/security summary
+- `POST /api/admin/company-users/:uuid/billing-extension` - extend company NearLoy access without payment and optionally notify owners in Telegram
+- `GET` / `POST /api/admin/ai/assist` - permission-scoped admin AI assistant
+- `POST /api/admin/ai/apply` - apply safe admin AI actions after explicit confirmation
+- `GET` / `POST /api/admin/finance-operations` - finance payout queue with company/PR coverage snapshots
+- `PATCH /api/admin/finance-operations/:uuid` - approve/reject payout, send/sync YooKassa test payout, or close manually
 
 Company workspace routes (`/api/company/*`, COMPANY membership):
 
@@ -141,8 +146,12 @@ Set `NEXT_PUBLIC_API_URL=http://localhost:3001/api` for the Next.js auth and adm
 Set `NEXT_PUBLIC_YANDEX_MAPS_API_KEY=<key>` to enable the Yandex Maps JS API integration on `/map`.
 Set `YANDEX_GEOCODER_API_KEY=<key>` to let admin company locations resolve addresses into saved coordinates.
 Set `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `YOOKASSA_RETURN_URL` and `YOOKASSA_COMPANY_RETURN_URL` to enable YooKassa checkout payments.
+Set `YOOKASSA_PAYOUT_AGENT_ID`, `YOOKASSA_PAYOUT_SECRET_KEY` and `YOOKASSA_PAYOUT_ALLOW_RAW_CARD=true` for the YooKassa test payout gateway in `/admin/finance`; manual payout closure remains available for launch.
 Set `EMAIL_PROVIDER=resend` and `RESEND_API_KEY` for production email delivery on Railway; SMTP may time out on Railway Hobby.
-Set `OPENAI_API_KEY` to enable `/company/ai`; default model is `gpt-5.4-nano` with compact JSON output and no critical-system actions.
+Set `OPENAI_API_KEY` on the API service to enable `/company/ai`; default model is `gpt-5.4-nano` with compact JSON output and no critical-system actions.
+Set `OPENAI_ADMIN_ASSISTANT_MODEL` and `OPENAI_ADMIN_ASSISTANT_MAX_OUTPUT_TOKENS` only when the admin assistant needs a different model/output cap than company AI.
+For local development from networks where direct OpenAI access is unavailable, set `AI_GATEWAY_SECRET` on the deployed API service and use `OPENAI_GATEWAY_URL` + `OPENAI_GATEWAY_SECRET` locally. The browser still never receives the OpenAI key.
+Set `DAILY_REPORT_SCHEDULER_ENABLED=true`, `DAILY_REPORT_TIME_MSK=23:00` and `DAILY_REPORT_SECRET` to run the Telegram daily report scheduler.
 
 ## Backup and Restore Safety
 
@@ -157,6 +166,7 @@ Set `OPENAI_API_KEY` to enable `/company/ai`; default model is `gpt-5.4-nano` wi
 ## Admin UI Overview
 
 - `/admin` - live operations dashboard and prioritized task board
+- `/admin/ai` - permission-scoped admin AI assistant
 - `/admin/tasks` - operations Kanban board
 - `/admin/tasks/:uuid` - task resolution workspace with a direct route to the source alert/workflow
 - `/admin/users` - users directory
@@ -167,6 +177,7 @@ Set `OPENAI_API_KEY` to enable `/company/ai`; default model is `gpt-5.4-nano` wi
 - `/admin/companies/:uuid/clients` - company clients table with search, sorting, pagination, and expandable details
 - `/admin/companies/:uuid/payments` - company payments
 - `/admin/companies/:uuid/security` - company staff/security summary
+- `/admin/finance` - company/PR payout operations with YooKassa test payout and manual closure
 - `/admin/payments` - provider payment ledger
 - `/admin/system-health` - critical alerts cockpit
 - `/admin/database` - interactive DB map (zoom, pan, relations)

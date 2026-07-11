@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 
 const isWindows = process.platform === "win32";
 const npmCommand = isWindows ? "cmd.exe" : "npm";
+
+if (!process.env.DAILY_REPORT_SECRET) {
+  process.env.DAILY_REPORT_SECRET = `local-daily-report-${randomUUID()}`;
+}
 
 function npmRun(name, args) {
   const finalArgs = isWindows ? ["/d", "/s", "/c", "npm", ...args] : args;
@@ -29,6 +34,7 @@ const children = [
   npmRun("web", ["run", "dev:web"]),
   npmRun("api", ["run", "api:dev"]),
   npmRun("telegram", ["run", "telegram:poll:local", "--", "--from-now"]),
+  npmRun("daily-report", ["run", "reports:daily:scheduler"]),
 ];
 
 function shutdown() {

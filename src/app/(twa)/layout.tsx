@@ -1,5 +1,6 @@
 import { BottomNav } from "@/components/BottomNav";
 import { PageTransition } from "@/components/PageTransition";
+import { AuthRecoveryOverlay } from "@/components/auth/AuthRecoveryOverlay";
 import { TelegramMiniAppAuthBootstrap } from "@/components/twa/TelegramMiniAppAuthBootstrap";
 import { ProfileStatusUnlockToast } from "@/components/twa/ProfileStatusUnlockToast";
 import { TwaStaleDataNudge } from "@/components/twa/TwaStaleDataNudge";
@@ -18,6 +19,7 @@ export default function TWALayout({
       <ProfileStatusUnlockToast />
       <TwaStaleDataNudge />
       <BottomNav />
+      <AuthRecoveryOverlay />
     </div>
   );
 }

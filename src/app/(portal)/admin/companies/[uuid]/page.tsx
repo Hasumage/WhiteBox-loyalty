@@ -13,6 +13,7 @@ import {
   ChevronUp,
   CircleDollarSign,
   CreditCard,
+  Crown,
   Gift,
   Globe2,
   Hash,
@@ -53,6 +54,7 @@ import {
   adminDeleteCompanyLocation,
   adminDeleteCompanyUser,
   adminEndCompanyReferral,
+  adminExtendCompanyBilling,
   adminGetCompanyReferral,
   adminGetCompanyOverview,
   adminGetCompanyUser,
@@ -325,6 +327,12 @@ export default function AdminCompanyProfilePage() {
   const [referral, setReferral] = useState<AdminCompanyReferralResponse | null>(null);
   const [overview, setOverview] = useState<AdminCompanyOverview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [billingExtensionOpen, setBillingExtensionOpen] = useState(false);
+  const [billingExtensionSaving, setBillingExtensionSaving] = useState(false);
+  const [billingExtensionValue, setBillingExtensionValue] = useState("1");
+  const [billingExtensionUnit, setBillingExtensionUnit] = useState<"months" | "days">("months");
+  const [billingExtensionComment, setBillingExtensionComment] = useState("");
+  const [billingExtensionText, setBillingExtensionText] = useState("");
   const [referralQuery, setReferralQuery] = useState("");
   const [referralSaving, setReferralSaving] = useState(false);
   const [companyEmailSubject, setCompanyEmailSubject] = useState("");
@@ -485,6 +493,20 @@ export default function AdminCompanyProfilePage() {
       recentPayments: [],
     };
   }, [accountForm, companyForm, companyUserUuid, overview, subscriptions]);
+  const defaultBillingExtensionText = useMemo(
+    () => [
+      "✨ <b>Подписка NearLoy продлена</b>",
+      "",
+      `Компания: <b>${companyForm?.name || "компания"}</b>`,
+      "Доступ действует до <b>{periodEndsAt}</b>.",
+      "{commentLine}",
+    ].join("\n"),
+    [companyForm?.name],
+  );
+
+  useEffect(() => {
+    if (!billingExtensionText) setBillingExtensionText(defaultBillingExtensionText);
+  }, [billingExtensionText, defaultBillingExtensionText]);
 
   async function load() {
     setLoading(true);
@@ -581,6 +603,40 @@ export default function AdminCompanyProfilePage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleExtendBilling() {
+    const rawValue = Math.trunc(Number(billingExtensionValue) || 1);
+    const durationValue =
+      billingExtensionUnit === "days"
+        ? Math.min(730, Math.max(1, rawValue))
+        : Math.min(24, Math.max(1, rawValue));
+    setBillingExtensionSaving(true);
+    setError(null);
+    setNotice(null);
+    const res = await adminExtendCompanyBilling(companyUserUuid, {
+      months: billingExtensionUnit === "months" ? durationValue : undefined,
+      days: billingExtensionUnit === "days" ? durationValue : undefined,
+      comment: billingExtensionComment,
+      notificationText: billingExtensionText || defaultBillingExtensionText,
+      notifyTelegram: true,
+    });
+    if (!res.ok) {
+      setBillingExtensionSaving(false);
+      setError(res.message);
+      return;
+    }
+    const overviewRes = await adminGetCompanyOverview(companyUserUuid);
+    setBillingExtensionSaving(false);
+    if (overviewRes.ok) {
+      setOverview(overviewRes.data);
+      setOverviewError(null);
+    } else {
+      setOverview((current) => (current ? { ...current, billing: res.data.billing } : current));
+    }
+    setBillingExtensionOpen(false);
+    setBillingExtensionComment("");
+    setNotice(`Подписка NearLoy продлена без оплаты. Telegram: отправлено ${res.data.notification.telegram.delivered}, в очереди ${res.data.notification.telegram.queued}.`);
   }
 
   function hydrateReferralDraft(next: AdminCompanyReferralResponse | null) {
@@ -1186,9 +1242,9 @@ export default function AdminCompanyProfilePage() {
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="secondary">
-            <Link href={`/admin/users/${companyUserUuid}`}>
-              <UserCheck className="h-4 w-4" />
-              Карточка пользователя
+            <Link href={`/admin/companies/${companyUserUuid}/security`}>
+              <Users className="h-4 w-4" />
+              Сотрудники компании
             </Link>
           </Button>
           <Button asChild variant="secondary">
@@ -1255,18 +1311,90 @@ export default function AdminCompanyProfilePage() {
                 Операционный статус компании
               </CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                Подписка NearLoy, пользовательские подписки, баланс и последние платежи.
+                Подписка NearLoy, пользовательские подписки, баланс и приоритет компании.
               </p>
             </div>
-            <Button asChild variant="secondary" size="sm">
-              <Link href={`/admin/companies/${companyUserUuid}/payments`}>
-                <CreditCard className="h-4 w-4" />
-                Все платежи
-              </Link>
-            </Button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant={billingExtensionOpen ? "default" : "secondary"}
+                size="sm"
+                onClick={() => setBillingExtensionOpen((value) => !value)}
+              >
+                <CalendarClock className="h-4 w-4" />
+                Продлить без оплаты
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {billingExtensionOpen ? (
+            <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/8 p-4">
+              <div className="grid gap-3 lg:grid-cols-[330px_1fr]">
+                <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
+                  <div>
+                    <Label htmlFor="billing-extension-value">Срок</Label>
+                    <Input
+                      id="billing-extension-value"
+                      type="number"
+                      min={1}
+                      max={billingExtensionUnit === "days" ? 730 : 24}
+                      value={billingExtensionValue}
+                      onChange={(event) => setBillingExtensionValue(event.target.value)}
+                      className="mt-2"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {billingExtensionUnit === "days" ? "Дней, 1–730" : "Месяцев, 1–24"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="billing-extension-unit">Период</Label>
+                    <SelectField
+                      id="billing-extension-unit"
+                      value={billingExtensionUnit}
+                      onChange={(event) => setBillingExtensionUnit(event.target.value as "months" | "days")}
+                      className="mt-2"
+                    >
+                      <option value="months">Месяцы</option>
+                      <option value="days">Дни</option>
+                    </SelectField>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="billing-extension-comment">Комментарий администратора</Label>
+                  <Input
+                    id="billing-extension-comment"
+                    value={billingExtensionComment}
+                    onChange={(event) => setBillingExtensionComment(event.target.value.slice(0, 1000))}
+                    placeholder="Компенсация, тестовый период, решение поддержки"
+                    className="mt-2"
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <Label htmlFor="billing-extension-text">Текст Telegram-уведомления</Label>
+                  <Textarea
+                    id="billing-extension-text"
+                    value={billingExtensionText}
+                    onChange={(event) => setBillingExtensionText(event.target.value.slice(0, 1500))}
+                    className="mt-2 min-h-[120px]"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Можно использовать {"{periodEndsAt}"} и {"{commentLine}"}. Отправим владельцу и руководителям компании с подключённым Telegram.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={() => setBillingExtensionOpen(false)}>
+                  Отмена
+                </Button>
+                <Button type="button" onClick={() => void handleExtendBilling()} disabled={billingExtensionSaving}>
+                  {billingExtensionSaving ? <RotateCcw className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+                  Продлить
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           {effectiveOverview ? (
             <>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1369,25 +1497,25 @@ export default function AdminCompanyProfilePage() {
 
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold">Последние платежи</p>
-                    <Badge variant="outline">{effectiveOverview.recentPayments.length}</Badge>
+                    <p className="inline-flex items-center gap-2 font-semibold">
+                      <Crown className="h-4 w-4 text-amber-200" />
+                      Приоритет компании
+                    </p>
+                    <Badge variant="outline">Обычный</Badge>
                   </div>
-                  <div className="mt-4 space-y-2">
-                    {effectiveOverview.recentPayments.map((payment) => (
-                      <div key={payment.uuid} className="grid grid-cols-[1fr_auto] gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-sm">
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{payment.description}</p>
-                          <p className="text-xs text-muted-foreground">{payment.status} · {formatShortDate(payment.paidAt ?? payment.createdAt)}</p>
-                        </div>
-                        <p className="font-semibold">{formatRub(payment.amount)}</p>
-                      </div>
-                    ))}
-                    {effectiveOverview.recentPayments.length === 0 ? (
-                      <p className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-sm text-muted-foreground">
-                        Платежей по компании ещё нет.
-                      </p>
-                    ) : null}
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Уровень</p>
+                      <p className="mt-1 font-semibold">Стандартный</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Режим</p>
+                      <p className="mt-1 font-semibold">Без усиления</p>
+                    </div>
                   </div>
+                  <p className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/8 px-3 py-2 text-sm text-muted-foreground">
+                    Здесь будет управление приоритетом компании: видимость, ручные очереди и повышенное внимание команды.
+                  </p>
                 </div>
               </div>
             </>
