@@ -169,6 +169,20 @@ describe("RegisteredService", () => {
         where: expect.objectContaining({
           isActive: true,
           category: { slug: "coffee" },
+          OR: expect.arrayContaining([
+            { companyId: null },
+            {
+              company: expect.objectContaining({
+                isActive: true,
+                billingAccount: {
+                  is: expect.objectContaining({
+                    currentPeriodEndsAt: { gt: expect.any(Date) },
+                    status: "ACTIVE",
+                  }),
+                },
+              }),
+            },
+          ]),
         }),
       }),
     );
@@ -325,6 +339,19 @@ describe("RegisteredService", () => {
 
     const result = await service.listCompanies(11);
 
+    expect(prisma.company.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          isActive: true,
+          billingAccount: {
+            is: expect.objectContaining({
+              currentPeriodEndsAt: { gt: expect.any(Date) },
+              status: "ACTIVE",
+            }),
+          },
+        }),
+      }),
+    );
     expect(result[0].points.balance).toBe(120);
     expect(result[0].points.totalEarnedPoints).toBe(500);
     expect(result[0].isFavorite).toBe(true);
@@ -340,6 +367,18 @@ describe("RegisteredService", () => {
 
     const result = await service.setCompanyFavorite(11, "5", true);
 
+    expect(prisma.company.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          billingAccount: {
+            is: expect.objectContaining({
+              currentPeriodEndsAt: { gt: expect.any(Date) },
+              status: "ACTIVE",
+            }),
+          },
+        }),
+      }),
+    );
     expect(prisma.userCompany.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { userId_companyId: { userId: 11, companyId: 5 } },

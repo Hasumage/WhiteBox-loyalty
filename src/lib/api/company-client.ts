@@ -218,6 +218,7 @@ export type CompanyClient = {
   email: string | null;
   balance: number;
   totalSpend: number;
+  customerComment: string;
   level: { name: string; minimumSpend: number; cashbackPercent: number };
 };
 
@@ -390,6 +391,12 @@ function normalizeCompanyApiMessage(message: unknown) {
   const text = Array.isArray(message) ? message.join(", ") : typeof message === "string" ? message : "";
   if (text === "Company access is paused until monthly NearLoy access is renewed.") {
     return "Доступ компании приостановлен до продления ежемесячной подписки NearLoy.";
+  }
+  if (text === "Only a company manager can perform this action.") {
+    return "Это действие доступно только владельцу или менеджеру компании.";
+  }
+  if (text === "Company verification must be completed before operations are enabled.") {
+    return "Для этой операции нужна завершённая верификация компании.";
   }
   return text;
 }
@@ -589,6 +596,13 @@ export function lookupCompanyClientCode(code: string) {
   return request<CompanyClientDetail>("/company/clients/lookup-code", {
     method: "POST",
     body: JSON.stringify({ code }),
+  });
+}
+
+export function updateCompanyClientComment(userUuid: string, customerComment: string) {
+  return request<CompanyClientDetail>(`/company/clients/${encodeURIComponent(userUuid)}/comment`, {
+    method: "PATCH",
+    body: JSON.stringify({ customerComment }),
   });
 }
 
@@ -843,6 +857,33 @@ export type CompanyBillingData = {
 
 export function companyBilling() {
   return request<CompanyBillingData>("/company/billing");
+}
+
+export type TelegramConnectionStatus = {
+  connected: boolean;
+  telegramId: string | null;
+  phoneNumber: string | null;
+  phoneVerifiedAt: string | null;
+  email: string;
+  name: string;
+  role: string;
+  accountStatus: string;
+  canConnect: boolean;
+  updatedAt: string;
+};
+
+export type TelegramLinkTokenResponse = {
+  token: string;
+  expiresAt: string;
+  deepLink: string;
+};
+
+export function companyTelegramStatus() {
+  return nextCompanyRequest<TelegramConnectionStatus>("/api/telegram/status");
+}
+
+export function createCompanyTelegramLink() {
+  return nextCompanyRequest<TelegramLinkTokenResponse>("/api/telegram/link-token", { method: "POST" });
 }
 
 export function applyCompanyBillingPromo(code: string) {

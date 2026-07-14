@@ -11,6 +11,7 @@ import { encryptPassportData, type EncryptedPassportData, type ManualPassportDat
 import type { StoredPassportUpload } from "./passport-storage";
 
 const MAX_TEXT = 500;
+const COMPANY_TERMS_VERSION = "2026-07-12";
 
 type ApplicationPayload = {
   employmentType: CompanyEmploymentType;
@@ -41,6 +42,8 @@ type ApplicationPayload = {
   verificationDeferralReason?: string;
   passportPhotoProvided: boolean;
   consentAccepted: boolean;
+  termsAcceptedAt?: Date | null;
+  termsVersion?: string | null;
 };
 
 type ParseApplicationOptions = {
@@ -127,6 +130,9 @@ export function parseCompanyApplicationPayload(
   if (input.consentAccepted !== true) {
     throw new Error("Consent is required.");
   }
+  if (!options.existingCompany && input.termsAccepted !== true) {
+    throw new Error("Company terms acceptance is required.");
+  }
   const series = onlyDigits(input.passportSeries, 4);
   const number = onlyDigits(input.passportNumber, 6);
   const issuedBy = normalizeText(input.passportIssuedBy, 240);
@@ -170,6 +176,8 @@ export function parseCompanyApplicationPayload(
     verificationDeferralReason: undefined,
     passportPhotoProvided,
     consentAccepted: true,
+    termsAcceptedAt: input.termsAccepted === true ? new Date() : null,
+    termsVersion: input.termsAccepted === true ? COMPANY_TERMS_VERSION : null,
   };
 }
 
@@ -227,6 +235,8 @@ function applicationData(
     verificationDeferralReason: payload.verificationDeferralReason ?? null,
     passportDataDeletedAt: null,
     consentAcceptedAt: new Date(),
+    termsAcceptedAt: payload.termsAcceptedAt ?? null,
+    termsVersion: payload.termsVersion ?? null,
     ipAddress: params.ipAddress ?? null,
     userAgent: params.userAgent ?? null,
   };
@@ -310,6 +320,8 @@ export async function createCompanyVerificationApplication(params: {
         passportLast4: null,
         passportDataDeletedAt: null,
         verificationSubmittedAt: new Date(),
+        termsAcceptedAt: params.payload.termsAcceptedAt ?? new Date(),
+        termsVersion: params.payload.termsVersion ?? COMPANY_TERMS_VERSION,
       },
     });
 

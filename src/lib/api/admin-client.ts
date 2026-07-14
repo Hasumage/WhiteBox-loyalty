@@ -818,6 +818,15 @@ export type AdminCompanyOverview = {
   company: {
     owner: { uuid: string; name: string; email: string };
     profile: { id: number; name: string; slug: string; isActive: boolean };
+    verification: {
+      uuid: string;
+      companyName: string;
+      contactName: string;
+      identityVerificationMode: AdminIdentityVerificationMode;
+      status: AdminCompanyVerificationStatus;
+      createdAt: string;
+      updatedAt: string;
+    } | null;
   };
   billing: {
     account: {

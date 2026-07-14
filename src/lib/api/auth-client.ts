@@ -167,6 +167,7 @@ export async function requestRegistrationCode(body: {
   password: string;
   confirmPassword: string;
   locale?: "ru" | "en";
+  termsAccepted: boolean;
 }): Promise<{ success: true; email: string; expiresAt: string } | { message: string | string[] }> {
   try {
     const res = await fetch(`${apiBase()}/auth/register/request-code`, {

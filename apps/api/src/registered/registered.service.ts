@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
+  CompanyBillingStatus,
   LoyaltyTransactionStatus,
   LoyaltyTransactionType,
   Prisma,
@@ -15,6 +16,11 @@ import { PrismaService } from "../prisma/prisma.service";
 import { assertSubscriptionsEnabled, subscriptionsEnabled } from "../common/subscriptions-feature";
 
 const CUSTOMER_LOOKUP_CODE_TTL_MS = 5 * 60 * 1000;
+const MIN_BIRTH_YEAR = 1900;
+
+type ListCompaniesOptions = {
+  surface?: "default" | "map";
+};
 
 @Injectable()
 export class RegisteredService {
@@ -37,12 +43,68 @@ export class RegisteredService {
     return createHash("sha256").update(code).digest("hex");
   }
 
+  private publicCompanyWhere(now = new Date()): Prisma.CompanyWhereInput {
+    return {
+      isActive: true,
+      billingAccount: {
+        is: {
+          status: CompanyBillingStatus.ACTIVE,
+          currentPeriodEndsAt: { gt: now },
+        },
+      },
+    };
+  }
+
+  private canShowUnpaidMapPartnersLocally() {
+    return process.env.NODE_ENV !== "production" && process.env.LOCAL_MAP_SHOW_UNPAID_PARTNERS !== "false";
+  }
+
+  private companyWhereForClientSurface(options: ListCompaniesOptions = {}, now = new Date()): Prisma.CompanyWhereInput {
+    if (options.surface === "map" && this.canShowUnpaidMapPartnersLocally()) {
+      return { isActive: true };
+    }
+    return this.publicCompanyWhere(now);
+  }
+
   private async ensurePreferences(userId: number) {
     return this.prisma.userProfilePreference.upsert({
       where: { userId },
       update: {},
       create: { userId },
     });
+  }
+
+  private parseBirthDate(value: string | null | undefined) {
+    if (value === undefined) return undefined;
+    if (value === null || value.trim() === "") return null;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      throw new BadRequestException("Birth date must be in YYYY-MM-DD format.");
+    }
+
+    const [year, month, day] = value.split("-").map(Number);
+    const birthDate = new Date(Date.UTC(year, month - 1, day));
+    const isRealDate =
+      birthDate.getUTCFullYear() === year &&
+      birthDate.getUTCMonth() === month - 1 &&
+      birthDate.getUTCDate() === day;
+
+    if (!isRealDate) {
+      throw new BadRequestException("Birth date is invalid.");
+    }
+
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    if (birthDate > today) {
+      throw new BadRequestException("Birth date cannot be in the future.");
+    }
+
+    if (year < MIN_BIRTH_YEAR) {
+      throw new BadRequestException("Birth date is too far in the past.");
+    }
+
+    return birthDate;
   }
 
   private async getReferralCampaign() {
@@ -412,7 +474,7 @@ export class RegisteredService {
     const [user, preferences, favoriteCategories, wallet, activeSubscriptions, history, referral] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: userId },
-        select: { uuid: true, name: true, email: true, createdAt: true },
+        select: { uuid: true, name: true, email: true, birthDate: true, createdAt: true },
       }),
       this.ensurePreferences(userId),
       this.prisma.userFavoriteCategory.findMany({
@@ -449,6 +511,17 @@ export class RegisteredService {
       favoriteCategories: favoriteCategories.map((row) => row.category),
       referral,
     };
+  }
+
+  async updateProfile(userId: number, dto: { birthDate?: string | null }) {
+    const birthDate = this.parseBirthDate(dto.birthDate);
+    if (birthDate !== undefined) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { birthDate },
+      });
+    }
+    return this.profile(userId);
   }
 
   async completeOnboarding(userId: number) {
@@ -630,6 +703,8 @@ export class RegisteredService {
   }
 
   private async listMarketplaceCategories(userId: number) {
+    const now = new Date();
+    const publicCompanyWhere = this.publicCompanyWhere(now);
     const [categories, favorites] = await Promise.all([
       this.prisma.category.findMany({
         where: {
@@ -638,7 +713,7 @@ export class RegisteredService {
               subscriptions: {
                 some: {
                   isActive: true,
-                  OR: [{ companyId: null }, { company: { isActive: true } }],
+                  OR: [{ companyId: null }, { company: publicCompanyWhere }],
                 },
               },
             },
@@ -653,7 +728,7 @@ export class RegisteredService {
                       participants: {
                         every: {
                           approvalStatus: SubscriptionBundleParticipantStatus.APPROVED,
-                          company: { isActive: true, identityVerificationCompleted: true },
+                          company: publicCompanyWhere,
                         },
                       },
                     },
@@ -719,6 +794,8 @@ export class RegisteredService {
   async marketplace(userId: number, categorySlug?: string) {
     assertSubscriptionsEnabled();
 
+    const now = new Date();
+    const publicCompanyWhere = this.publicCompanyWhere(now);
     const categories = await this.listMarketplaceCategories(userId);
     const [subscriptions, bundles, activeRows, activeBundleRows] = await Promise.all([
       this.prisma.subscription.findMany({
@@ -726,7 +803,7 @@ export class RegisteredService {
           isActive: true,
           entitlements: { some: { isActive: true } },
           ...(categorySlug ? { category: { slug: categorySlug } } : {}),
-          OR: [{ companyId: null }, { company: { isActive: true } }],
+          OR: [{ companyId: null }, { company: publicCompanyWhere }],
         },
         orderBy: [{ createdAt: "desc" }, { name: "asc" }],
         include: {
@@ -746,7 +823,7 @@ export class RegisteredService {
               participants: {
                 every: {
                   approvalStatus: SubscriptionBundleParticipantStatus.APPROVED,
-                  company: { isActive: true, identityVerificationCompleted: true },
+                  company: publicCompanyWhere,
                 },
               },
             },
@@ -791,10 +868,11 @@ export class RegisteredService {
     };
   }
 
-  async listCompanies(userId: number) {
+  async listCompanies(userId: number, options: ListCompaniesOptions = {}) {
+    const now = new Date();
     const [companies, transactions] = await Promise.all([
       this.prisma.company.findMany({
-        where: { isActive: true },
+        where: this.companyWhereForClientSurface(options, now),
         orderBy: { name: "asc" },
         include: {
           category: { select: { id: true, slug: true, name: true, icon: true } },
@@ -906,7 +984,7 @@ export class RegisteredService {
 
   async publicCompany(slug: string) {
     const company = await this.prisma.company.findFirst({
-      where: { isActive: true, slug },
+      where: { ...this.publicCompanyWhere(), slug },
       include: {
         category: { select: { id: true, slug: true, name: true, icon: true } },
         categories: {
@@ -989,7 +1067,7 @@ export class RegisteredService {
     const numericId = Number(companyIdentifier);
     const company = await this.prisma.company.findFirst({
       where: {
-        isActive: true,
+        ...this.publicCompanyWhere(),
         OR: [
           ...(Number.isInteger(numericId) && numericId > 0 ? [{ id: numericId }] : []),
           { slug: companyIdentifier },

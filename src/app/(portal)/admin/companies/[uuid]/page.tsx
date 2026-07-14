@@ -294,6 +294,15 @@ function statusLabel(value: string, t: (key: TranslationKey) => string) {
   return value;
 }
 
+function verificationStatusLabel(value: string) {
+  if (value === "SUBMITTED") return "на проверке";
+  if (value === "REVIEWING") return "в работе";
+  if (value === "APPROVED") return "одобрена";
+  if (value === "REJECTED") return "отклонена";
+  if (value === "DRAFT") return "черновик";
+  return value;
+}
+
 export default function AdminCompanyProfilePage() {
   const { t } = useI18n("ru");
   const params = useParams<{ uuid: string }>();
@@ -450,6 +459,7 @@ export default function AdminCompanyProfilePage() {
       company: {
         owner: { uuid: companyUserUuid, name: accountForm.name, email: "" },
         profile: { id: 0, name: companyForm.name, slug: companyForm.slug, isActive: companyForm.isActive },
+        verification: null,
       },
       billing: {
         account: null,
@@ -1220,6 +1230,7 @@ export default function AdminCompanyProfilePage() {
     ...(referral?.candidates ?? []),
   ];
   const referralRevenue = referral?.revenue;
+  const companyVerification = effectiveOverview?.company.verification ?? null;
 
   return (
     <div className="space-y-5">
@@ -1259,6 +1270,22 @@ export default function AdminCompanyProfilePage() {
               Платежи
             </Link>
           </Button>
+          {companyVerification ? (
+            <Button asChild variant="secondary">
+              <Link href={`/admin/company-verifications/${companyVerification.uuid}`}>
+                <ShieldCheck className="h-4 w-4" />
+                KYC
+                <span className="ml-1 rounded-full border border-white/10 px-2 py-0.5 text-xs text-muted-foreground">
+                  {verificationStatusLabel(companyVerification.status)}
+                </span>
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="secondary" disabled title="По этой компании ещё нет заявки на верификацию">
+              <ShieldAlert className="h-4 w-4" />
+              KYC: нет заявки
+            </Button>
+          )}
           <Button variant="destructive" onClick={() => void removeCompanyUser()}>
             <Trash2 className="h-4 w-4" />
             {t("admin.companyDetail.deleteCompanyUser")}

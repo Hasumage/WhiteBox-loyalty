@@ -1,6 +1,6 @@
 ﻿import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { UserRole } from "@prisma/client";
-import { IsEmail, IsEnum, IsIn, IsOptional, IsString, Length, MinLength } from "class-validator";
+import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, Length, MinLength } from "class-validator";
 
 export class RequestRegistrationCodeDto {
   @ApiProperty({ example: "Max Pastukhov" })
@@ -31,4 +31,11 @@ export class RequestRegistrationCodeDto {
   @IsOptional()
   @IsIn(["ru", "en"])
   locale?: "ru" | "en";
+
+  @ApiProperty({
+    example: true,
+    description: "Must be true: the user accepted NearLoy user terms before account creation.",
+  })
+  @IsBoolean()
+  termsAccepted!: boolean;
 }

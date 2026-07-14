@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isUserAuthResponse, requireUserSession } from "@/lib/auth/require-user-session";
 import { prisma } from "@/lib/prisma";
+import { resolveTelegramBotRuntime } from "@/lib/telegram/bot-runtime";
 import { sendTelegramMessageQueued } from "@/lib/telegram/telegram-queue";
 
 export const runtime = "nodejs";
@@ -85,7 +86,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Сначала подключите Telegram, затем запросите привязку телефона." }, { status: 400 });
     }
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const telegram = resolveTelegramBotRuntime();
+    const botToken = telegram.token;
     if (!botToken) {
       return NextResponse.json({ message: "Токен Telegram-бота не настроен." }, { status: 503 });
     }

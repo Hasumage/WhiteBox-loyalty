@@ -39,6 +39,7 @@ import {
   RedeemSubscriptionEntitlementDto,
   RequestCompanyPayoutDto,
   SpendCompanyPointsDto,
+  UpdateCompanyClientCommentDto,
   UpdateCompanyOwnedSubscriptionDto,
   UpdateCompanyLoyaltySettingsDto,
   UpdateCompanyMemberRoleDto,
@@ -926,6 +927,7 @@ export class CompanyService {
         balance: customer.companyLinks[0]?.balance ?? 0,
         totalSpend,
         level: this.resolveLevel(totalSpend, member.company.levelRules),
+        customerComment: customer.companyLinks[0]?.customerComment ?? "",
       };
     });
   }
@@ -1078,6 +1080,7 @@ export class CompanyService {
       name: customer.name,
       email: isKnownCustomer ? customer.email : null,
       balance: customer.companyLinks[0]?.balance ?? 0,
+      customerComment: customer.companyLinks[0]?.customerComment ?? "",
       totalSpend,
       level: this.resolveLevel(totalSpend, member.company.levelRules),
       recentPurchases: customer.companyPurchases.map((purchase) => ({
@@ -1097,6 +1100,26 @@ export class CompanyService {
       activeSubscriptions,
       activeBundleSubscriptions,
     };
+  }
+
+  async updateClientComment(userId: number, uuid: string, dto: UpdateCompanyClientCommentDto) {
+    const member = await this.membership(userId);
+    const customer = await this.prisma.user.findFirst({
+      where: { uuid, role: UserRole.CLIENT },
+      select: { id: true, uuid: true },
+    });
+    if (!customer) throw new NotFoundException("Customer not found.");
+    const comment = dto.customerComment?.trim() || null;
+    await this.prisma.userCompany.upsert({
+      where: { userId_companyId: { userId: customer.id, companyId: member.companyId } },
+      update: { customerComment: comment },
+      create: {
+        userId: customer.id,
+        companyId: member.companyId,
+        customerComment: comment,
+      },
+    });
+    return this.client(userId, uuid);
   }
 
   async lookupClientByCode(userId: number, dto: LookupCompanyClientCodeDto) {

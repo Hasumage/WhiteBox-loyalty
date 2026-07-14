@@ -8,6 +8,7 @@ import { UpdateFavoriteCategoriesDto } from "./dto/update-favorite-categories.dt
 import { UpdateCompanyFavoriteDto } from "./dto/update-company-favorite.dto";
 import { RedeemCodeDto } from "./dto/redeem-code.dto";
 import { UpdateProfilePreferencesDto } from "./dto/update-profile-preferences.dto";
+import { UpdateUserProfileDto } from "./dto/update-user-profile.dto";
 import { RegisteredService } from "./registered.service";
 
 /**
@@ -26,6 +27,13 @@ export class RegisteredController {
   @ApiOperation({ summary: "Example route for any logged-in user" })
   profile(@CurrentUser() user: RequestUser) {
     return this.registeredService.profile(user.userId);
+  }
+
+  @Put("profile")
+  @ApiBody({ type: UpdateUserProfileDto })
+  @ApiOperation({ summary: "Update current user's editable profile fields" })
+  updateProfile(@CurrentUser() user: RequestUser, @Body() dto: UpdateUserProfileDto) {
+    return this.registeredService.updateProfile(user.userId, dto);
   }
 
   @Post("onboarding/complete")
@@ -106,8 +114,11 @@ export class RegisteredController {
 
   @Get("companies")
   @ApiOperation({ summary: "Partner companies with user points and level progress" })
-  companies(@CurrentUser() user: RequestUser) {
-    return this.registeredService.listCompanies(user.userId);
+  @ApiQuery({ name: "surface", required: false, enum: ["map"] })
+  companies(@CurrentUser() user: RequestUser, @Query("surface") surface?: string) {
+    return this.registeredService.listCompanies(user.userId, {
+      surface: surface === "map" ? "map" : "default",
+    });
   }
 
   @Put("companies/:id/favorite")

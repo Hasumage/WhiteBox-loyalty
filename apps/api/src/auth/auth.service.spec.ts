@@ -191,6 +191,7 @@ describe("AuthService", () => {
       email: "New.Client@Example.COM",
       password: "password12",
       confirmPassword: "password12",
+      termsAccepted: true,
     });
 
     expect(result.success).toBe(true);
@@ -241,6 +242,7 @@ describe("AuthService", () => {
       password: "password12",
       confirmPassword: "password12",
       locale: "en",
+      termsAccepted: true,
     });
 
     expect(result.success).toBe(true);
@@ -271,6 +273,7 @@ describe("AuthService", () => {
       email: "clicker@example.com",
       password: "password12",
       confirmPassword: "password12",
+      termsAccepted: true,
     };
     const context = { ipAddress: "10.0.0.3", emailGuardId: "guard-register-click" };
 
@@ -652,7 +655,10 @@ describe("AuthService", () => {
       phoneNumber: null,
       phoneVerifiedAt: null,
       companyReferralCode: null,
+      birthDate: null,
       emailVerifiedAt: null,
+      termsAcceptedAt: null,
+      termsVersion: null,
       accountStatus: "ACTIVE",
       deletionScheduledAt: null,
       selectedProfileStatusId: null,

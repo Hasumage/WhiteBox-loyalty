@@ -42,7 +42,7 @@ import { PageTransition } from "@/components/PageTransition";
 import { AuthRecoveryOverlay } from "@/components/auth/AuthRecoveryOverlay";
 import { clearStoredSession, getStoredUser } from "@/lib/api/auth-client";
 import { fetchWithAuthRecovery } from "@/lib/api/authenticated-fetch";
-import { companyBilling, type CompanyBillingData } from "@/lib/api/company-client";
+import { companyBilling, companyProfile, type CompanyBillingData, type CompanyMemberRole } from "@/lib/api/company-client";
 import { getCompanyBillingWarning } from "@/lib/company-billing-warning";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { useI18n } from "@/lib/i18n/use-i18n";
@@ -129,6 +129,8 @@ const companyMenuAvailable: NavItem[] = companyMenuBase.filter(
 );
 
 const companyMenuLocalOnlyHrefs = new Set(["/company/club", "/company/payments"]);
+const companyCashierMenuHrefs = ["/company", "/company/clients"];
+const companyCashierMenuHrefSet = new Set(companyCashierMenuHrefs);
 
 const COMPANY_WORKSPACE_LABEL = "Кабинет компании";
 const COMPANY_PARTNER_LABEL = "Кабинет партнёра";
@@ -192,6 +194,10 @@ function menuLabelForPath(
     .find((item) => pathname.startsWith(`${item.href}/`))?.label ?? fallback;
 }
 
+function isCompanyCashierPathAllowed(pathname: string) {
+  return companyCashierMenuHrefs.some((href) => pathname === href || pathname.startsWith(`${href}/`));
+}
+
 export default function PortalLayout({
   children,
 }: {
@@ -204,9 +210,14 @@ export default function PortalLayout({
   const currentRole = typeof window === "undefined" ? undefined : getStoredUser()?.role;
   const [notifications, setNotifications] = useState<MenuNotifications>({ items: {}, sections: {} });
   const [companyBillingData, setCompanyBillingData] = useState<CompanyBillingData | null>(null);
+  const [companyMemberRole, setCompanyMemberRole] = useState<CompanyMemberRole | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLocalCompanyItems, setShowLocalCompanyItems] = useState(false);
-  const visibleCompanyMenu = companyMenuAvailable.filter(
+  const companyMenuByRole =
+    !isAdmin && pathname.startsWith("/company") && (companyMemberRole === null || companyMemberRole === "CASHIER")
+      ? companyMenuAvailable.filter((item) => companyCashierMenuHrefSet.has(item.href))
+      : companyMenuAvailable;
+  const visibleCompanyMenu = companyMenuByRole.filter(
     (item) => showLocalCompanyItems || !companyMenuLocalOnlyHrefs.has(item.href),
   );
   const menu: NavItem[] = isAdmin
@@ -217,6 +228,7 @@ export default function PortalLayout({
     : visibleCompanyMenu;
   const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : COMPANY_WORKSPACE_LABEL);
   const billingWarning = getCompanyBillingWarning(companyBillingData);
+  const canManageCompanyBilling = !isAdmin && companyMemberRole !== null && companyMemberRole !== "CASHIER";
 
   const adminSections = useMemo(
     () =>
@@ -259,6 +271,33 @@ export default function PortalLayout({
 
   useEffect(() => {
     if (isAdmin || !pathname.startsWith("/company")) {
+      setCompanyMemberRole(null);
+      return;
+    }
+
+    let active = true;
+    companyProfile()
+      .then((profile) => {
+        if (active) setCompanyMemberRole(profile.member.role);
+      })
+      .catch(() => {
+        if (active) setCompanyMemberRole(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAdmin, pathname]);
+
+  useEffect(() => {
+    if (isAdmin || companyMemberRole !== "CASHIER" || !pathname.startsWith("/company")) return;
+    if (!isCompanyCashierPathAllowed(pathname)) {
+      router.replace("/company/clients");
+    }
+  }, [companyMemberRole, isAdmin, pathname, router]);
+
+  useEffect(() => {
+    if (isAdmin || !pathname.startsWith("/company")) {
       setCompanyBillingData(null);
       return;
     }
@@ -296,6 +335,8 @@ export default function PortalLayout({
         { href: "/admin/company-verifications", label: t("admin.layout.mobileVerify"), icon: FileCheck },
       ].filter((item) => currentRole !== "SUPPORT" || item.href === "/admin/support")
     : visibleCompanyMenu.slice(0, 4);
+  const companyDeskMenu = menu.slice(0, 3);
+  const companyManagementMenu = menu.slice(3);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
@@ -350,7 +391,7 @@ export default function PortalLayout({
             <div className="space-y-5">
               <div>
                 <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{COMPANY_DESK_GROUP_LABEL}</p>
-                {menu.slice(0, 3).map(({ href, label, icon: Icon }) => {
+                {companyDeskMenu.map(({ href, label, icon: Icon }) => {
                   const active = isItemActive(href);
                   return (
                     <Link
@@ -367,29 +408,31 @@ export default function PortalLayout({
                   );
                 })}
               </div>
-              <div>
-                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{COMPANY_MANAGEMENT_GROUP_LABEL}</p>
-                {menu.slice(3).map(({ href, label, icon: Icon }) => {
-                const active = isItemActive(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors lg:flex",
-                      active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/20",
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {label}
-                  </Link>
-                );
-                })}
-              </div>
+              {companyManagementMenu.length > 0 && (
+                <div>
+                  <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{COMPANY_MANAGEMENT_GROUP_LABEL}</p>
+                  {companyManagementMenu.map(({ href, label, icon: Icon }) => {
+                    const active = isItemActive(href);
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        className={cn(
+                          "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors lg:flex",
+                          active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/20",
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
           <div className="mt-auto space-y-3">
-            {!isAdmin && <CompanyBillingSidebarWarning warning={billingWarning} />}
+            {canManageCompanyBilling && <CompanyBillingSidebarWarning warning={billingWarning} />}
             <button
               type="button"
               onClick={handleLogout}
@@ -537,7 +580,9 @@ export default function PortalLayout({
                     </Link>
                   );
                 })}
-                <CompanyBillingSidebarWarning warning={billingWarning} onClick={() => setMobileMenuOpen(false)} />
+                {canManageCompanyBilling && (
+                  <CompanyBillingSidebarWarning warning={billingWarning} onClick={() => setMobileMenuOpen(false)} />
+                )}
               </div>
             )}
             <button

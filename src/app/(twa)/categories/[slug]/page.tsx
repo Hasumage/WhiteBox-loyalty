@@ -40,8 +40,8 @@ export default function CategoryDetailPage() {
   useEffect(() => {
     let ignore = false;
     const requests = SUBSCRIPTIONS_ENABLED
-      ? Promise.all([getTwaCompanies(), getTwaMarketplace()] as const)
-      : Promise.all([getTwaCompanies(), Promise.resolve({ subscriptions: [] })] as const);
+      ? Promise.all([getTwaCompanies(true), getTwaMarketplace()] as const)
+      : Promise.all([getTwaCompanies(true), Promise.resolve({ subscriptions: [] })] as const);
 
     void requests.then(([apiCompanies, marketplace]) => {
       if (ignore) return;
