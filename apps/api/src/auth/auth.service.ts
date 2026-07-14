@@ -62,6 +62,7 @@ type EmailRequestGuardState = {
 const EMAIL_REPEAT_DELAY_MS = 90_000;
 const EMAIL_BLOCK_MS = 2 * 60 * 60_000;
 const PASSWORD_RESET_PENDING_HASH = "PASSWORD_RESET_PENDING";
+const USER_TERMS_VERSION = "2026-07-12";
 
 @Injectable()
 export class AuthService implements OnModuleInit, OnModuleDestroy {
@@ -316,6 +317,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       name: string;
       passwordHash: string;
       role: UserRole;
+      termsAcceptedAt?: Date | null;
+      termsVersion?: string | null;
     },
     email: string,
   ) {
@@ -326,6 +329,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
         passwordHash: pending.passwordHash,
         role: pending.role,
         emailVerifiedAt: new Date(),
+        termsAcceptedAt: pending.termsAcceptedAt ?? new Date(),
+        termsVersion: pending.termsVersion ?? USER_TERMS_VERSION,
       },
     });
     await this.grantClientRegistrationRewards(tx, created.id, pending.role);
@@ -343,6 +348,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       name: string;
       passwordHash: string;
       role: UserRole;
+      termsAcceptedAt?: Date | null;
+      termsVersion?: string | null;
     },
   ) {
     this.assertRegistrationCanUseExistingEmail(existing);
@@ -353,6 +360,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
         passwordHash: pending.passwordHash,
         role: pending.role,
         emailVerifiedAt: new Date(),
+        termsAcceptedAt: pending.termsAcceptedAt ?? new Date(),
+        termsVersion: pending.termsVersion ?? USER_TERMS_VERSION,
       },
     });
   }
@@ -444,6 +453,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     if (dto.password !== dto.confirmPassword) {
       throw new BadRequestException("Passwords do not match");
     }
+    if (dto.termsAccepted !== true) {
+      throw new BadRequestException("Accept the NearLoy user terms before creating an account.");
+    }
     const role = dto.role ?? UserRole.CLIENT;
     this.assertPublicRegistrationRole(role);
 
@@ -461,6 +473,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const ttlMinutes = Number(this.config.get("REGISTRATION_EMAIL_CODE_TTL_MINUTES") ?? 15);
     const expiresAt = new Date(Date.now() + Math.max(5, ttlMinutes) * 60_000);
+    const termsAcceptedAt = new Date();
 
     await this.prisma.$transaction(async (tx) => {
       await tx.emailVerificationCode.updateMany({
@@ -476,6 +489,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
           role: target.role,
           codeHash,
           expiresAt,
+          termsAcceptedAt,
+          termsVersion: USER_TERMS_VERSION,
         },
       });
     });

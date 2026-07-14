@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Copy, ExternalLink, Lock, LogOut, RefreshCw, Send, Shield, ShieldCheck } from "lucide-react";
+import { CalendarDays, CheckCircle2, Copy, ExternalLink, Lock, LogOut, RefreshCw, Send, Shield, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
 import { DeleteAccountDialog } from "@/components/settings/DeleteAccountDialog";
@@ -15,6 +16,7 @@ import {
   getTwaProfile,
   getUserTelegramStatus,
   requestTelegramPhone,
+  updateTwaProfile,
   updateTwaProfilePreferences,
   type TwaProfile,
   type UserTelegramConnectionStatus,
@@ -40,6 +42,17 @@ function maskTelegramId(value: string | null | undefined) {
   return `${value.slice(0, 2)}•••${value.slice(-3)}`;
 }
 
+function toDateInput(value: string | null | undefined) {
+  return value ? value.slice(0, 10) : "";
+}
+
+function todayInputValue() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 export default function SettingsAccountPage() {
   const { t } = useI18n("ru");
   const router = useRouter();
@@ -50,6 +63,9 @@ export default function SettingsAccountPage() {
   const [pushNotif, setPushNotif] = useState(false);
   const [marketingNotif, setMarketingNotif] = useState(false);
   const [preferences, setPreferences] = useState<ProfilePreferences>(fallbackPreferences);
+  const [birthDate, setBirthDate] = useState("");
+  const [savedBirthDate, setSavedBirthDate] = useState("");
+  const [birthDateSaving, setBirthDateSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [telegramStatus, setTelegramStatus] = useState<UserTelegramConnectionStatus | null>(null);
   const [telegramLink, setTelegramLink] = useState<UserTelegramLink | null>(null);
@@ -61,6 +77,9 @@ export default function SettingsAccountPage() {
     void (async () => {
       const [profile, telegram] = await Promise.all([getTwaProfile(), getUserTelegramStatus()]);
       setPreferences(profile.preferences);
+      const profileBirthDate = toDateInput(profile.user.birthDate);
+      setBirthDate(profileBirthDate);
+      setSavedBirthDate(profileBirthDate);
       if (telegram.ok) setTelegramStatus(telegram.data);
       if (!telegram.ok) setTelegramMessage(telegram.message);
     })();
@@ -79,6 +98,22 @@ export default function SettingsAccountPage() {
       return;
     }
     setPreferences(res.data);
+  }
+
+  async function saveBirthDate() {
+    setMessage(null);
+    setBirthDateSaving(true);
+    const res = await updateTwaProfile({ birthDate: birthDate || null });
+    setBirthDateSaving(false);
+    if (!res.ok) {
+      setMessage(res.message);
+      return;
+    }
+    setPreferences(res.data.preferences);
+    const nextBirthDate = toDateInput(res.data.user.birthDate);
+    setBirthDate(nextBirthDate);
+    setSavedBirthDate(nextBirthDate);
+    setMessage(t("client.account.birthDateSaved"));
   }
 
   async function refreshTelegramStatus() {
@@ -130,6 +165,7 @@ export default function SettingsAccountPage() {
   }
 
   const masked = user?.email ? maskEmail(user.email) : "-";
+  const canSaveBirthDate = birthDate !== savedBirthDate && !birthDateSaving;
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-4 pt-6">
@@ -153,6 +189,30 @@ export default function SettingsAccountPage() {
           <div className="flex items-center justify-between rounded-xl bg-muted/20 px-3 py-2">
             <span className="text-xs text-muted-foreground">{t("client.account.email")}</span>
             <span className="text-sm font-medium">{masked}</span>
+          </div>
+          <div className="mt-3 rounded-2xl border border-white/10 bg-muted/10 p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <CalendarDays className="h-4 w-4 text-primary" />
+              {t("client.account.birthDate")}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <Input
+                type="date"
+                max={todayInputValue()}
+                value={birthDate}
+                onChange={(event) => setBirthDate(event.target.value)}
+                className="h-11 rounded-xl border-white/10 bg-black/20 [color-scheme:dark]"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-xl"
+                disabled={!canSaveBirthDate}
+                onClick={() => void saveBirthDate()}
+              >
+                {birthDateSaving ? t("client.account.savingBirthDate") : t("client.account.saveBirthDate")}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -235,10 +295,6 @@ export default function SettingsAccountPage() {
           <CardDescription>{t("client.account.telegramSubtitle")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="rounded-2xl border border-cyan-200/15 bg-cyan-400/10 px-3 py-3 text-xs leading-relaxed text-cyan-50/85">
-            {t("client.account.telegramUniqueHint")}
-          </div>
-
           {telegramStatus?.connected ? (
             <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-3">
               <div className="flex items-start gap-3">

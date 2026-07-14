@@ -22,6 +22,7 @@ import {
   RedeemSubscriptionEntitlementDto,
   RequestCompanyPayoutDto,
   SpendCompanyPointsDto,
+  UpdateCompanyClientCommentDto,
   UpdateCompanyOwnedSubscriptionDto,
   UpdateCompanyLoyaltySettingsDto,
   UpdateCompanyMemberRoleDto,
@@ -102,6 +103,16 @@ export class CompanyController {
   @Get("clients/:uuid")
   client(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
     return this.companyService.client(user.userId, uuid);
+  }
+
+  @Patch("clients/:uuid/comment")
+  @ApiOperation({ summary: "Update company-specific cashier comment for a customer" })
+  updateClientComment(
+    @CurrentUser() user: RequestUser,
+    @Param("uuid") uuid: string,
+    @Body() dto: UpdateCompanyClientCommentDto,
+  ) {
+    return this.companyService.updateClientComment(user.userId, uuid, dto);
   }
 
   @Post("clients/lookup-code")

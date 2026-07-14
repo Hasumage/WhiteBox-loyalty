@@ -34,6 +34,7 @@ export function BottomNav() {
   const hideNav = isSubscriptionDetail || isFullMap || (pathname.startsWith("/wallet/") && !hasSession);
   const hideFab =
     pathname.startsWith("/wallet/") ||
+    pathname === "/scan" ||
     pathname === "/onboarding" ||
     pathname === "/settings" ||
     pathname.startsWith("/settings/");

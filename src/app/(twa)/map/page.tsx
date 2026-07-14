@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowLeft, Bus, Car, ChevronRight, Crosshair, Filter, Footprints, LocateFixed, MapPin, Maximize2, Route, Search, X } from "lucide-react";
-import { getActiveTwaSubscriptions, getCachedActiveTwaSubscriptions, getCachedTwaCompanies, getTwaCompanies, type TwaCompany, type TwaUserSubscription } from "@/lib/api/twa-client";
+import { getActiveTwaSubscriptions, getCachedActiveTwaSubscriptions, getCachedTwaMapCompanies, getTwaMapCompanies, type TwaCompany, type TwaUserSubscription } from "@/lib/api/twa-client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,122 @@ import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 const YANDEX_MAPS_SCRIPT_ID = "yandex-maps-js-api-v3";
 const YANDEX_MAP_CENTER: [number, number] = [37.6176, 55.7558];
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
+const CITY_CLUSTER_MAX_ZOOM = 8.8;
+const CITY_CLUSTER_ZOOM_IN = 11.2;
+
+type CityClusterDefinition = {
+  id: string;
+  name: string;
+  aliases: string[];
+  center: [number, number];
+  radiusKm: number;
+  landmark: string;
+  image: string;
+  background: string;
+};
+
+const CITY_CLUSTERS: CityClusterDefinition[] = [
+  {
+    id: "moscow",
+    name: "\u041c\u043e\u0441\u043a\u0432\u0430",
+    aliases: ["moscow", "\u043c\u043e\u0441\u043a\u0432\u0430"],
+    center: [37.6176, 55.7558],
+    radiusKm: 85,
+    landmark: "\u041a\u0440\u0435\u043c\u043b\u044c",
+    image: "/city-clusters/moscow.webp",
+    background: "radial-gradient(circle at 28% 22%, rgba(248,113,113,.92), transparent 30%), linear-gradient(135deg, rgba(127,29,29,.95), rgba(15,23,42,.96))",
+  },
+  {
+    id: "saint-petersburg",
+    name: "\u0421\u0430\u043d\u043a\u0442-\u041f\u0435\u0442\u0435\u0440\u0431\u0443\u0440\u0433",
+    aliases: ["saint petersburg", "st petersburg", "spb", "\u0441\u0430\u043d\u043a\u0442-\u043f\u0435\u0442\u0435\u0440\u0431\u0443\u0440\u0433", "\u043f\u0435\u0442\u0435\u0440\u0431\u0443\u0440\u0433", "\u0441\u043f\u0431"],
+    center: [30.3159, 59.9391],
+    radiusKm: 70,
+    landmark: "\u0418\u0441\u0430\u0430\u043a\u0438\u0439",
+    image: "/city-clusters/saint-petersburg.webp",
+    background: "radial-gradient(circle at 30% 20%, rgba(125,211,252,.85), transparent 34%), linear-gradient(135deg, rgba(30,64,175,.9), rgba(15,23,42,.96))",
+  },
+  {
+    id: "novosibirsk",
+    name: "\u041d\u043e\u0432\u043e\u0441\u0438\u0431\u0438\u0440\u0441\u043a",
+    aliases: ["novosibirsk", "\u043d\u043e\u0432\u043e\u0441\u0438\u0431\u0438\u0440\u0441\u043a"],
+    center: [82.9204, 55.0302],
+    radiusKm: 65,
+    landmark: "\u041e\u043f\u0435\u0440\u043d\u044b\u0439",
+    image: "/city-clusters/novosibirsk.webp",
+    background: "radial-gradient(circle at 26% 22%, rgba(96,165,250,.86), transparent 34%), linear-gradient(135deg, rgba(30,41,59,.94), rgba(2,44,34,.95))",
+  },
+  {
+    id: "yekaterinburg",
+    name: "\u0415\u043a\u0430\u0442\u0435\u0440\u0438\u043d\u0431\u0443\u0440\u0433",
+    aliases: ["yekaterinburg", "ekaterinburg", "\u0435\u043a\u0430\u0442\u0435\u0440\u0438\u043d\u0431\u0443\u0440\u0433"],
+    center: [60.6057, 56.8389],
+    radiusKm: 60,
+    landmark: "\u0412\u044b\u0441\u043e\u0446\u043a\u0438\u0439",
+    image: "/city-clusters/yekaterinburg.webp",
+    background: "radial-gradient(circle at 30% 18%, rgba(251,191,36,.86), transparent 34%), linear-gradient(135deg, rgba(120,53,15,.9), rgba(15,23,42,.96))",
+  },
+  {
+    id: "kazan",
+    name: "\u041a\u0430\u0437\u0430\u043d\u044c",
+    aliases: ["kazan", "\u043a\u0430\u0437\u0430\u043d\u044c"],
+    center: [49.1064, 55.7961],
+    radiusKm: 62,
+    landmark: "\u041a\u0440\u0435\u043c\u043b\u044c",
+    image: "/city-clusters/kazan.webp",
+    background: "radial-gradient(circle at 28% 20%, rgba(52,211,153,.86), transparent 34%), linear-gradient(135deg, rgba(6,95,70,.92), rgba(15,23,42,.96))",
+  },
+  {
+    id: "krasnoyarsk",
+    name: "\u041a\u0440\u0430\u0441\u043d\u043e\u044f\u0440\u0441\u043a",
+    aliases: ["krasnoyarsk", "\u043a\u0440\u0430\u0441\u043d\u043e\u044f\u0440\u0441\u043a"],
+    center: [92.8526, 56.0106],
+    radiusKm: 58,
+    landmark: "\u0421\u0442\u043e\u043b\u0431\u044b",
+    image: "/city-clusters/krasnoyarsk.webp",
+    background: "radial-gradient(circle at 28% 20%, rgba(74,222,128,.82), transparent 34%), linear-gradient(135deg, rgba(20,83,45,.92), rgba(15,23,42,.96))",
+  },
+  {
+    id: "nizhny-novgorod",
+    name: "\u041d\u0438\u0436\u043d\u0438\u0439 \u041d\u043e\u0432\u0433\u043e\u0440\u043e\u0434",
+    aliases: ["nizhny novgorod", "\u043d\u0438\u0436\u043d\u0438\u0439 \u043d\u043e\u0432\u0433\u043e\u0440\u043e\u0434", "\u043d\u0438\u0436\u043d\u0438\u0439"],
+    center: [44.0059, 56.3269],
+    radiusKm: 62,
+    landmark: "\u0421\u0442\u0440\u0435\u043b\u043a\u0430",
+    image: "/city-clusters/nizhny-novgorod.webp",
+    background: "radial-gradient(circle at 28% 20%, rgba(45,212,191,.84), transparent 34%), linear-gradient(135deg, rgba(17,94,89,.9), rgba(15,23,42,.96))",
+  },
+  {
+    id: "chelyabinsk",
+    name: "\u0427\u0435\u043b\u044f\u0431\u0438\u043d\u0441\u043a",
+    aliases: ["chelyabinsk", "\u0447\u0435\u043b\u044f\u0431\u0438\u043d\u0441\u043a"],
+    center: [61.4368, 55.1644],
+    radiusKm: 58,
+    landmark: "\u0410\u0440\u043a\u0430",
+    image: "/city-clusters/chelyabinsk.webp",
+    background: "radial-gradient(circle at 28% 20%, rgba(148,163,184,.9), transparent 34%), linear-gradient(135deg, rgba(51,65,85,.94), rgba(15,23,42,.96))",
+  },
+  {
+    id: "ufa",
+    name: "\u0423\u0444\u0430",
+    aliases: ["ufa", "\u0443\u0444\u0430"],
+    center: [55.9587, 54.7351],
+    radiusKm: 58,
+    landmark: "\u0421\u0430\u043b\u0430\u0432\u0430\u0442",
+    image: "/city-clusters/ufa.webp",
+    background: "radial-gradient(circle at 28% 20%, rgba(250,204,21,.86), transparent 34%), linear-gradient(135deg, rgba(101,67,33,.92), rgba(15,23,42,.96))",
+  },
+  {
+    id: "samara",
+    name: "\u0421\u0430\u043c\u0430\u0440\u0430",
+    aliases: ["samara", "\u0441\u0430\u043c\u0430\u0440\u0430"],
+    center: [50.1002, 53.1959],
+    radiusKm: 58,
+    landmark: "\u041a\u043e\u0441\u043c\u043e\u0441",
+    image: "/city-clusters/samara.webp",
+    background: "radial-gradient(circle at 28% 20%, rgba(196,181,253,.9), transparent 34%), linear-gradient(135deg, rgba(76,29,149,.92), rgba(15,23,42,.96))",
+  },
+];
 
 type MapStatus =
   | { state: "missing-key"; message: string }
@@ -68,7 +184,8 @@ type PartnerMapPoint = {
 
 type MarkerItem =
   | { type: "point"; point: PartnerMapPoint }
-  | { type: "cluster"; id: string; points: PartnerMapPoint[]; longitude: number; latitude: number };
+  | { type: "cluster"; id: string; points: PartnerMapPoint[]; longitude: number; latitude: number }
+  | { type: "city"; id: string; city: CityClusterDefinition; points: PartnerMapPoint[]; partnerCount: number; longitude: number; latitude: number };
 
 type MapLocationState = {
   center: [number, number];
@@ -137,16 +254,90 @@ function categoryIconName(point: PartnerMapPoint) {
   return point.company.category?.icon ?? point.company.categories[0]?.icon ?? "MapPin";
 }
 
+function normalizeCityName(value: string | null | undefined) {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/С‘/g, "Рµ")
+    .replace(/[^a-zР°-СЏ0-9]+/gi, " ")
+    .trim();
+}
+
+function distanceBetweenKm(fromLatitude: number, fromLongitude: number, toLatitude: number, toLongitude: number) {
+  const earthRadiusKm = 6371;
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(toLatitude - fromLatitude);
+  const dLng = toRad(toLongitude - fromLongitude);
+  const lat1 = toRad(fromLatitude);
+  const lat2 = toRad(toLatitude);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function cityForPoint(point: PartnerMapPoint) {
+  const locationCity = normalizeCityName(point.location.city);
+  const address = normalizeCityName(point.location.address);
+  const byName = CITY_CLUSTERS.find((city) =>
+    city.aliases.some((alias) => {
+      const normalizedAlias = normalizeCityName(alias);
+      return locationCity === normalizedAlias || address.includes(normalizedAlias);
+    }),
+  );
+  if (byName) return byName;
+
+  const nearest = CITY_CLUSTERS
+    .map((city) => ({
+      city,
+      distance: distanceBetweenKm(point.location.latitude, point.location.longitude, city.center[1], city.center[0]),
+    }))
+    .sort((a, b) => a.distance - b.distance)[0];
+
+  return nearest && nearest.distance <= nearest.city.radiusKm ? nearest.city : null;
+}
+
+function buildCityMarkerItems(points: PartnerMapPoint[]): MarkerItem[] {
+  const cityBuckets = new Map<string, { city: CityClusterDefinition; points: PartnerMapPoint[] }>();
+
+  for (const point of points) {
+    const city = cityForPoint(point);
+    if (!city) continue;
+    const current = cityBuckets.get(city.id) ?? { city, points: [] };
+    current.points.push(point);
+    cityBuckets.set(city.id, current);
+  }
+
+  return [...cityBuckets.values()]
+    .map<MarkerItem>(({ city, points: cityPoints }) => ({
+      type: "city",
+      id: `city:${city.id}`,
+      city,
+      points: cityPoints,
+      partnerCount: new Set(cityPoints.map((point) => point.company.id)).size,
+      longitude: city.center[0],
+      latitude: city.center[1],
+    }))
+    .sort((a, b) => {
+      if (a.type !== "city" || b.type !== "city") return 0;
+      return b.points.length - a.points.length || a.city.name.localeCompare(b.city.name);
+    });
+}
+
 function clusterCellSize(zoom: number, pointsCount: number) {
   if (zoom >= 14) return 0;
-  if (zoom >= 13) return pointsCount >= 20 ? 0.012 : 0.008;
-  if (zoom >= 12) return 0.018;
-  if (zoom >= 11) return 0.04;
-  if (zoom >= 10) return 0.075;
-  return 0.14;
+  if (zoom >= 13) return pointsCount >= 20 ? 0.018 : 0.012;
+  if (zoom >= 12) return 0.035;
+  if (zoom >= 11) return 0.07;
+  if (zoom >= 10) return 0.14;
+  if (zoom > CITY_CLUSTER_MAX_ZOOM) return 0.32;
+  return 0.75;
 }
 
 function buildMarkerItems(points: PartnerMapPoint[], selectedId: string | null, zoom = 11): MarkerItem[] {
+  if (zoom <= CITY_CLUSTER_MAX_ZOOM) {
+    const cityItems = buildCityMarkerItems(points);
+    if (cityItems.length > 0) return cityItems;
+  }
   if (points.length < 4) return points.map((point) => ({ type: "point", point }));
 
   const buckets = new Map<string, PartnerMapPoint[]>();
@@ -254,6 +445,38 @@ function fallbackCoordinates(longitude: number, latitude: number, points: Partne
 
 function fallbackPoint(point: PartnerMapPoint, points: PartnerMapPoint[]) {
   return fallbackCoordinates(point.location.longitude, point.location.latitude, points);
+}
+
+function CityClusterBadge({ item, compact = false }: { item: Extract<MarkerItem, { type: "city" }>; compact?: boolean }) {
+  return (
+    <motion.span
+      className={cn(
+        "flex items-center gap-2 rounded-2xl border border-cyan-200/50 bg-slate-950/90 p-1.5 text-white shadow-[0_18px_42px_rgba(0,0,0,0.45)] ring-4 ring-cyan-400/15 backdrop-blur",
+        compact ? "max-w-[132px] pr-2" : "max-w-[170px] pr-3",
+      )}
+      whileTap={{ scale: 0.96 }}
+    >
+      <span
+        className={cn("relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/20 bg-slate-950", compact ? "h-11 w-11" : "h-14 w-14")}
+        style={{ background: item.city.background }}
+      >
+        <img
+          src={item.city.image}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="lazy"
+          draggable={false}
+        />
+        <span className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.16),transparent_46%,rgba(0,0,0,0.24))]" />
+      </span>
+      <span className="min-w-0 text-left leading-tight">
+        <span className="block truncate text-[12px] font-extrabold">{item.city.name}</span>
+      </span>
+      <span className="ml-auto shrink-0 rounded-full border border-cyan-200/30 bg-cyan-300/15 px-1.5 py-0.5 text-[11px] font-black text-cyan-50">
+        {item.partnerCount}
+      </span>
+    </motion.span>
+  );
 }
 
 function loadYandexMaps(apiKey: string): Promise<YMaps3Api> {
@@ -390,6 +613,21 @@ function PartnerMap({
         </span>
       )}
       {markerItems.map((item) => {
+        if (item.type === "city") {
+          const position = fallbackCoordinates(item.longitude, item.latitude, points);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onClusterPreview(item.points)}
+              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-200"
+              style={{ left: `${position.x}%`, top: `${position.y}%` }}
+              aria-label={`${item.city.name}: ${item.partnerCount} РїР°СЂС‚РЅС‘СЂРѕРІ`}
+            >
+              <CityClusterBadge item={item} compact />
+            </button>
+          );
+        }
         if (item.type === "cluster") {
           const position = fallbackCoordinates(item.longitude, item.latitude, points);
           return (
@@ -629,7 +867,7 @@ function YandexPartnerMap({
 
   return (
     <div className="space-y-2">
-      <div className={cn("relative h-[280px] w-full overflow-hidden rounded-2xl border border-white/10 bg-muted/30", className)}>
+      <div className={cn("nearloy-yandex-map relative isolate h-[280px] w-full overflow-hidden rounded-2xl border border-white/10 bg-muted/30", className)}>
         <YMap location={location} mode="vector">
           <YMapDefaultSchemeLayer />
           <YMapDefaultFeaturesLayer />
@@ -649,6 +887,26 @@ function YandexPartnerMap({
             </YMapMarker>
           )}
           {markerItems.map((item) => {
+            if (item.type === "city") {
+              return (
+                <YMapMarker key={item.id} coordinates={[item.longitude, item.latitude]}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClusterPreview(item.points);
+                      animateMapLocation({
+                        center: [item.longitude, item.latitude],
+                        zoom: CITY_CLUSTER_ZOOM_IN,
+                      });
+                    }}
+                    className="transition-transform focus:outline-none focus:ring-2 focus:ring-cyan-200 active:scale-95"
+                    aria-label={`${item.city.name}: ${item.partnerCount} РїР°СЂС‚РЅС‘СЂРѕРІ`}
+                  >
+                    <CityClusterBadge item={item} />
+                  </button>
+                </YMapMarker>
+              );
+            }
             if (item.type === "cluster") {
               return (
                 <YMapMarker key={item.id} coordinates={[item.longitude, item.latitude]}>
@@ -693,8 +951,9 @@ function YandexPartnerMap({
           })}
         </YMap>
         {showFooter && (
-          <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-background/80 px-2 py-1.5 text-[10px] text-muted-foreground backdrop-blur">
-            {interpolate(t("client.map.yandexFooter"), { count: points.length })}
+          <div className="pointer-events-none absolute bottom-2 left-2 z-[2147483647] flex min-h-9 w-[250px] max-w-[calc(100%-1rem)] items-center gap-2 rounded-xl border border-white/10 bg-slate-950/90 px-2.5 py-1.5 text-[10px] text-slate-300 shadow-[0_14px_34px_rgba(0,0,0,0.42)] backdrop-blur-md">
+            <MapPin className="h-3.5 w-3.5 shrink-0 text-rose-300" />
+            <span className="truncate">{t("client.map.yandexIntegration")}</span>
           </div>
         )}
         {overlay}
@@ -769,13 +1028,13 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
 
   useEffect(() => {
     let ignore = false;
-    const cachedCompanies = getCachedTwaCompanies();
+    const cachedCompanies = getCachedTwaMapCompanies();
     const cachedSubscriptions = getCachedActiveTwaSubscriptions();
     if (cachedCompanies.length) setCompanies(cachedCompanies);
     if (SUBSCRIPTIONS_ENABLED && cachedSubscriptions.length) setActiveSubscriptions(cachedSubscriptions);
     const requests = SUBSCRIPTIONS_ENABLED
-      ? Promise.all([getTwaCompanies(), getActiveTwaSubscriptions()] as const)
-      : Promise.all([getTwaCompanies(), Promise.resolve([] as TwaUserSubscription[])] as const);
+      ? Promise.all([getTwaMapCompanies(true), getActiveTwaSubscriptions()] as const)
+      : Promise.all([getTwaMapCompanies(true), Promise.resolve([] as TwaUserSubscription[])] as const);
 
     void requests.then(([data, subscriptions]) => {
       if (ignore) return;

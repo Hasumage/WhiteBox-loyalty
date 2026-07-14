@@ -52,6 +52,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     customerBalance,
     loyaltyTotals,
     recentPayments,
+    verificationApplication,
   ] = await Promise.all([
     prisma.userSubscription.groupBy({
       by: ["status"],
@@ -135,6 +136,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         createdAt: true,
       },
     }).catch(() => []),
+    prisma.companyVerificationApplication.findFirst({
+      where: { companyId: company.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        uuid: true,
+        companyName: true,
+        contactName: true,
+        identityVerificationMode: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }).catch(() => null),
   ]);
 
   const revenueRows = revenueSubscriptions.map((item) => ({
@@ -193,6 +207,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     company: {
       owner: { uuid: owner.uuid, name: owner.name, email: owner.email },
       profile: { id: company.id, name: company.name, slug: company.slug, isActive: company.isActive },
+      verification: verificationApplication
+        ? {
+            uuid: verificationApplication.uuid,
+            companyName: verificationApplication.companyName,
+            contactName: verificationApplication.contactName,
+            identityVerificationMode: verificationApplication.identityVerificationMode,
+            status: verificationApplication.status,
+            createdAt: verificationApplication.createdAt,
+            updatedAt: verificationApplication.updatedAt,
+          }
+        : null,
     },
     billing: {
       account,

@@ -19,7 +19,7 @@ type FieldElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 const stepFields: Record<Step, string[]> = {
   1: ["employmentType", "contactName", "contactEmail", "password", "passwordConfirm", "companyName", "businessCategory"],
   2: ["legalLastName", "legalFirstName", "birthDate", "legalInn"],
-  3: ["consentAccepted"],
+  3: ["consentAccepted", "termsAccepted"],
 };
 
 function digitsOnly(value: string, max: number) {
@@ -65,7 +65,7 @@ const copy = {
     companyName: "Название компании или проекта",
     businessCategory: "Что продаете / сфера бизнеса",
     legalHint:
-      "Пока оставляем только универсальный минимум: ФИО по документам и ИНН. Реквизиты, ОГРНИП, регион и условия вывода добавим позже как отдельные настраиваемые поля.",
+      "Для заявки достаточно ФИО по документам и ИНН. Если для проверки или выплат понадобятся дополнительные данные, мы запросим их отдельно.",
     legalLastName: "Фамилия по документам",
     legalFirstName: "Имя по документам",
     legalMiddleName: "Отчество, если есть",
@@ -266,6 +266,7 @@ export default function CompanyRegisterPage() {
     const payload = new FormData(form);
     payload.set("identityVerificationMode", "FULL");
     payload.set("consentAccepted", form.querySelector<HTMLInputElement>("#consentAccepted")?.checked === true ? "true" : "false");
+    payload.set("termsAccepted", form.querySelector<HTMLInputElement>("#termsAccepted")?.checked === true ? "true" : "false");
 
     setStatus("sending");
     setMessage("");
@@ -426,6 +427,21 @@ export default function CompanyRegisterPage() {
               <label className="flex gap-3 rounded-2xl border border-white/10 bg-black/18 p-4 text-sm leading-6 text-white/64">
                 <input id="consentAccepted" name="consentAccepted" required type="checkbox" className="mt-1 h-4 w-4" />
                 <span>{String(t.consent)}</span>
+              </label>
+              <label className="flex gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50/82">
+                <input id="termsAccepted" name="termsAccepted" required type="checkbox" className="mt-1 h-4 w-4 accent-cyan-100" />
+                <span>
+                  {locale === "ru"
+                    ? "Я принимаю правила NearLoy для компаний и понимаю, что компания отвечает за свои товары, услуги, акции, сотрудников и размещённые данные."
+                    : "I accept the NearLoy company terms and understand that the company is responsible for its goods, services, promotions, employees, and submitted data."}{" "}
+                  <Link href="/help/terms/companies" target="_blank" className="font-semibold text-white underline underline-offset-4">
+                    {locale === "ru" ? "Правила для компаний" : "Company terms"}
+                  </Link>
+                  {" · "}
+                  <Link href="/help/privacy" target="_blank" className="font-semibold text-white underline underline-offset-4">
+                    {locale === "ru" ? "Политика приватности" : "Privacy policy"}
+                  </Link>
+                </span>
               </label>
             </div>
 

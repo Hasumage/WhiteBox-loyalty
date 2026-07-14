@@ -287,66 +287,69 @@ enum EmailVerificationStatus {
 }
 
 model User {
-  id              Int                @id @default(autoincrement())
-  uuid            String             @unique @default(uuid())
-  telegramId      BigInt?            @unique
-  phoneNumber     String?            @unique
-  phoneVerifiedAt DateTime?
-  companyReferralCode String?        @unique
-  name            String
-  email           String             @unique
-  role            UserRole           @default(CLIENT)
+  id                  Int           @id @default(autoincrement())
+  uuid                String        @unique @default(uuid())
+  telegramId          BigInt?       @unique
+  phoneNumber         String?       @unique
+  phoneVerifiedAt     DateTime?
+  companyReferralCode String?       @unique
+  name                String
+  email               String        @unique
+  role                UserRole      @default(CLIENT)
   /// bcrypt hash; null for Telegram-only or OAuth-only users until password is set
-  passwordHash    String?
-  emailVerifiedAt DateTime?
-  accountStatus         AccountStatus @default(ACTIVE)
-  deletionScheduledAt   DateTime?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  passwordHash        String?
+  birthDate           DateTime?
+  emailVerifiedAt     DateTime?
+  termsAcceptedAt     DateTime?
+  termsVersion        String?
+  accountStatus       AccountStatus @default(ACTIVE)
+  deletionScheduledAt DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
-  companyLinks  UserCompany[]
-  subscriptions UserSubscription[]
-  subscriptionBundles UserSubscriptionBundle[]
-  refreshTokens RefreshToken[]
-  oauthAccounts OAuthAccount[]
-  favoriteCategories UserFavoriteCategory[]
-  emailChangeRequests EmailChangeRequest[] @relation("EmailChangeTarget")
-  requestedEmailChanges EmailChangeRequest[] @relation("EmailChangeRequester")
-  managedCompany Company? @relation("CompanyOwner")
-  companyMemberships CompanyMember[]
-  companyPurchases CompanyPurchase[] @relation("CompanyPurchaseCustomer")
-  processedCompanyPurchases CompanyPurchase[] @relation("CompanyPurchaseProcessor")
-  processedSubscriptionRedemptions SubscriptionRedemption[] @relation("SubscriptionRedemptionProcessor")
-  processedSubscriptionBundleRedemptions SubscriptionBundleRedemption[] @relation("SubscriptionBundleRedemptionProcessor")
-  loginEvents LoginEvent[]
-  loyaltyTransactions LoyaltyTransaction[]
-  actorAuditEvents AuditEvent[] @relation("AuditActor")
-  targetAuditEvents AuditEvent[] @relation("AuditTarget")
-  profilePreference UserProfilePreference?
-  promoRedemptions PromoCodeRedemption[]
-  referralInvites ReferralInvite[] @relation("ReferralInviter")
-  redeemedReferralInvites ReferralInvite[] @relation("ReferralInvited")
-  companyReferrals CompanyReferral[] @relation("CompanyReferralOwner")
-  supportedCompanies Company[] @relation("CompanySupportManager")
-  telegramLinkTokens TelegramLinkToken[]
-  customerLookupCodes CustomerLookupCode[]
-  permissions AdminUserPermission[]
-  selectedProfileStatusId String?
-  selectedProfileStatus ProfileStatus? @relation("SelectedProfileStatus", fields: [selectedProfileStatusId], references: [id], onDelete: SetNull)
-  profileStatusUnlocks UserProfileStatusUnlock[] @relation("UserProfileStatusUnlocks")
-  grantedProfileStatuses UserProfileStatusUnlock[] @relation("ProfileStatusUnlockedBy")
-  requestedFinanceOperations FinanceOperation[] @relation("FinanceRequestedBy")
-  approvedFinanceOperations FinanceOperation[] @relation("FinanceApprovedBy")
-  assignedAdminTasks AdminTask[] @relation("AdminTaskAssignee")
-  resolvedAdminTasks AdminTask[] @relation("AdminTaskResolver")
-  proposedSubscriptionBundles SubscriptionBundle[] @relation("SubscriptionBundleProposer")
+  companyLinks                           UserCompany[]
+  subscriptions                          UserSubscription[]
+  subscriptionBundles                    UserSubscriptionBundle[]
+  refreshTokens                          RefreshToken[]
+  oauthAccounts                          OAuthAccount[]
+  favoriteCategories                     UserFavoriteCategory[]
+  emailChangeRequests                    EmailChangeRequest[]            @relation("EmailChangeTarget")
+  requestedEmailChanges                  EmailChangeRequest[]            @relation("EmailChangeRequester")
+  managedCompany                         Company?                        @relation("CompanyOwner")
+  companyMemberships                     CompanyMember[]
+  companyPurchases                       CompanyPurchase[]               @relation("CompanyPurchaseCustomer")
+  processedCompanyPurchases              CompanyPurchase[]               @relation("CompanyPurchaseProcessor")
+  processedSubscriptionRedemptions       SubscriptionRedemption[]        @relation("SubscriptionRedemptionProcessor")
+  processedSubscriptionBundleRedemptions SubscriptionBundleRedemption[]  @relation("SubscriptionBundleRedemptionProcessor")
+  loginEvents                            LoginEvent[]
+  loyaltyTransactions                    LoyaltyTransaction[]
+  actorAuditEvents                       AuditEvent[]                    @relation("AuditActor")
+  targetAuditEvents                      AuditEvent[]                    @relation("AuditTarget")
+  profilePreference                      UserProfilePreference?
+  promoRedemptions                       PromoCodeRedemption[]
+  referralInvites                        ReferralInvite[]                @relation("ReferralInviter")
+  redeemedReferralInvites                ReferralInvite[]                @relation("ReferralInvited")
+  companyReferrals                       CompanyReferral[]               @relation("CompanyReferralOwner")
+  supportedCompanies                     Company[]                       @relation("CompanySupportManager")
+  telegramLinkTokens                     TelegramLinkToken[]
+  customerLookupCodes                    CustomerLookupCode[]
+  permissions                            AdminUserPermission[]
+  selectedProfileStatusId                String?
+  selectedProfileStatus                  ProfileStatus?                  @relation("SelectedProfileStatus", fields: [selectedProfileStatusId], references: [id], onDelete: SetNull)
+  profileStatusUnlocks                   UserProfileStatusUnlock[]       @relation("UserProfileStatusUnlocks")
+  grantedProfileStatuses                 UserProfileStatusUnlock[]       @relation("ProfileStatusUnlockedBy")
+  requestedFinanceOperations             FinanceOperation[]              @relation("FinanceRequestedBy")
+  approvedFinanceOperations              FinanceOperation[]              @relation("FinanceApprovedBy")
+  assignedAdminTasks                     AdminTask[]                     @relation("AdminTaskAssignee")
+  resolvedAdminTasks                     AdminTask[]                     @relation("AdminTaskResolver")
+  proposedSubscriptionBundles            SubscriptionBundle[]            @relation("SubscriptionBundleProposer")
   approvedSubscriptionBundleParticipants SubscriptionBundleParticipant[] @relation("SubscriptionBundleParticipantApprover")
-  createdCompanyBillingPromoCodes CompanyBillingPromoCode[] @relation("CompanyBillingPromoCreator")
-  payments Payment[]
-  kycAccessLogs CompanyKycAccessLog[] @relation("CompanyKycAccessActor")
-  deletedKycPhotos CompanyKycRecord[] @relation("CompanyKycPhotoDeletedBy")
-  sentEmailMessages EmailMessage[] @relation("EmailSender")
-  targetEmailMessages EmailMessage[] @relation("EmailTargetUser")
+  createdCompanyBillingPromoCodes        CompanyBillingPromoCode[]       @relation("CompanyBillingPromoCreator")
+  payments                               Payment[]
+  kycAccessLogs                          CompanyKycAccessLog[]           @relation("CompanyKycAccessActor")
+  deletedKycPhotos                       CompanyKycRecord[]              @relation("CompanyKycPhotoDeletedBy")
+  sentEmailMessages                      EmailMessage[]                  @relation("EmailSender")
+  targetEmailMessages                    EmailMessage[]                  @relation("EmailTargetUser")
 }
 
 model ProfileStatus {
@@ -368,12 +371,12 @@ model ProfileStatus {
 }
 
 model UserProfileStatusUnlock {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       Int
   statusId     String
-  source       String   @default("MANUAL")
+  source       String    @default("MANUAL")
   unlockedById Int?
-  unlockedAt   DateTime @default(now())
+  unlockedAt   DateTime  @default(now())
   seenAt       DateTime?
 
   user       User          @relation("UserProfileStatusUnlocks", fields: [userId], references: [id], onDelete: Cascade)
@@ -393,14 +396,14 @@ model PlatformCounter {
 }
 
 model AdminUserPermission {
-  id        String          @id @default(cuid())
-  userId    Int
-  scope     PermissionScope
-  canView   Boolean         @default(false)
-  canEdit   Boolean         @default(false)
-  canApprove Boolean        @default(false)
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  id         String          @id @default(cuid())
+  userId     Int
+  scope      PermissionScope
+  canView    Boolean         @default(false)
+  canEdit    Boolean         @default(false)
+  canApprove Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -409,19 +412,19 @@ model AdminUserPermission {
 }
 
 model Category {
-  id          Int       @id @default(autoincrement())
-  slug        String    @unique
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
   name        String
   description String?
   icon        String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  companies      Company[]
-  companyCategories CompanyCategory[]
-  subscriptions  Subscription[]
+  companies           Company[]
+  companyCategories   CompanyCategory[]
+  subscriptions       Subscription[]
   subscriptionBundles SubscriptionBundle[]
-  favoredByUsers UserFavoriteCategory[]
+  favoredByUsers      UserFavoriteCategory[]
 }
 
 model UserFavoriteCategory {
@@ -430,85 +433,87 @@ model UserFavoriteCategory {
   categoryId Int
   createdAt  DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([userId, categoryId])
   @@index([categoryId])
 }
 
 model Company {
-  id                Int       @id @default(autoincrement())
-  slug              String    @unique
-  name              String
-  description       String?
-  categoryId        Int
-  pointsPerReward   Int       @default(100)
-  subscriptionSpendPolicy SubscriptionSpendPolicy @default(EXCLUDE)
-  platformCommissionPercent Decimal @default(12.00) @db.Decimal(5, 2)
-  platformMonthlyFee Decimal @default(4990.00) @db.Decimal(10, 2)
-  commissionFreeMonthlyTurnover Decimal @default(50000.00) @db.Decimal(12, 2)
-  monthlyFeeOverride Decimal? @db.Decimal(10, 2)
-  monthlyFeeOverrideEndsAt DateTime?
-  commissionGraceEndsAt DateTime?
-  isActive          Boolean   @default(true)
-  operatesOnline    Boolean   @default(false)
-  ownerUserId       Int?      @unique
-  supportManagerId  Int?
-  supportManagerAssignedAt DateTime?
-  employmentType    CompanyEmploymentType?
-  identityVerificationMode IdentityVerificationMode @default(FULL)
-  identityVerificationCompleted Boolean @default(false)
-  verificationStatus CompanyVerificationStatus @default(DRAFT)
-  legalFirstName    String?
-  legalMiddleName   String?
-  legalLastName     String?
-  birthDate         DateTime?
-  legalFullName     String?
-  legalInn          String?
-  legalOgrnip       String?
-  legalRegistrationRegion String?
-  payoutBankName    String?
-  payoutBik         String?
-  payoutAccount     String?
-  payoutCorrespondentAccount String?
-  payoutCardLast4   String?
-  passportVerificationStatus CompanyVerificationStatus @default(DRAFT)
-  passportLast4     String?
-  passportDataDeletedAt DateTime?
-  verificationSubmittedAt DateTime?
-  verificationReviewedAt DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                            Int                       @id @default(autoincrement())
+  slug                          String                    @unique
+  name                          String
+  description                   String?
+  categoryId                    Int
+  pointsPerReward               Int                       @default(100)
+  subscriptionSpendPolicy       SubscriptionSpendPolicy   @default(EXCLUDE)
+  platformCommissionPercent     Decimal                   @default(12.00) @db.Decimal(5, 2)
+  platformMonthlyFee            Decimal                   @default(4990.00) @db.Decimal(10, 2)
+  commissionFreeMonthlyTurnover Decimal                   @default(50000.00) @db.Decimal(12, 2)
+  monthlyFeeOverride            Decimal?                  @db.Decimal(10, 2)
+  monthlyFeeOverrideEndsAt      DateTime?
+  commissionGraceEndsAt         DateTime?
+  isActive                      Boolean                   @default(true)
+  operatesOnline                Boolean                   @default(false)
+  ownerUserId                   Int?                      @unique
+  supportManagerId              Int?
+  supportManagerAssignedAt      DateTime?
+  employmentType                CompanyEmploymentType?
+  identityVerificationMode      IdentityVerificationMode  @default(FULL)
+  identityVerificationCompleted Boolean                   @default(false)
+  verificationStatus            CompanyVerificationStatus @default(DRAFT)
+  legalFirstName                String?
+  legalMiddleName               String?
+  legalLastName                 String?
+  birthDate                     DateTime?
+  legalFullName                 String?
+  legalInn                      String?
+  legalOgrnip                   String?
+  legalRegistrationRegion       String?
+  payoutBankName                String?
+  payoutBik                     String?
+  payoutAccount                 String?
+  payoutCorrespondentAccount    String?
+  payoutCardLast4               String?
+  passportVerificationStatus    CompanyVerificationStatus @default(DRAFT)
+  passportLast4                 String?
+  passportDataDeletedAt         DateTime?
+  verificationSubmittedAt       DateTime?
+  verificationReviewedAt        DateTime?
+  termsAcceptedAt               DateTime?
+  termsVersion                  String?
+  createdAt                     DateTime                  @default(now())
+  updatedAt                     DateTime                  @updatedAt
 
-  category          Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  categories        CompanyCategory[]
-  locations         CompanyLocation[]
-  levelRules        CompanyLevelRule[]
-  owner             User?           @relation("CompanyOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  supportManager    User?           @relation("CompanySupportManager", fields: [supportManagerId], references: [id], onDelete: SetNull)
-  subscriptions     Subscription[]
-  subscriptionBundleParts SubscriptionBundleParticipant[]
-  proposedSubscriptionBundles SubscriptionBundle[] @relation("SubscriptionBundleProposerCompany")
-  promoPointCodes   PromoCode[]     @relation("PromoPointCompany")
-  referralCampaigns ReferralCampaign[] @relation("ReferralBonusCompany")
-  currentReferral  CompanyReferral?
-  userLinks         UserCompany[]
-  loyaltyTransactions LoyaltyTransaction[]
-  verificationApplications CompanyVerificationApplication[]
-  financeOperations FinanceOperation[]
-  members           CompanyMember[]
-  purchases         CompanyPurchase[]
-  subscriptionRedemptions SubscriptionRedemption[]
+  category                      Category                         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  categories                    CompanyCategory[]
+  locations                     CompanyLocation[]
+  levelRules                    CompanyLevelRule[]
+  owner                         User?                            @relation("CompanyOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  supportManager                User?                            @relation("CompanySupportManager", fields: [supportManagerId], references: [id], onDelete: SetNull)
+  subscriptions                 Subscription[]
+  subscriptionBundleParts       SubscriptionBundleParticipant[]
+  proposedSubscriptionBundles   SubscriptionBundle[]             @relation("SubscriptionBundleProposerCompany")
+  promoPointCodes               PromoCode[]                      @relation("PromoPointCompany")
+  referralCampaigns             ReferralCampaign[]               @relation("ReferralBonusCompany")
+  currentReferral               CompanyReferral?
+  userLinks                     UserCompany[]
+  loyaltyTransactions           LoyaltyTransaction[]
+  verificationApplications      CompanyVerificationApplication[]
+  financeOperations             FinanceOperation[]
+  members                       CompanyMember[]
+  purchases                     CompanyPurchase[]
+  subscriptionRedemptions       SubscriptionRedemption[]
   subscriptionBundleRedemptions SubscriptionBundleRedemption[]
-  billingAccount     CompanyBillingAccount?
-  billingInvoices    CompanyBillingInvoice[]
-  billingPromoRedemptions CompanyBillingPromoRedemption[]
-  payments           Payment[]
-  kycRecord          CompanyKycRecord?
-  mediaAssets        CompanyMediaAsset[]
-  specialOffers      CompanySpecialOffer[]
-  targetEmailMessages EmailMessage[] @relation("EmailTargetCompany")
+  billingAccount                CompanyBillingAccount?
+  billingInvoices               CompanyBillingInvoice[]
+  billingPromoRedemptions       CompanyBillingPromoRedemption[]
+  payments                      Payment[]
+  kycRecord                     CompanyKycRecord?
+  mediaAssets                   CompanyMediaAsset[]
+  specialOffers                 CompanySpecialOffer[]
+  targetEmailMessages           EmailMessage[]                   @relation("EmailTargetCompany")
 
   @@index([categoryId])
   @@index([supportManagerId])
@@ -516,25 +521,25 @@ model Company {
 }
 
 model CompanyBillingAccount {
-  id                    String               @id @default(cuid())
-  companyId             Int                  @unique
-  status                CompanyBillingStatus @default(TRIAL)
-  trialStartedAt        DateTime?
-  trialEndsAt           DateTime?
-  currentPeriodStartsAt DateTime
-  currentPeriodEndsAt   DateTime
-  appliedPromoCodeId    String?
-  paymentMethodProvider PaymentProvider?
+  id                     String               @id @default(cuid())
+  companyId              Int                  @unique
+  status                 CompanyBillingStatus @default(TRIAL)
+  trialStartedAt         DateTime?
+  trialEndsAt            DateTime?
+  currentPeriodStartsAt  DateTime
+  currentPeriodEndsAt    DateTime
+  appliedPromoCodeId     String?
+  paymentMethodProvider  PaymentProvider?
   paymentMethodEncrypted Bytes?
-  paymentMethodIv       String?
-  paymentMethodTag      String?
-  paymentMethodTitle    String?
+  paymentMethodIv        String?
+  paymentMethodTag       String?
+  paymentMethodTitle     String?
   paymentMethodCardLast4 String?
-  paymentMethodCardType String?
-  paymentMethodSavedAt  DateTime?
+  paymentMethodCardType  String?
+  paymentMethodSavedAt   DateTime?
   paymentMethodDeletedAt DateTime?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
 
   company          Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   appliedPromoCode CompanyBillingPromoCode? @relation("AppliedCompanyBillingPromo", fields: [appliedPromoCodeId], references: [id], onDelete: SetNull)
@@ -544,21 +549,21 @@ model CompanyBillingAccount {
 }
 
 model CompanyBillingInvoice {
-  id                       String                      @id @default(cuid())
-  uuid                     String                      @unique @default(uuid())
-  companyId                Int
-  status                   CompanyBillingInvoiceStatus @default(OPEN)
-  periodStartsAt           DateTime
-  periodEndsAt             DateTime
-  baseFee                  Decimal                     @db.Decimal(12, 2)
-  promoDiscountPercent     Decimal                     @default(0) @db.Decimal(5, 2)
-  promoDiscountAmount      Decimal                     @default(0) @db.Decimal(12, 2)
-  commissionCreditAmount   Decimal                     @default(0) @db.Decimal(12, 2)
-  amountDue                Decimal                     @db.Decimal(12, 2)
-  paidAmount               Decimal                     @default(0) @db.Decimal(12, 2)
-  paidAt                   DateTime?
-  createdAt                DateTime                    @default(now())
-  updatedAt                DateTime                    @updatedAt
+  id                     String                      @id @default(cuid())
+  uuid                   String                      @unique @default(uuid())
+  companyId              Int
+  status                 CompanyBillingInvoiceStatus @default(OPEN)
+  periodStartsAt         DateTime
+  periodEndsAt           DateTime
+  baseFee                Decimal                     @db.Decimal(12, 2)
+  promoDiscountPercent   Decimal                     @default(0) @db.Decimal(5, 2)
+  promoDiscountAmount    Decimal                     @default(0) @db.Decimal(12, 2)
+  commissionCreditAmount Decimal                     @default(0) @db.Decimal(12, 2)
+  amountDue              Decimal                     @db.Decimal(12, 2)
+  paidAmount             Decimal                     @default(0) @db.Decimal(12, 2)
+  paidAt                 DateTime?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -568,23 +573,23 @@ model CompanyBillingInvoice {
 }
 
 model CompanyBillingPromoCode {
-  id                 String   @id @default(cuid())
-  uuid               String   @unique @default(uuid())
-  code               String   @unique
-  title              String
-  description        String?
-  discountPercent    Decimal  @db.Decimal(5, 2)
-  maxRedemptions     Int?
-  redemptionCount    Int      @default(0)
-  startsAt           DateTime?
-  expiresAt          DateTime?
-  isActive           Boolean  @default(true)
-  createdByUserId    Int
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id              String    @id @default(cuid())
+  uuid            String    @unique @default(uuid())
+  code            String    @unique
+  title           String
+  description     String?
+  discountPercent Decimal   @db.Decimal(5, 2)
+  maxRedemptions  Int?
+  redemptionCount Int       @default(0)
+  startsAt        DateTime?
+  expiresAt       DateTime?
+  isActive        Boolean   @default(true)
+  createdByUserId Int
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  createdBy       User                          @relation("CompanyBillingPromoCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  appliedAccounts CompanyBillingAccount[]       @relation("AppliedCompanyBillingPromo")
+  createdBy       User                            @relation("CompanyBillingPromoCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  appliedAccounts CompanyBillingAccount[]         @relation("AppliedCompanyBillingPromo")
   redemptions     CompanyBillingPromoRedemption[]
 
   @@index([isActive, expiresAt])
@@ -647,22 +652,22 @@ model Payment {
 }
 
 model CompanyReferral {
-  id              Int                   @id @default(autoincrement())
-  uuid            String                @unique @default(uuid())
-  companyId       Int                   @unique
+  id              Int                           @id @default(autoincrement())
+  uuid            String                        @unique @default(uuid())
+  companyId       Int                           @unique
   referrerUserId  Int
-  status          CompanyReferralStatus @default(ACTIVE)
+  status          CompanyReferralStatus         @default(ACTIVE)
   pipelineStatus  CompanyReferralPipelineStatus @default(CONNECTED)
-  referralPercent Decimal               @default(1.00) @db.Decimal(5, 2)
-  source          String                @default("PR")
-  notes           String?               @db.Text
-  startedAt       DateTime              @default(now())
+  referralPercent Decimal                       @default(1.00) @db.Decimal(5, 2)
+  source          String                        @default("PR")
+  notes           String?                       @db.Text
+  startedAt       DateTime                      @default(now())
   endedAt         DateTime?
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
 
-  company         Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  referrer        User                  @relation("CompanyReferralOwner", fields: [referrerUserId], references: [id], onDelete: Restrict)
+  company  Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  referrer User    @relation("CompanyReferralOwner", fields: [referrerUserId], references: [id], onDelete: Restrict)
 
   @@index([referrerUserId, status])
   @@index([pipelineStatus])
@@ -670,46 +675,48 @@ model CompanyReferral {
 }
 
 model CompanyVerificationApplication {
-  id                Int                       @id @default(autoincrement())
-  uuid              String                    @unique @default(uuid())
-  companyId         Int?
-  employmentType    CompanyEmploymentType
-  identityVerificationMode IdentityVerificationMode @default(FULL)
-  status            CompanyVerificationStatus @default(SUBMITTED)
-  contactName       String
-  contactEmail      String
-  contactTelegram   String?
-  companyName       String
-  businessCategory  String
-  legalFirstName    String?
-  legalMiddleName   String?
-  legalLastName     String?
-  birthDate         DateTime?
-  legalFullName     String
-  legalInn          String
-  legalOgrnip       String?
-  legalRegistrationRegion String?
-  payoutBankName    String?
-  payoutBik         String?
-  payoutAccount     String?
+  id                         Int                       @id @default(autoincrement())
+  uuid                       String                    @unique @default(uuid())
+  companyId                  Int?
+  employmentType             CompanyEmploymentType
+  identityVerificationMode   IdentityVerificationMode  @default(FULL)
+  status                     CompanyVerificationStatus @default(SUBMITTED)
+  contactName                String
+  contactEmail               String
+  contactTelegram            String?
+  companyName                String
+  businessCategory           String
+  legalFirstName             String?
+  legalMiddleName            String?
+  legalLastName              String?
+  birthDate                  DateTime?
+  legalFullName              String
+  legalInn                   String
+  legalOgrnip                String?
+  legalRegistrationRegion    String?
+  payoutBankName             String?
+  payoutBik                  String?
+  payoutAccount              String?
   payoutCorrespondentAccount String?
-  payoutCardLast4   String?
-  passportEncryptedPayload String?
-  passportEncryptionIv String?
-  passportEncryptionTag String?
-  passportLast4     String?
+  payoutCardLast4            String?
+  passportEncryptedPayload   String?
+  passportEncryptionIv       String?
+  passportEncryptionTag      String?
+  passportLast4              String?
   verificationDeferralReason String?
-  passportDataDeletedAt DateTime?
-  consentAcceptedAt DateTime
-  ipAddress         String?
-  userAgent         String?
-  adminNotifiedAt   DateTime?
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  passportDataDeletedAt      DateTime?
+  consentAcceptedAt          DateTime
+  termsAcceptedAt            DateTime?
+  termsVersion               String?
+  ipAddress                  String?
+  userAgent                  String?
+  adminNotifiedAt            DateTime?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
 
-  company           Company?                  @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  passportFiles     PassportVerificationFile[]
-  kycRecord         CompanyKycRecord?
+  company       Company?                   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  passportFiles PassportVerificationFile[]
+  kycRecord     CompanyKycRecord?
 
   @@index([status, createdAt])
   @@index([contactEmail])
@@ -717,41 +724,41 @@ model CompanyVerificationApplication {
 }
 
 model CompanyKycRecord {
-  id                       Int                       @id @default(autoincrement())
-  uuid                     String                    @unique @default(uuid())
-  companyId                Int                       @unique
-  applicationId            Int?                      @unique
-  status                   CompanyVerificationStatus @default(APPROVED)
-  employmentType           CompanyEmploymentType?
-  identityVerificationMode IdentityVerificationMode   @default(FULL)
-  legalFirstName           String?
-  legalMiddleName          String?
-  legalLastName            String?
-  birthDate                DateTime?
-  legalFullName            String?
-  legalInn                 String?
-  legalOgrnip              String?
-  legalRegistrationRegion  String?
-  passportEncryptedPayload String?
-  passportEncryptionIv     String?
-  passportEncryptionTag    String?
-  passportLast4            String?
-  passportPhotoEncrypted   Bytes?
-  passportPhotoEncryptionIv String?
+  id                         Int                       @id @default(autoincrement())
+  uuid                       String                    @unique @default(uuid())
+  companyId                  Int                       @unique
+  applicationId              Int?                      @unique
+  status                     CompanyVerificationStatus @default(APPROVED)
+  employmentType             CompanyEmploymentType?
+  identityVerificationMode   IdentityVerificationMode  @default(FULL)
+  legalFirstName             String?
+  legalMiddleName            String?
+  legalLastName              String?
+  birthDate                  DateTime?
+  legalFullName              String?
+  legalInn                   String?
+  legalOgrnip                String?
+  legalRegistrationRegion    String?
+  passportEncryptedPayload   String?
+  passportEncryptionIv       String?
+  passportEncryptionTag      String?
+  passportLast4              String?
+  passportPhotoEncrypted     Bytes?
+  passportPhotoEncryptionIv  String?
   passportPhotoEncryptionTag String?
-  passportPhotoMimeType    String?
-  passportPhotoOriginalName String?
-  passportPhotoSize        Int?
-  passportPhotoSha256      String?
-  passportPhotoDeletedAt   DateTime?
-  passportPhotoDeletedById Int?
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
+  passportPhotoMimeType      String?
+  passportPhotoOriginalName  String?
+  passportPhotoSize          Int?
+  passportPhotoSha256        String?
+  passportPhotoDeletedAt     DateTime?
+  passportPhotoDeletedById   Int?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
 
-  company                  Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  application              CompanyVerificationApplication? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
-  passportPhotoDeletedBy   User?                     @relation("CompanyKycPhotoDeletedBy", fields: [passportPhotoDeletedById], references: [id], onDelete: SetNull)
-  accessLogs               CompanyKycAccessLog[]
+  company                Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  application            CompanyVerificationApplication? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  passportPhotoDeletedBy User?                           @relation("CompanyKycPhotoDeletedBy", fields: [passportPhotoDeletedById], references: [id], onDelete: SetNull)
+  accessLogs             CompanyKycAccessLog[]
 
   @@index([status, updatedAt])
 }
@@ -765,30 +772,30 @@ model CompanyKycAccessLog {
   reason      String?
   ipAddress   String?
   userAgent   String?
-  createdAt   DateTime              @default(now())
+  createdAt   DateTime               @default(now())
 
-  kycRecord   CompanyKycRecord      @relation(fields: [kycRecordId], references: [id], onDelete: Cascade)
-  actor       User?                  @relation("CompanyKycAccessActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  kycRecord CompanyKycRecord @relation(fields: [kycRecordId], references: [id], onDelete: Cascade)
+  actor     User?            @relation("CompanyKycAccessActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([kycRecordId, createdAt])
   @@index([actorUserId, createdAt])
 }
 
 model PassportVerificationFile {
-  id             Int                @id @default(autoincrement())
-  uuid           String             @unique @default(uuid())
-  applicationId  Int
-  storageKey     String             @unique
-  originalName   String?
-  mimeType       String
-  size           Int
-  sha256         String
-  encryptionIv   String
-  encryptionTag  String
-  status         PassportFileStatus @default(ACTIVE)
-  uploadedAt     DateTime           @default(now())
-  deletedAt      DateTime?
-  missingAt      DateTime?
+  id            Int                @id @default(autoincrement())
+  uuid          String             @unique @default(uuid())
+  applicationId Int
+  storageKey    String             @unique
+  originalName  String?
+  mimeType      String
+  size          Int
+  sha256        String
+  encryptionIv  String
+  encryptionTag String
+  status        PassportFileStatus @default(ACTIVE)
+  uploadedAt    DateTime           @default(now())
+  deletedAt     DateTime?
+  missingAt     DateTime?
 
   application CompanyVerificationApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
@@ -797,31 +804,31 @@ model PassportVerificationFile {
 }
 
 model FinanceOperation {
-  id             String                 @id @default(cuid())
-  uuid           String                 @unique @default(uuid())
-  type           FinanceOperationType
-  status         FinanceOperationStatus @default(DRAFT)
-  amount         Decimal                @db.Decimal(12, 2)
-  currency       String                 @default("RUB")
-  companyId      Int?
-  title          String
-  details        String?                @db.Text
-  payoutProvider PaymentProvider?
-  providerPayoutId String?              @unique
-  providerPayoutStatus String?
-  providerIdempotenceKey String?        @unique
-  providerPayload Json?
-  payoutDestinationType String?
-  payoutDestinationLabel String?
+  id                        String                 @id @default(cuid())
+  uuid                      String                 @unique @default(uuid())
+  type                      FinanceOperationType
+  status                    FinanceOperationStatus @default(DRAFT)
+  amount                    Decimal                @db.Decimal(12, 2)
+  currency                  String                 @default("RUB")
+  companyId                 Int?
+  title                     String
+  details                   String?                @db.Text
+  payoutProvider            PaymentProvider?
+  providerPayoutId          String?                @unique
+  providerPayoutStatus      String?
+  providerIdempotenceKey    String?                @unique
+  providerPayload           Json?
+  payoutDestinationType     String?
+  payoutDestinationLabel    String?
   payoutProviderRequestedAt DateTime?
-  payoutProviderSyncedAt DateTime?
-  requestedById  Int?
-  approvedById   Int?
-  requestedAt    DateTime?
-  approvedAt     DateTime?
-  processedAt    DateTime?
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
+  payoutProviderSyncedAt    DateTime?
+  requestedById             Int?
+  approvedById              Int?
+  requestedAt               DateTime?
+  approvedAt                DateTime?
+  processedAt               DateTime?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
 
   company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   requestedBy User?    @relation("FinanceRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
@@ -834,14 +841,14 @@ model FinanceOperation {
 }
 
 model TelegramLinkToken {
-  id          String    @id @default(cuid())
-  token       String    @unique
-  userId      Int
-  expiresAt   DateTime
-  usedAt      DateTime?
-  createdAt   DateTime  @default(now())
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    Int
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
 }
@@ -878,43 +885,43 @@ model Subscription {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  company        Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  category       Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  userPlans      UserSubscription[]
-  promoCodes     PromoCode[]
-  entitlements   SubscriptionEntitlement[]
-  payments       Payment[]
+  company      Company?                  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  category     Category?                 @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  userPlans    UserSubscription[]
+  promoCodes   PromoCode[]
+  entitlements SubscriptionEntitlement[]
+  payments     Payment[]
 
   @@index([companyId])
   @@index([categoryId])
 }
 
 model SubscriptionBundle {
-  id             Int                      @id @default(autoincrement())
-  uuid           String                   @unique @default(uuid())
-  slug           String                   @unique
-  name           String
-  description    String                   @db.Text
-  price          Decimal                  @db.Decimal(10, 2)
-  renewalPeriod  String
-  renewalValue   Int                      @default(1)
-  renewalUnit    String                   @default("month")
-  promoBonusDays Int                      @default(0)
-  status         SubscriptionBundleStatus @default(DRAFT)
-  isActive       Boolean                  @default(false)
-  categoryId     Int?
+  id                  Int                      @id @default(autoincrement())
+  uuid                String                   @unique @default(uuid())
+  slug                String                   @unique
+  name                String
+  description         String                   @db.Text
+  price               Decimal                  @db.Decimal(10, 2)
+  renewalPeriod       String
+  renewalValue        Int                      @default(1)
+  renewalUnit         String                   @default("month")
+  promoBonusDays      Int                      @default(0)
+  status              SubscriptionBundleStatus @default(DRAFT)
+  isActive            Boolean                  @default(false)
+  categoryId          Int?
   proposedByCompanyId Int?
-  proposedByUserId Int?
-  activatedAt    DateTime?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  proposedByUserId    Int?
+  activatedAt         DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
 
-  category       Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  proposedByCompany Company?              @relation("SubscriptionBundleProposerCompany", fields: [proposedByCompanyId], references: [id], onDelete: SetNull)
-  proposedByUser User?                    @relation("SubscriptionBundleProposer", fields: [proposedByUserId], references: [id], onDelete: SetNull)
-  participants   SubscriptionBundleParticipant[]
-  userBundles    UserSubscriptionBundle[]
-  payments       Payment[]
+  category          Category?                       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  proposedByCompany Company?                        @relation("SubscriptionBundleProposerCompany", fields: [proposedByCompanyId], references: [id], onDelete: SetNull)
+  proposedByUser    User?                           @relation("SubscriptionBundleProposer", fields: [proposedByUserId], references: [id], onDelete: SetNull)
+  participants      SubscriptionBundleParticipant[]
+  userBundles       UserSubscriptionBundle[]
+  payments          Payment[]
 
   @@index([status, isActive])
   @@index([categoryId])
@@ -922,29 +929,29 @@ model SubscriptionBundle {
 }
 
 model SubscriptionBundleParticipant {
-  id                  Int                @id @default(autoincrement())
-  uuid                String             @unique @default(uuid())
+  id                  Int                                 @id @default(autoincrement())
+  uuid                String                              @unique @default(uuid())
   bundleId            Int
   companyId           Int
   benefitTitle        String
-  benefitDescription  String             @db.Text
-  fulfillmentNote     String?            @db.Text
-  revenueSharePercent Decimal            @db.Decimal(5, 2)
-  allowance           Int                @default(1)
-  windowValue         Int                @default(1)
-  windowUnit          SubscriptionEntitlementWindow @default(MONTH)
+  benefitDescription  String                              @db.Text
+  fulfillmentNote     String?                             @db.Text
+  revenueSharePercent Decimal                             @db.Decimal(5, 2)
+  allowance           Int                                 @default(1)
+  windowValue         Int                                 @default(1)
+  windowUnit          SubscriptionEntitlementWindow       @default(MONTH)
   approvalStatus      SubscriptionBundleParticipantStatus @default(APPROVED)
   approvedAt          DateTime?
   rejectedAt          DateTime?
   approvedById        Int?
-  sortOrder           Int                @default(1)
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  sortOrder           Int                                 @default(1)
+  createdAt           DateTime                            @default(now())
+  updatedAt           DateTime                            @updatedAt
 
-  bundle              SubscriptionBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
-  company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  approvedBy          User?              @relation("SubscriptionBundleParticipantApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  redemptions         SubscriptionBundleRedemption[]
+  bundle      SubscriptionBundle             @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  company     Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  approvedBy  User?                          @relation("SubscriptionBundleParticipantApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  redemptions SubscriptionBundleRedemption[]
 
   @@unique([bundleId, companyId])
   @@index([companyId])
@@ -952,21 +959,21 @@ model SubscriptionBundleParticipant {
 }
 
 model UserSubscriptionBundle {
-  id             Int                @id @default(autoincrement())
-  uuid           String             @unique @default(uuid())
-  userId         Int
-  bundleId       Int
-  status         SubscriptionStatus @default(ACTIVE)
-  activatedAt    DateTime           @default(now())
-  expiresAt      DateTime?
-  willAutoRenew  Boolean            @default(true)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  id            Int                @id @default(autoincrement())
+  uuid          String             @unique @default(uuid())
+  userId        Int
+  bundleId      Int
+  status        SubscriptionStatus @default(ACTIVE)
+  activatedAt   DateTime           @default(now())
+  expiresAt     DateTime?
+  willAutoRenew Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bundle         SubscriptionBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
-  redemptions    SubscriptionBundleRedemption[]
-  payment        Payment?
+  user        User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bundle      SubscriptionBundle             @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  redemptions SubscriptionBundleRedemption[]
+  payment     Payment?
 
   @@index([userId, status])
   @@index([bundleId])
@@ -991,7 +998,7 @@ model CompanyLocation {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, isActive])
 }
@@ -1002,8 +1009,8 @@ model CompanyCategory {
   categoryId Int
   createdAt  DateTime @default(now())
 
-  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, categoryId])
   @@index([categoryId])
@@ -1026,7 +1033,7 @@ model CompanyMediaAsset {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, kind, sortOrder])
 }
@@ -1050,7 +1057,7 @@ model CompanySpecialOffer {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, isActive, sortOrder])
 }
@@ -1065,10 +1072,10 @@ model CompanyLevelRule {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@index([companyId, sortOrder])
   @@unique([companyId, sortOrder])
+  @@index([companyId, sortOrder])
 }
 
 model CompanyMember {
@@ -1110,20 +1117,21 @@ model CompanyPurchase {
 }
 
 model UserCompany {
-  id               Int       @id @default(autoincrement())
-  userId           Int
-  companyId        Int
-  balance          Int       @default(0)
+  id                 Int       @id @default(autoincrement())
+  userId             Int
+  companyId          Int
+  balance            Int       @default(0)
   pointsToNextReward Int?
-  expiringPoints   Int?
-  expiringDate     DateTime?
-  isFavorite       Boolean   @default(false)
-  favoritedAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  expiringPoints     Int?
+  expiringDate       DateTime?
+  customerComment    String?
+  isFavorite         Boolean   @default(false)
+  favoritedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([userId, companyId])
   @@index([companyId])
@@ -1141,10 +1149,10 @@ model UserSubscription {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  redemptions    SubscriptionRedemption[]
-  payment        Payment?
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription             @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  redemptions  SubscriptionRedemption[]
+  payment      Payment?
 
   @@index([userId, status])
   @@index([subscriptionId])
@@ -1180,10 +1188,10 @@ model SubscriptionRedemption {
   note               String?
   redeemedAt         DateTime @default(now())
 
-  userSubscription UserSubscription       @relation(fields: [userSubscriptionId], references: [id], onDelete: Cascade)
+  userSubscription UserSubscription        @relation(fields: [userSubscriptionId], references: [id], onDelete: Cascade)
   entitlement      SubscriptionEntitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
-  company          Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  processedBy      User                   @relation("SubscriptionRedemptionProcessor", fields: [processedById], references: [id], onDelete: Restrict)
+  company          Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  processedBy      User                    @relation("SubscriptionRedemptionProcessor", fields: [processedById], references: [id], onDelete: Restrict)
 
   @@index([userSubscriptionId, entitlementId, redeemedAt])
   @@index([companyId, redeemedAt])
@@ -1201,10 +1209,10 @@ model SubscriptionBundleRedemption {
   note                     String?
   redeemedAt               DateTime @default(now())
 
-  userSubscriptionBundle UserSubscriptionBundle       @relation(fields: [userSubscriptionBundleId], references: [id], onDelete: Cascade)
+  userSubscriptionBundle UserSubscriptionBundle        @relation(fields: [userSubscriptionBundleId], references: [id], onDelete: Cascade)
   participant            SubscriptionBundleParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  company                Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  processedBy            User                         @relation("SubscriptionBundleRedemptionProcessor", fields: [processedById], references: [id], onDelete: Restrict)
+  company                Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  processedBy            User                          @relation("SubscriptionBundleRedemptionProcessor", fields: [processedById], references: [id], onDelete: Restrict)
 
   @@index([userSubscriptionBundleId, participantId, redeemedAt])
   @@index([companyId, redeemedAt])
@@ -1212,19 +1220,19 @@ model SubscriptionBundleRedemption {
 }
 
 model UserProfilePreference {
-  id                    Int      @id @default(autoincrement())
-  userId                Int      @unique
+  id                    Int       @id @default(autoincrement())
+  userId                Int       @unique
   onboardingCompletedAt DateTime?
   onboardingSkippedAt   DateTime?
   geolocationPromptedAt DateTime?
-  profileVisibility     String   @default("PRIVATE")
-  preferredLocale       String   @default("en")
-  marketingOptIn        Boolean  @default(false)
-  showActivityStats     Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  profileVisibility     String    @default("PRIVATE")
+  preferredLocale       String    @default("en")
+  marketingOptIn        Boolean   @default(false)
+  showActivityStats     Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model PromoCode {
@@ -1242,19 +1250,19 @@ model PromoCode {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
-  company        Company?            @relation("PromoPointCompany", fields: [companyId], references: [id], onDelete: SetNull)
-  subscription   Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  redemptions    PromoCodeRedemption[]
+  company      Company?              @relation("PromoPointCompany", fields: [companyId], references: [id], onDelete: SetNull)
+  subscription Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  redemptions  PromoCodeRedemption[]
 }
 
 model PromoCodeRedemption {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   promoCodeId Int
   userId      Int
-  redeemedAt  DateTime  @default(now())
+  redeemedAt  DateTime @default(now())
 
-  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promoCode PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([promoCodeId, userId])
   @@index([userId])
@@ -1270,7 +1278,7 @@ model ReferralCampaign {
   updatedAt          DateTime @updatedAt
   createdAt          DateTime @default(now())
 
-  bonusCompany       Company? @relation("ReferralBonusCompany", fields: [bonusCompanyId], references: [id], onDelete: SetNull)
+  bonusCompany Company? @relation("ReferralBonusCompany", fields: [bonusCompanyId], references: [id], onDelete: SetNull)
 }
 
 model ReferralInvite {
@@ -1283,8 +1291,8 @@ model ReferralInvite {
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
-  inviter       User                 @relation("ReferralInviter", fields: [inviterUserId], references: [id], onDelete: Cascade)
-  invited       User?                @relation("ReferralInvited", fields: [invitedUserId], references: [id], onDelete: SetNull)
+  inviter User  @relation("ReferralInviter", fields: [inviterUserId], references: [id], onDelete: Cascade)
+  invited User? @relation("ReferralInvited", fields: [invitedUserId], references: [id], onDelete: SetNull)
 
   @@index([inviterUserId])
 }
@@ -1306,16 +1314,16 @@ model RefreshToken {
 
 /// OAuth 2.0 provider linkage (groundwork for future OAuth / OpenID Connect).
 model OAuthAccount {
-  id                  String    @id @default(cuid())
-  provider            String
-  providerAccountId   String
-  userId              Int
-  accessToken         String?   @db.Text
-  refreshToken        String?   @db.Text
-  expiresAt           DateTime?
-  scope               String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  provider          String
+  providerAccountId String
+  userId            Int
+  accessToken       String?   @db.Text
+  refreshToken      String?   @db.Text
+  expiresAt         DateTime?
+  scope             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1324,15 +1332,15 @@ model OAuthAccount {
 }
 
 model LoginEvent {
-  id           String   @id @default(cuid())
-  userId       Int
-  ipAddress    String?
-  countryCode  String?
-  city         String?
-  userAgent    String?
-  deviceLabel  String?
-  requestId    String?
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      Int
+  ipAddress   String?
+  countryCode String?
+  city        String?
+  userAgent   String?
+  deviceLabel String?
+  requestId   String?
+  createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1361,14 +1369,14 @@ model LoyaltyTransaction {
 
 /// Email change workflow initiated by admin and confirmed by end user via secure token link.
 model EmailChangeRequest {
-  id                String   @id @default(cuid())
-  tokenHash         String   @unique
+  id                String    @id @default(cuid())
+  tokenHash         String    @unique
   userId            Int
   requestedByUserId Int
   oldEmail          String
   newEmail          String
   expiresAt         DateTime
-  createdAt         DateTime @default(now())
+  createdAt         DateTime  @default(now())
   usedAt            DateTime?
   revokedAt         DateTime?
 
@@ -1411,48 +1419,50 @@ model EmailMessage {
 }
 
 model EmailVerificationCode {
-  id              String                  @id @default(cuid())
+  id              String                   @id @default(cuid())
   email           String
   normalizedEmail String
   name            String
   passwordHash    String
-  role            UserRole                @default(CLIENT)
+  role            UserRole                 @default(CLIENT)
   codeHash        String
   purpose         EmailVerificationPurpose @default(REGISTRATION)
-  status          EmailVerificationStatus @default(PENDING)
-  attempts        Int                     @default(0)
+  status          EmailVerificationStatus  @default(PENDING)
+  attempts        Int                      @default(0)
   expiresAt       DateTime
   consumedAt      DateTime?
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  termsAcceptedAt DateTime?
+  termsVersion    String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
 
   @@index([normalizedEmail, status, expiresAt])
   @@index([expiresAt])
 }
 
 model AuditEvent {
-  id          String         @id @default(cuid())
-  workspace   AuditWorkspace @default(MANAGER)
-  level       AuditLevel     @default(INFO)
-  category    AuditCategory
-  action      String
-  details     String?
-  actorUserId Int?
-  actorLabel  String
+  id           String         @id @default(cuid())
+  workspace    AuditWorkspace @default(MANAGER)
+  level        AuditLevel     @default(INFO)
+  category     AuditCategory
+  action       String
+  details      String?
+  actorUserId  Int?
+  actorLabel   String
   targetUserId Int?
-  targetLabel String?
-  targetEmail String?
-  targetUuid  String?
-  result      AuditResult    @default(SUCCESS)
-  tags        String[]       @default([])
-  ipAddress   String?
-  countryCode String?
-  linkUrl     String?
-  linkLabel   String?
-  createdAt   DateTime       @default(now())
+  targetLabel  String?
+  targetEmail  String?
+  targetUuid   String?
+  result       AuditResult    @default(SUCCESS)
+  tags         String[]       @default([])
+  ipAddress    String?
+  countryCode  String?
+  linkUrl      String?
+  linkLabel    String?
+  createdAt    DateTime       @default(now())
 
-  actorUser   User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
-  targetUser  User? @relation("AuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  actorUser  User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  targetUser User? @relation("AuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
 
   @@index([workspace, createdAt])
   @@index([category, createdAt])
@@ -1489,25 +1499,25 @@ model AdminTask {
 }
 
 model LandingLead {
-  id                Int       @id @default(autoincrement())
-  uuid              String    @unique @default(uuid())
-  name              String
-  company           String?
-  contact           String
-  business          String?
-  message           String   @db.Text
-  status            LandingLeadStatus @default(NEW)
-  source            String   @default("landing")
-  ipAddress         String?
-  userAgent         String?
-  fingerprint       String
-  spamScore         Int      @default(0)
-  notes             String?  @db.Text
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  processedAt       DateTime?
+  id          Int               @id @default(autoincrement())
+  uuid        String            @unique @default(uuid())
+  name        String
+  company     String?
+  contact     String
+  business    String?
+  message     String            @db.Text
+  status      LandingLeadStatus @default(NEW)
+  source      String            @default("landing")
+  ipAddress   String?
+  userAgent   String?
+  fingerprint String
+  spamScore   Int               @default(0)
+  notes       String?           @db.Text
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  processedAt DateTime?
 
-  deliveries        NotificationDelivery[]
+  deliveries NotificationDelivery[]
 
   @@index([status, createdAt])
   @@index([contact])
@@ -1515,22 +1525,22 @@ model LandingLead {
 }
 
 model NotificationDelivery {
-  id             String   @id @default(cuid())
-  leadId         Int
-  channel        String   @default("telegram")
-  recipientRole  String
-  recipientChatId String
-  recipientLabel String?
-  status         NotificationDeliveryStatus @default(PENDING)
-  attempts       Int      @default(0)
+  id                String                     @id @default(cuid())
+  leadId            Int
+  channel           String                     @default("telegram")
+  recipientRole     String
+  recipientChatId   String
+  recipientLabel    String?
+  status            NotificationDeliveryStatus @default(PENDING)
+  attempts          Int                        @default(0)
   telegramMessageId Int?
-  lastError      String?  @db.Text
-  nextRetryAt    DateTime?
-  sentAt         DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  lastError         String?                    @db.Text
+  nextRetryAt       DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
-  lead           LandingLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead LandingLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
   @@index([status, nextRetryAt])
@@ -1538,24 +1548,24 @@ model NotificationDelivery {
 }
 
 model TelegramMessageQueue {
-  id                String   @id @default(cuid())
+  id                String                     @id @default(cuid())
   recipientChatId   String
   recipientRole     String?
   recipientLabel    String?
-  text              String   @db.Text
+  text              String                     @db.Text
   parseMode         String?
   replyMarkup       Json?
   status            NotificationDeliveryStatus @default(PENDING)
-  attempts          Int      @default(0)
+  attempts          Int                        @default(0)
   telegramMessageId Int?
-  lastError         String?  @db.Text
+  lastError         String?                    @db.Text
   nextRetryAt       DateTime?
   sentAt            DateTime?
   source            String?
   sourceId          String?
-  priority          Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  priority          Int                        @default(0)
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
 
   @@index([status, nextRetryAt])
   @@index([source, sourceId])

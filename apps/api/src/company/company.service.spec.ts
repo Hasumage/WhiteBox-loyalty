@@ -1392,6 +1392,17 @@ describe("CompanyService", () => {
     expect(tx.financeOperation.create).not.toHaveBeenCalled();
   });
 
+  it("rejects a payout when company verification is not completed", async () => {
+    prisma.companyMember.findFirst.mockResolvedValueOnce({
+      ...membership,
+      company: { ...membership.company, identityVerificationCompleted: false, verificationStatus: "DRAFT" },
+    });
+
+    await expect(service.requestPayout(50, { amount: 5000 })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.financeOperation.create).not.toHaveBeenCalled();
+  });
+
   it("reserves an eligible payout in a serializable transaction", async () => {
     const day = 24 * 60 * 60 * 1000;
     const startedAt = new Date(Date.now() - day - 1000);

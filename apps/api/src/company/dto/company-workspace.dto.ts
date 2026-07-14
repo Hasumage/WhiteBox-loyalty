@@ -61,6 +61,14 @@ export class LookupCompanyClientCodeDto {
   code!: string;
 }
 
+export class UpdateCompanyClientCommentDto {
+  @ApiPropertyOptional({ example: "Комментарий для клиента" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  customerComment?: string;
+}
+
 export class UpdateCompanyProfileDto {
   @ApiProperty({ example: "Aurora Coffee" })
   @IsString()

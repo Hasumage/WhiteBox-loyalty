@@ -51,6 +51,7 @@ describe("company application helpers", () => {
     passportIssuedAt: "2020-01-01",
     passportPhotoProvided: true,
     consentAccepted: true,
+    termsAccepted: true,
   };
 
   beforeEach(() => {

@@ -36,6 +36,10 @@ const copy = {
     backToForm: "Изменить данные",
     codeSent: "Код отправлен. Проверьте входящие и папку спам.",
     passwordsMismatch: "Пароли не совпадают",
+    termsRequired: "Перед созданием аккаунта нужно принять правила NearLoy.",
+    termsPrefix: "Я принимаю",
+    userTerms: "правила для пользователей",
+    privacy: "политику приватности",
     codeHint: "Код действует ограниченное время. Если письмо не пришло, вернитесь назад и отправьте код ещё раз.",
   },
   en: {
@@ -50,6 +54,10 @@ const copy = {
     backToForm: "Edit details",
     codeSent: "Code sent. Check your inbox and spam folder.",
     passwordsMismatch: "Passwords do not match",
+    termsRequired: "Accept the NearLoy terms before creating an account.",
+    termsPrefix: "I accept the",
+    userTerms: "user terms",
+    privacy: "privacy policy",
     codeHint: "The code expires soon. If you did not receive it, go back and send a new one.",
   },
 } as const;
@@ -65,6 +73,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -99,10 +108,14 @@ export default function RegisterPage() {
         setError(text.passwordsMismatch);
         return;
       }
+      if (!termsAccepted) {
+        setError(text.termsRequired);
+        return;
+      }
 
       setLoading(true);
       try {
-        const response = await requestRegistrationCode({ name, email, password, confirmPassword, locale });
+        const response = await requestRegistrationCode({ name, email, password, confirmPassword, locale, termsAccepted });
         if (!("success" in response)) {
           setError(responseMessage(response, t("client.auth.registrationFailed")));
           return;
@@ -233,6 +246,26 @@ export default function RegisterPage() {
                   className="glass border-white/10"
                 />
               </div>
+              <label className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-sm leading-6 text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(event) => setTermsAccepted(event.currentTarget.checked)}
+                  required
+                  className="mt-1 h-4 w-4 shrink-0 accent-cyan-100"
+                />
+                <span>
+                  {text.termsPrefix}{" "}
+                  <Link href="/help/terms/users" className="text-foreground underline underline-offset-4" target="_blank">
+                    {text.userTerms}
+                  </Link>{" "}
+                  и{" "}
+                  <Link href="/help/privacy" className="text-foreground underline underline-offset-4" target="_blank">
+                    {text.privacy}
+                  </Link>
+                  .
+                </span>
+              </label>
             </>
           ) : (
             <>

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { isUserAuthResponse, requireUserSession } from "@/lib/auth/require-user-session";
 import { prisma } from "@/lib/prisma";
+import { resolveTelegramBotRuntime } from "@/lib/telegram/bot-runtime";
 
 export const runtime = "nodejs";
 
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
       telegramLinkToken.create({ data: { token, userId: user.id, expiresAt } }),
     ]);
 
-    const username = (process.env.TELEGRAM_BOT_USERNAME || "nearloy_bot").replace(/^@/, "");
+    const username = resolveTelegramBotRuntime().username;
     return NextResponse.json({ token, expiresAt, deepLink: `https://t.me/${username}?start=link_${token}` });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create Telegram link";

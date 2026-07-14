@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowRight, Banknote, BookOpen, CircleAlert, Coins, QrCode, ReceiptText, Sparkles, Users, WalletCards, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Banknote, BellRing, BookOpen, CheckCircle2, CircleAlert, Coins, ExternalLink, QrCode, ReceiptText, RefreshCw, Send, Sparkles, Users, WalletCards, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { companyBilling, companyDashboard, type CompanyBillingData, type CompanyDashboard } from "@/lib/api/company-client";
+import { companyBilling, companyDashboard, companyTelegramStatus, createCompanyTelegramLink, type CompanyBillingData, type CompanyDashboard, type TelegramConnectionStatus } from "@/lib/api/company-client";
 import { getCompanyBillingWarning } from "@/lib/company-billing-warning";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
@@ -20,6 +20,10 @@ export default function CompanyPortalPage() {
   const [dashboard, setDashboard] = useState<CompanyDashboard | null>(null);
   const [billing, setBilling] = useState<CompanyBillingData | null>(null);
   const [error, setError] = useState("");
+  const [telegramStatus, setTelegramStatus] = useState<TelegramConnectionStatus | null>(null);
+  const [telegramLink, setTelegramLink] = useState("");
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramError, setTelegramError] = useState("");
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
 
@@ -36,6 +40,9 @@ export default function CompanyPortalPage() {
       .catch(() => {
         // Billing status is a helpful warning, but the dashboard should stay usable without it.
       });
+    companyTelegramStatus()
+      .then(setTelegramStatus)
+      .catch(() => setTelegramError("Не удалось проверить подключение Telegram."));
   }, []);
 
   const metrics = dashboard?.metrics;
@@ -57,6 +64,33 @@ export default function CompanyPortalPage() {
     if (dashboard) window.localStorage.setItem(`nearloy:company-tutorial:${dashboard.company.name}`, "complete");
     setTutorialOpen(false);
   }
+
+  async function refreshTelegramStatus() {
+    setTelegramLoading(true);
+    setTelegramError("");
+    try {
+      setTelegramStatus(await companyTelegramStatus());
+    } catch {
+      setTelegramError("Не удалось обновить статус Telegram.");
+    } finally {
+      setTelegramLoading(false);
+    }
+  }
+
+  async function connectTelegram() {
+    setTelegramLoading(true);
+    setTelegramError("");
+    try {
+      const link = await createCompanyTelegramLink();
+      setTelegramLink(link.deepLink);
+      window.open(link.deepLink, "_blank", "noopener,noreferrer");
+    } catch {
+      setTelegramError("Не удалось создать ссылку подключения.");
+    } finally {
+      setTelegramLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header className="relative overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_86%_8%,rgba(103,232,249,0.15),transparent_34%),linear-gradient(120deg,rgba(17,24,39,0.98),rgba(8,9,12,0.98))] p-6 sm:p-8">
@@ -232,6 +266,44 @@ export default function CompanyPortalPage() {
               <Button asChild variant="outline" className="mt-4 w-full rounded-xl">
                 <Link href="/company/payments">Финансы</Link>
               </Button>
+            </div>
+            <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.05] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <span className="rounded-2xl border border-cyan-200/15 bg-cyan-200/[0.08] p-3 text-cyan-100">
+                  <BellRing className="h-5 w-5" />
+                </span>
+                <Badge className={telegramStatus?.connected ? "bg-emerald-400/15 text-emerald-100" : "bg-white/10 text-white"}>
+                  {telegramStatus?.connected ? "Telegram подключён" : "Telegram не подключён"}
+                </Badge>
+              </div>
+              <h3 className="mt-4 text-sm font-semibold">Уведомления в Telegram</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Получайте важные события компании: заявки, выплаты, оплату подписки и системные напоминания.
+              </p>
+              {telegramStatus?.connected && (
+                <p className="mt-2 flex items-center gap-2 text-xs text-emerald-100">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Аккаунт готов получать уведомления.
+                </p>
+              )}
+              {telegramError && <p className="mt-2 text-xs text-red-100">{telegramError}</p>}
+              <div className="mt-4 flex flex-wrap gap-2">
+                {telegramStatus?.connected ? (
+                  <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={refreshTelegramStatus} disabled={telegramLoading}>
+                    <RefreshCw className="h-4 w-4" /> Обновить статус
+                  </Button>
+                ) : (
+                  <Button type="button" size="sm" className="rounded-xl" onClick={connectTelegram} disabled={telegramLoading || telegramStatus?.canConnect === false}>
+                    <Send className="h-4 w-4" /> Подключить
+                  </Button>
+                )}
+                {telegramLink && (
+                  <Button asChild variant="ghost" size="sm" className="rounded-xl">
+                    <a href={telegramLink} target="_blank" rel="noreferrer">
+                      Открыть ссылку <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </Button>
+                )}
+              </div>
             </div>
             {SUBSCRIPTIONS_ENABLED ? (
               <>

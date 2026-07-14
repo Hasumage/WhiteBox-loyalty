@@ -12,6 +12,7 @@ import {
   Hash,
   History,
   Infinity as InfinityIcon,
+  MessageSquareText,
   MinusCircle,
   QrCode,
   ReceiptText,
@@ -25,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   awardCompanyPoints,
   companyClient,
@@ -33,6 +35,7 @@ import {
   redeemCompanyBundleBenefit,
   redeemCompanyEntitlement,
   spendCompanyPoints,
+  updateCompanyClientComment,
   type CompanyClient,
   type CompanyClientDetail,
   type EntitlementWindow,
@@ -105,9 +108,11 @@ export default function CompanyClientsPage() {
   const [spendPoints, setSpendPoints] = useState("");
   const [purchaseAmount, setPurchaseAmount] = useState("");
   const [quickCode, setQuickCode] = useState("");
+  const [customerCommentDraft, setCustomerCommentDraft] = useState("");
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [commentSaving, setCommentSaving] = useState(false);
 
   const redeemableItems = useMemo<RedeemableItem[]>(() => {
     if (!SUBSCRIPTIONS_ENABLED || !selected) return [];
@@ -151,6 +156,10 @@ export default function CompanyClientsPage() {
   useEffect(() => {
     return () => stopScanner();
   }, []);
+
+  useEffect(() => {
+    setCustomerCommentDraft(selected?.customerComment ?? "");
+  }, [selected?.uuid, selected?.customerComment]);
 
   async function openClient(value: string) {
     const uuid = extractUserUuid(value);
@@ -246,6 +255,21 @@ export default function CompanyClientsPage() {
   async function refreshSelected() {
     if (!selected) return;
     setSelected(await companyClient(selected.uuid));
+  }
+
+  async function saveCustomerComment() {
+    if (!selected) return;
+    try {
+      setError("");
+      setCommentSaving(true);
+      const result = await updateCompanyClientComment(selected.uuid, customerCommentDraft);
+      setSelected(result);
+      setFeedback("Комментарий для клиента сохранён.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось сохранить комментарий.");
+    } finally {
+      setCommentSaving(false);
+    }
   }
 
   async function award(mode: "MANUAL" | "PURCHASE") {
@@ -422,6 +446,31 @@ export default function CompanyClientsPage() {
                 <Badge variant="outline">{selected.balance} баллов</Badge>
                 <Badge variant="outline">Потрачено {selected.totalSpend.toLocaleString("ru-RU")} ₽</Badge>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-cyan-300/20 bg-cyan-300/[0.035] py-0">
+            <CardContent className="space-y-3 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  <MessageSquareText className="h-4 w-4 text-cyan-100" /> Комментарий для клиента
+                </h3>
+                <Button
+                  variant="secondary"
+                  onClick={() => void saveCustomerComment()}
+                  disabled={commentSaving || customerCommentDraft === (selected.customerComment ?? "")}
+                  className="rounded-xl"
+                >
+                  {commentSaving ? "Сохраняем..." : "Сохранить"}
+                </Button>
+              </div>
+              <Textarea
+                value={customerCommentDraft}
+                onChange={(event) => setCustomerCommentDraft(event.target.value.slice(0, 2000))}
+                placeholder="Комментарий для клиента"
+                className="min-h-24 rounded-2xl bg-black/20"
+              />
+              <p className="text-right text-xs text-muted-foreground">{customerCommentDraft.length}/2000</p>
             </CardContent>
           </Card>
 

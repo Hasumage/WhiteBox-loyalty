@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
+import { getInternalIconOption } from "@/components/icons/internal-icon-collection";
+import { InternalIconPicker } from "@/components/icons/InternalIconPicker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,11 +38,12 @@ export default function AdminCategoriesPage() {
     const q = query.trim().toLowerCase();
     if (!q) return categories;
     return categories.filter((cat) => {
+      const iconLabel = getInternalIconOption(cat.icon)?.label ?? cat.icon;
       return (
         cat.slug.toLowerCase().includes(q) ||
         cat.name.toLowerCase().includes(q) ||
         (cat.description ?? "").toLowerCase().includes(q) ||
-        cat.icon.toLowerCase().includes(q)
+        iconLabel.toLowerCase().includes(q)
       );
     });
   }, [categories, query]);
@@ -106,11 +109,11 @@ export default function AdminCategoriesPage() {
         <CardHeader>
           <CardTitle className="text-base">{t("admin.categories.createTitle")}</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_18rem_auto]">
           <Input placeholder={t("admin.categories.slug")} value={draft.slug} onChange={(e) => setDraft((p) => ({ ...p, slug: e.target.value }))} />
           <Input placeholder={t("admin.categories.name")} value={draft.name} onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))} />
           <Input placeholder={t("admin.categories.description")} value={draft.description} onChange={(e) => setDraft((p) => ({ ...p, description: e.target.value }))} />
-          <Input placeholder={t("admin.categories.iconName")} value={draft.icon} onChange={(e) => setDraft((p) => ({ ...p, icon: e.target.value }))} />
+          <InternalIconPicker value={draft.icon} onChange={(icon) => setDraft((p) => ({ ...p, icon }))} />
           <Button onClick={() => void createCategory()} disabled={!draft.slug || !draft.name || !draft.icon}>
             {t("admin.categories.create")}
           </Button>
@@ -143,12 +146,15 @@ export default function AdminCategoriesPage() {
                   <CategoryIcon iconName={cat.icon} className="h-4 w-4 text-primary" />
                 </div>
                 <p className="text-sm font-semibold">{cat.name}</p>
+                <span className="rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[11px] text-muted-foreground">
+                  {getInternalIconOption(cat.icon)?.label ?? cat.icon}
+                </span>
               </div>
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_18rem]">
                 <Input value={cat.slug} onChange={(e) => setCategories((prev) => prev.map((p) => p.id === cat.id ? { ...p, slug: e.target.value } : p))} />
                 <Input value={cat.name} onChange={(e) => setCategories((prev) => prev.map((p) => p.id === cat.id ? { ...p, name: e.target.value } : p))} />
                 <Input value={cat.description ?? ""} onChange={(e) => setCategories((prev) => prev.map((p) => p.id === cat.id ? { ...p, description: e.target.value } : p))} />
-                <Input value={cat.icon} onChange={(e) => setCategories((prev) => prev.map((p) => p.id === cat.id ? { ...p, icon: e.target.value } : p))} />
+                <InternalIconPicker value={cat.icon} onChange={(icon) => setCategories((prev) => prev.map((p) => p.id === cat.id ? { ...p, icon } : p))} />
               </div>
               <div className="mt-3 flex gap-2">
                 <Button variant="secondary" onClick={() => void updateCategory(cat.id, { slug: cat.slug, name: cat.name, description: cat.description, icon: cat.icon })} disabled={savingId === cat.id}>

@@ -216,6 +216,7 @@ export type TwaProfile = {
     uuid: string;
     name: string;
     email: string;
+    birthDate: string | null;
     createdAt: string;
   };
   preferences: {
@@ -546,6 +547,14 @@ export function getTwaCompanies(force = false) {
   return getJson<TwaCompany[]>("/registered/companies", [], TWA_CACHE_TTL_MS, force);
 }
 
+export function getCachedTwaMapCompanies() {
+  return readCachedJson<TwaCompany[]>("/registered/companies?surface=map", []);
+}
+
+export function getTwaMapCompanies(force = false) {
+  return getJson<TwaCompany[]>("/registered/companies?surface=map", [], TWA_CACHE_TTL_MS, force);
+}
+
 export function getPublicTwaCompany(slug: string) {
   return getJson<TwaCompany | null>(`/public/companies/${encodeURIComponent(slug)}`, null, TWA_CACHE_TTL_MS, true);
 }
@@ -591,7 +600,7 @@ export function createTwaLookupCode() {
 }
 
 const profileFallback: TwaProfile = {
-  user: { uuid: "", name: "", email: "", createdAt: "" },
+  user: { uuid: "", name: "", email: "", birthDate: null, createdAt: "" },
   preferences: {
     onboardingCompletedAt: null,
     onboardingSkippedAt: null,
@@ -623,6 +632,12 @@ export function getCachedTwaProfile() {
 
 export function getTwaProfile() {
   return getJson<TwaProfile>("/registered/profile", profileFallback);
+}
+
+export async function updateTwaProfile(input: { birthDate?: string | null }) {
+  const result = await putJson<TwaProfile>("/registered/profile", input, "Failed to update profile");
+  if (result.ok) clearTwaCache();
+  return result;
 }
 
 const historyFallback: TwaHistory = {

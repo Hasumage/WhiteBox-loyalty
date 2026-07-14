@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Heart, Search, SlidersHorizontal, X } from "lucide-react";
 import type { ApiCategory } from "@/lib/api/categories-client";
 import { getCachedFavoriteCategorySlugs, getFavoriteCategorySlugs } from "@/lib/api/categories-client";
 import { getCachedTwaCompanies, getTwaCompanies, type TwaCompany } from "@/lib/api/twa-client";
@@ -65,15 +65,18 @@ function buildCompanyCategories(companies: TwaCompany[], favoriteSlugs: string[]
 }
 
 export default function CompaniesPage() {
-  const { t } = useI18n("ru");
+  const { locale, t } = useI18n("ru");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [companies, setCompanies] = useState<TwaCompany[]>([]);
   const [favoriteSlugs, setFavoriteSlugs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let ignore = false;
+    const params = new URLSearchParams(window.location.search);
+    setFavoritesOnly(params.get("favorite") === "1" || params.get("favorites") === "1");
     const cachedCompanies = getCachedTwaCompanies();
     const cachedFavorites = getCachedFavoriteCategorySlugs();
     if (cachedCompanies.length) {
@@ -81,7 +84,7 @@ export default function CompaniesPage() {
       setLoading(false);
     }
     if (cachedFavorites.length) setFavoriteSlugs(cachedFavorites);
-    void Promise.all([getTwaCompanies(), getFavoriteCategorySlugs()]).then(([apiCompanies, favorites]) => {
+    void Promise.all([getTwaCompanies(true), getFavoriteCategorySlugs()]).then(([apiCompanies, favorites]) => {
       if (ignore) return;
       setCompanies(apiCompanies);
       setFavoriteSlugs(favorites);
@@ -121,10 +124,11 @@ export default function CompaniesPage() {
         categoryNames.some((name) => name.includes(query));
 
       if (!matchesSearch) return false;
+      if (favoritesOnly && !company.isFavorite) return false;
       if (selectedCategory && !companyMatchesCategory(company, selectedCategory)) return false;
       return true;
     });
-  }, [companies, searchQuery, selectedCategory, t]);
+  }, [companies, favoritesOnly, searchQuery, selectedCategory, t]);
 
   if (loading && companies.length === 0) {
     return <TwaLoadingScreen title={t("client.partners.loadingTitle")} subtitle={t("client.partners.loadingSubtitle")} />;
@@ -165,7 +169,7 @@ export default function CompaniesPage() {
               type="button"
               className={cn(
                 "inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors",
-                selectedCategory
+                selectedCategory || favoritesOnly
                   ? "bg-primary text-primary-foreground"
                   : "glass border border-white/10 text-muted-foreground hover:text-foreground",
               )}
@@ -215,7 +219,10 @@ export default function CompaniesPage() {
                 </div>
               </section>
 
-              <Button variant="outline" className="w-full border-white/10" onClick={() => setSelectedCategory(null)}>
+              <Button variant="outline" className="w-full border-white/10" onClick={() => {
+                setSelectedCategory(null);
+                setFavoritesOnly(false);
+              }}>
                 {t("client.common.resetFilters")}
               </Button>
             </div>
@@ -224,15 +231,31 @@ export default function CompaniesPage() {
 
         <button
           type="button"
-          onClick={() => setSelectedCategory(null)}
+          onClick={() => {
+            setSelectedCategory(null);
+            setFavoritesOnly(false);
+          }}
           className={cn(
             "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors",
-            selectedCategory === null
+            selectedCategory === null && !favoritesOnly
               ? "bg-primary text-primary-foreground"
               : "glass border border-white/10 text-muted-foreground hover:text-foreground",
           )}
         >
           {t("client.common.all")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setFavoritesOnly((current) => !current)}
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+            favoritesOnly
+              ? "bg-primary text-primary-foreground"
+              : "glass border border-white/10 text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <Heart className={cn("h-3.5 w-3.5", favoritesOnly && "fill-current")} />
+          {locale === "ru" ? "Любимые" : "Favorites"}
         </button>
         {quickCategories.map((category) => (
           <button

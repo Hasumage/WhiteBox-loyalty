@@ -56,6 +56,7 @@ async function readCompanyRegisterPayload(request: NextRequest): Promise<{
         .map(([key, value]) => [key, String(value)]),
     ) as Record<string, unknown>;
     payload.consentAccepted = payload.consentAccepted === "true" || payload.consentAccepted === "on";
+    payload.termsAccepted = payload.termsAccepted === "true" || payload.termsAccepted === "on";
     payload.identityVerificationMode = "FULL";
     payload.passportPhotoProvided = Boolean(passportUpload);
     return { raw: payload, passportUpload };
@@ -63,6 +64,7 @@ async function readCompanyRegisterPayload(request: NextRequest): Promise<{
 
   const raw = (await request.json()) as Record<string, unknown>;
   raw.consentAccepted = raw.consentAccepted === true;
+  raw.termsAccepted = raw.termsAccepted === true;
   raw.identityVerificationMode = "FULL";
   // Full verification requires a real encrypted upload, not a JSON assertion.
   raw.passportPhotoProvided = false;

@@ -3,23 +3,31 @@ import { cn } from "@/lib/utils";
 export function NearLoyLogo({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 32 32"
+      viewBox="0 0 512 512"
       aria-hidden
-      className={cn("h-9 w-9", className)}
+      className={cn("h-9 w-9 shrink-0 overflow-visible", className)}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <linearGradient id="nl-gradient" x1="5" y1="4" x2="27" y2="28" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#76D7FF" />
-          <stop offset="1" stopColor="#40C4A8" />
-        </linearGradient>
+        <filter id="nearloy-logo-shadow" x="-6%" y="-6%" width="112%" height="112%">
+          <feDropShadow dx="5" dy="6" stdDeviation="1.2" floodColor="#6f8080" floodOpacity="0.38" />
+        </filter>
       </defs>
-      <rect x="4" y="4" width="24" height="24" rx="8" fill="#0B1220" stroke="url(#nl-gradient)" strokeWidth="1.5" />
-      <path d="M10 12H16V20H10V12Z" stroke="#E8F6FF" strokeWidth="1.5" />
-      <path d="M16 12H22V20H16V12Z" stroke="#E8F6FF" strokeWidth="1.5" />
-      <path d="M16 12V20" stroke="url(#nl-gradient)" strokeWidth="1.5" />
-      <path d="M10 16H22" stroke="url(#nl-gradient)" strokeWidth="1.5" />
+      <rect x="14" y="14" width="484" height="484" rx="104" fill="#000000" stroke="#67E8F9" strokeOpacity="0.55" strokeWidth="12" />
+      <g
+        fill="none"
+        stroke="#ecfeff"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        filter="url(#nearloy-logo-shadow)"
+      >
+        <path d="M104 186V104H186" strokeWidth="24" />
+        <path d="M326 104H408V186" strokeWidth="24" />
+        <path d="M408 326V408H326" strokeWidth="24" />
+        <path d="M186 408H104V326" strokeWidth="24" />
+        <path d="M256 66L310 196L446 256L310 316L256 446L202 316L66 256L202 196Z" strokeWidth="46" />
+      </g>
     </svg>
   );
 }

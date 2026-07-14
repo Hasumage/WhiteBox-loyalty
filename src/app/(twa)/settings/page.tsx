@@ -31,7 +31,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { getStoredUser, type StoredUser } from "@/lib/api/auth-client";
@@ -49,8 +48,6 @@ import {
 } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { interpolate } from "@/lib/i18n/format";
-import { categoryName } from "@/lib/i18n/categories";
-import { ProfileStatusBadge } from "@/components/profile-status/profile-status-view";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 const SHOW_LAUNCH_REFERRALS = false;
@@ -62,15 +59,8 @@ function initials(name: string) {
   return name.slice(0, 2).toUpperCase() || "?";
 }
 
-type FavoriteCategoryChip = {
-  slug: string;
-  name: string;
-  icon: string;
-};
-
-
 const fallbackProfile: TwaProfile = {
-  user: { uuid: "", name: "", email: "", createdAt: "" },
+  user: { uuid: "", name: "", email: "", birthDate: null, createdAt: "" },
   preferences: {
     onboardingCompletedAt: null,
     onboardingSkippedAt: null,
@@ -100,7 +90,6 @@ export default function SettingsPage() {
   const { locale, setLocale, t } = useI18n("ru");
   const pathname = usePathname();
   const [user, setUser] = useState<StoredUser | null>(null);
-  const [favoriteCategories, setFavoriteCategories] = useState<FavoriteCategoryChip[]>([]);
   const [profile, setProfile] = useState<TwaProfile>(fallbackProfile);
   const [promoCode, setPromoCode] = useState("");
   const [referralCode, setReferralCode] = useState("");
@@ -118,7 +107,6 @@ export default function SettingsPage() {
       .map((category) => ({ slug: category.slug, name: category.name, icon: category.icon }));
     const cachedProfile = getCachedTwaProfile();
     const cachedDashboard = getCachedTwaDashboard();
-    if (cachedFavoriteList.length) setFavoriteCategories(cachedFavoriteList);
     if (cachedProfile.user.uuid || cachedDashboard.wallet.companies.length || (SUBSCRIPTIONS_ENABLED && cachedDashboard.activeSubscriptions.length)) {
       setProfile({
         ...cachedProfile,
@@ -145,7 +133,6 @@ export default function SettingsPage() {
       const favoriteList = allCategories
         .filter((c) => favoriteSet.has(c.slug))
         .map((c) => ({ slug: c.slug, name: c.name, icon: c.icon }));
-      setFavoriteCategories(favoriteList);
       setProfile({
         ...freshProfile,
         stats: {
@@ -188,14 +175,6 @@ export default function SettingsPage() {
     window.addEventListener("hashchange", scrollToHash);
     return () => window.removeEventListener("hashchange", scrollToHash);
   }, [pathname]);
-
-  const favoriteSummary = useMemo(
-    () =>
-      favoriteCategories.length === 0
-        ? t("client.profile.noFavorites")
-        : interpolate(t("client.profile.categoriesSelected"), { count: favoriteCategories.length }),
-    [favoriteCategories.length, t],
-  );
 
   const activityLabel =
     profile.stats.activityScore >= 75
@@ -281,7 +260,6 @@ export default function SettingsPage() {
   }
 
   const displayName = user?.name ?? profile.user.name ?? t("client.profile.guest");
-  const selectedStatus = profileStatusState?.selectedStatus;
   const newStatusCount = profileStatusState?.summary.new ?? 0;
   const metrics = [
     { label: t("client.profile.partners"), value: profile.stats.partnerCount, icon: Store },
@@ -294,29 +272,41 @@ export default function SettingsPage() {
       label: t("client.profile.accountSettings"),
       detail: t("client.profile.accountSettingsSubtitle"),
       icon: LockKeyhole,
-      accent: "from-cyan-300/18 to-white/[0.04]",
+      accent: "from-cyan-300/[0.24] via-sky-400/[0.10] to-white/[0.03]",
+      glow: "bg-cyan-300/[0.18]",
+      iconTone: "border-cyan-200/30 bg-cyan-300/[0.14] text-cyan-50",
+      line: "from-transparent via-cyan-200/70 to-transparent",
     },
     {
-      href: "/settings/statuses",
-      label: t("client.profile.profileStatus"),
-      detail: t("client.profile.profileStatusDescription"),
-      icon: Trophy,
-      accent: "from-amber-300/18 to-white/[0.04]",
+      href: "/settings/personalization",
+      label: t("client.profile.personalization"),
+      detail: locale === "ru" ? "Статусы, категории и любимые компании." : "Statuses, categories and favorite companies.",
+      icon: Sparkles,
+      accent: "from-violet-300/[0.24] via-fuchsia-400/[0.10] to-white/[0.03]",
+      glow: "bg-violet-300/[0.18]",
+      iconTone: "border-violet-200/30 bg-violet-300/[0.14] text-violet-50",
+      line: "from-transparent via-violet-200/70 to-transparent",
       badge: newStatusCount ? interpolate(t("client.profile.newStatuses"), { count: newStatusCount }) : null,
-    },
-    {
-      href: "/settings/favorites",
-      label: t("client.profile.favoriteCategories"),
-      detail: favoriteSummary,
-      icon: Heart,
-      accent: "from-rose-300/16 to-white/[0.04]",
     },
     {
       href: "/companies",
       label: t("client.profile.visitPartners"),
       detail: t("client.profile.startEarning"),
       icon: Store,
-      accent: "from-emerald-300/14 to-white/[0.04]",
+      accent: "from-emerald-300/[0.20] via-teal-400/[0.10] to-white/[0.03]",
+      glow: "bg-emerald-300/[0.16]",
+      iconTone: "border-emerald-200/30 bg-emerald-300/[0.13] text-emerald-50",
+      line: "from-transparent via-emerald-200/70 to-transparent",
+    },
+    {
+      href: "#section-payments",
+      label: t("client.profile.rewardsCenter"),
+      detail: t("client.profile.rewardsCenterSubtitle"),
+      icon: Gift,
+      accent: "from-amber-300/[0.22] via-orange-400/[0.10] to-white/[0.03]",
+      glow: "bg-amber-300/[0.16]",
+      iconTone: "border-amber-200/30 bg-amber-300/[0.13] text-amber-50",
+      line: "from-transparent via-amber-200/70 to-transparent",
     },
   ];
   const moreLinks = [
@@ -394,24 +384,25 @@ export default function SettingsPage() {
           </div>
           <Sparkles className="h-5 w-5 text-primary" />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-3">
           {quickLinks.map((item) => {
             const Icon = item.icon;
+            const cardClassName = cn(
+              "group relative min-h-[9.5rem] overflow-hidden rounded-[1.6rem] border border-white/25 bg-white/[0.07] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-36px_60px_rgba(255,255,255,0.035),0_18px_46px_rgba(0,0,0,0.26)] backdrop-blur-xl transition duration-500 hover:-translate-y-0.5 hover:border-cyan-100/40 hover:bg-white/[0.10]",
+              "bg-gradient-to-br",
+              item.accent,
+            );
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                id={item.href === "/settings/account" ? "settings-block" : undefined}
-                className={cn(
-                  "group relative min-h-[9.5rem] overflow-hidden rounded-[1.6rem] border border-white/10 bg-slate-950/70 p-3 transition hover:-translate-y-0.5 hover:border-white/20",
-                  "bg-gradient-to-br",
-                  item.accent,
-                )}
-              >
-                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-white/10 blur-2xl" />
+              <Link key={item.href} href={item.href} id={item.href === "/settings/account" ? "settings-block" : undefined} className={cardClassName}>
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(255,255,255,0.34),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.18),transparent_36%,rgba(255,255,255,0.07)_66%,transparent)] opacity-80" />
+                <div className="absolute -left-16 top-8 h-28 w-36 rounded-full bg-black/[0.22] blur-3xl transition-transform duration-700 ease-out group-hover:translate-x-24 group-hover:-translate-y-5" />
+                <div className="absolute -inset-y-10 -left-24 w-16 rotate-12 bg-white/[0.20] blur-xl transition-transform duration-700 ease-out group-hover:translate-x-80" />
+                <div className="absolute inset-[1px] rounded-[1.55rem] border border-white/[0.08]" />
+                <div className={cn("absolute -right-8 -top-8 h-24 w-24 rounded-full blur-2xl transition-transform duration-700 ease-out group-hover:-translate-x-4 group-hover:translate-y-3", item.glow)} />
+                <div className={cn("absolute inset-x-8 bottom-0 h-px bg-gradient-to-r opacity-80", item.line)} />
                 <div className="relative flex h-full flex-col justify-between gap-3">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/25 text-cyan-100">
+                    <span className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_30px_rgba(0,0,0,0.20)] backdrop-blur-md", item.iconTone)}>
                       <Icon className="h-5 w-5" />
                     </span>
                     {item.badge ? (
@@ -420,9 +411,9 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold leading-tight">{item.label}</p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-white/68">{item.detail}</p>
                   </div>
-                  <div className="flex items-center justify-between text-xs font-semibold text-cyan-100">
+                  <div className="flex items-center justify-between text-xs font-semibold text-cyan-50/95">
                     <span>{t("client.profile.open")}</span>
                     <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
                   </div>
@@ -508,77 +499,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-semibold">{t("client.profile.personalization")}</h2>
-          <p className="text-xs text-muted-foreground">{t("client.profile.personalizationSubtitle")}</p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Card className="glass flex min-w-0 flex-col border-cyan-200/20 bg-cyan-300/[0.04]">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Sparkles className="h-4 w-4 text-cyan-100" />
-                {t("client.profile.profileStatus")}
-              </CardTitle>
-              <CardDescription>{t("client.profile.profileStatusDescription")}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-1 flex-col gap-3 pb-4">
-              {selectedStatus ? (
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("client.profile.currentStatus")}</p>
-                  <ProfileStatusBadge rarity={selectedStatus.rarity} icon={selectedStatus.icon} title={selectedStatus.title} className="max-w-full" />
-                </div>
-              ) : (
-                <p className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-muted-foreground">
-                  {t("client.profile.noStatusSelected")}
-                </p>
-              )}
-              <Button asChild variant="secondary" className="mt-auto h-auto w-full min-w-0 overflow-hidden rounded-2xl px-3 py-3 !whitespace-normal">
-                <Link href="/settings/statuses" className="min-w-0 text-center text-sm leading-snug">
-                  <Trophy className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0 max-w-full break-words">{t("client.profile.openStatusCollection")}</span>
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="glass flex min-w-0 flex-col border-white/10">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Heart className="h-4 w-4 text-primary" />
-                {t("client.profile.favoriteCategories")}
-              </CardTitle>
-              <CardDescription>{favoriteSummary}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-1 flex-col gap-3 pb-4">
-              <div className="flex flex-wrap gap-2">
-                {favoriteCategories.length === 0 ? (
-                  <span className="max-w-full rounded-2xl border border-dashed border-white/20 px-3 py-2 text-xs leading-5 text-muted-foreground">
-                    {t("client.profile.chooseCategories")}
-                  </span>
-                ) : (
-                  favoriteCategories.slice(0, 8).map((cat) => (
-                    <span
-                      key={cat.slug}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-white/35 bg-white px-3 py-1 text-xs font-semibold text-black shadow-[0_0_16px_rgba(255,255,255,0.08)]"
-                    >
-                      <CategoryIcon iconName={cat.icon} className="h-3.5 w-3.5 text-black" />
-                      {categoryName(cat, t)}
-                    </span>
-                  ))
-                )}
-              </div>
-              <Button asChild variant="secondary" className="mt-auto h-auto w-full min-w-0 overflow-hidden rounded-2xl px-3 py-3 !whitespace-normal">
-                <Link href="/settings/favorites" className="min-w-0 text-center text-sm leading-snug">
-                  <Heart className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0 max-w-full break-words">{t("client.profile.selectFavoriteCategories")}</span>
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
       <section id="section-payments" className="space-y-3 scroll-mt-6">
         <div>
           <h2 className="text-lg font-semibold">{t("client.profile.rewardsCenter")}</h2>
@@ -593,9 +513,9 @@ export default function SettingsPage() {
               </CardTitle>
               <CardDescription>{t("client.profile.promoCodesSubtitle")}</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-2 pb-4 min-[460px]:grid-cols-[1fr_auto]">
+            <CardContent className="grid gap-2 pb-4 lg:grid-cols-[minmax(0,1fr)_auto]">
               <Input className="glass border-white/10 uppercase" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder={t("client.profile.promoPlaceholder")} />
-              <Button type="button" className="min-[460px]:px-5" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>
+              <Button type="button" className="w-full lg:w-auto lg:px-5" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>
                 {t("client.profile.apply")}
               </Button>
             </CardContent>
@@ -625,9 +545,9 @@ export default function SettingsPage() {
                 </div>
                 <Copy className="h-4 w-4 shrink-0 text-primary" />
               </button>
-              <div className="grid gap-2 min-[460px]:grid-cols-[1fr_auto]">
+              <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
                 <Input className="glass border-white/10 uppercase" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder={t("client.profile.referralPlaceholder")} />
-                <Button type="button" variant="secondary" className="glass border-white/10 min-[460px]:px-5" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>
+                <Button type="button" variant="secondary" className="glass w-full border-white/10 lg:w-auto lg:px-5" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>
                   {t("client.profile.redeem")}
                 </Button>
               </div>
