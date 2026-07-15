@@ -40,6 +40,7 @@ function planPrice(plan: TwaSubscriptionPlan) {
 }
 
 export default function MarketplacePage() {
+  // #SubNearloyCode: клиентский marketplace скрыт до отдельного запуска подписок.
   if (!SUBSCRIPTIONS_ENABLED) {
     return <SubscriptionsComingSoon mode="client" backHref="/app" primaryHref="/map" />;
   }

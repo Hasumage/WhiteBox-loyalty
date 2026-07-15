@@ -61,6 +61,7 @@ function entitlementWindowLabel(unit: EntitlementWindow) {
 }
 
 export default function NewCompanySubscriptionPage() {
+  // #SubNearloyCode: форма создания клиентских подписок скрыта до отдельного запуска.
   if (!SUBSCRIPTIONS_ENABLED) {
     return <SubscriptionsComingSoon mode="company" backHref="/company/subscriptions" primaryHref="/company/clients" />;
   }

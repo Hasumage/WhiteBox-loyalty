@@ -6,10 +6,11 @@ import { ArrowRight, BadgeCheck, BellRing, Gift, MapPin, QrCode, Sparkles, Ticke
 import { LandingLeadForm } from "@/components/landing/LandingLeadForm";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
 import { OpenNearLoyDemo } from "@/components/landing/OpenNearLoyDemo";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 export const metadata: Metadata = {
-  title: "NearLoy — бонусы, подписки и сервис для клиентов",
-  description: "NearLoy помогает клиентам хранить бонусы, подписки, статусы и историю операций в одном удобном интерфейсе.",
+  title: "NearLoy — бонусы, уровни и сервис для клиентов",
+  description: "NearLoy помогает клиентам хранить бонусы, статусы, любимые компании и историю операций в одном удобном интерфейсе.",
 };
 
 type IconItem = {
@@ -19,19 +20,20 @@ type IconItem = {
 };
 
 const userHighlights: IconItem[] = [
-  { icon: WalletCards, title: "Один кошелёк", text: "Баллы, подписки, статусы и история операций собраны в одном месте." },
+  { icon: WalletCards, title: "Один кошелёк", text: "Баллы, статусы, любимые компании и история операций собраны в одном месте." },
   { icon: QrCode, title: "Быстро у кассы", text: "Покажите QR или короткий код, чтобы кассир нашёл профиль без лишних действий." },
-  { icon: Gift, title: "Больше пользы", text: "Получайте бонусы, используйте услуги по подписке и следите за прогрессом уровней." },
-  { icon: BellRing, title: "Понятные события", text: "Видно, когда начислены баллы, активирована подписка или появился новый статус." },
+  { icon: Gift, title: "Больше пользы", text: "Получайте бонусы, открывайте награды и следите за прогрессом уровней." },
+  { icon: BellRing, title: "Понятные события", text: "Видно, когда начислены баллы, обновился уровень или появился новый статус." },
 ];
 
 const steps = [
   { icon: WalletCards, title: "Откройте NearLoy", text: "Войдите в NearLoy и получите доступ к своему кошельку." },
   { icon: MapPin, title: "Найдите партнёра", text: "Карта и категории помогают выбрать компанию рядом или онлайн-сервис." },
-  { icon: QrCode, title: "Покажите QR", text: "Кассир быстро найдёт профиль, начислит баллы или погасит услугу подписки." },
-  { icon: BadgeCheck, title: "Следите за выгодой", text: "История, статусы и подписки остаются прозрачными и доступны в любой момент." },
+  { icon: QrCode, title: "Покажите QR", text: "Кассир быстро найдёт профиль, начислит баллы и увидит ваш прогресс." },
+  { icon: BadgeCheck, title: "Следите за выгодой", text: "История, статусы и награды остаются прозрачными и доступны в любой момент." },
 ];
 
+// #SubNearloyCode: карточки клиентских подписок остаются в коде, но блок скрыт до отдельного запуска.
 const subscriptionCards = [
   { title: "Кофе каждый день", text: "Подписка на ежедневный напиток с понятным лимитом использования.", icon: TicketCheck },
   { title: "Фитнес без лимита", text: "Безлимитный проход по подписке, если бизнес поддерживает такой сценарий.", icon: BadgeCheck },
@@ -85,13 +87,13 @@ export default function HomePage() {
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-100/18 bg-cyan-100/10 px-4 py-2 text-sm font-semibold text-cyan-100">
             <Sparkles className="h-4 w-4" />
-            Бонусы, подписки и статусы в одном интерфейсе
+            Бонусы, уровни и статусы в одном интерфейсе
           </div>
           <h1 className="mt-7 max-w-4xl text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
             NearLoy: больше от любимых компаний
           </h1>
           <p className="mt-6 max-w-2xl text-xl leading-9 text-white/62">
-            Храните бонусы, подписки, уровни и историю операций в телефоне. Показывайте QR на кассе, получайте сервис быстрее и используйте преимущества партнёров без пластиковых карт.
+            Храните бонусы, уровни, статусы и историю операций в телефоне. Показывайте QR на кассе, получайте сервис быстрее и используйте преимущества партнёров без пластиковых карт.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link href="/login" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-base font-semibold text-[#07101e] shadow-[0_0_34px_rgba(255,255,255,0.18)] transition hover:bg-white/90">
@@ -107,7 +109,7 @@ export default function HomePage() {
         <HeroImagePanel src="/landing/user-rewards-status.png" alt="NearLoy loyalty status dashboard with rewards and progress" />
       </section>
 
-      <section className="relative z-10 border-y border-white/10 bg-white/[0.035] py-16">
+      <section id="features" className="relative z-10 border-y border-white/10 bg-white/[0.035] py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {userHighlights.map((item) => (
@@ -125,15 +127,15 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">NearLoy внутри</p>
-            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">QR, бонусы и подписки вместе</h2>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">QR, бонусы и уровни вместе</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
-              NearLoy собирает ключевые сценарии клиента: быстрый QR на кассе, бонусы, подписки, уровни и историю действий. Всё выглядит как единый сервис, а не набор разрозненных карт.
+              NearLoy собирает ключевые сценарии клиента: быстрый QR на кассе, бонусы, уровни, статусы и историю действий. Всё выглядит как единый сервис, а не набор разрозненных карт.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
               {[
                 { icon: QrCode, label: "QR" },
                 { icon: Gift, label: "Бонусы" },
-                { icon: TicketCheck, label: "Тарифы" },
+                { icon: TicketCheck, label: "Награды" },
               ].map((item) => (
                 <span
                   key={item.label}
@@ -149,6 +151,8 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* #SubNearloyCode: скрытая клиентская секция подписок, вернуть вместе с SUBSCRIPTIONS_ENABLED. */}
+      {SUBSCRIPTIONS_ENABLED ? (
       <section id="subscriptions" className="relative z-10 border-y border-white/10 bg-white/[0.035] py-16">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-8">
           <ImagePanel
@@ -175,6 +179,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      ) : null}
 
       <section className="relative z-10 py-16">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:items-center lg:px-8">
@@ -206,14 +211,14 @@ export default function HomePage() {
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">Для бизнеса</p>
             <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">NearLoy помогает бизнесу возвращать клиентов</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
-              Запускайте бонусы, подписки и уровни лояльности, управляйте кассой и командой, а финансовые показатели держите под контролем в одном рабочем пространстве.
+              Запускайте бонусы и уровни лояльности, управляйте кассой и командой, а финансовые показатели держите под контролем в одном рабочем пространстве.
             </p>
           </div>
           <GlowCard className="p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-2xl font-semibold">Кабинет для партнёров</h3>
-                <p className="mt-2 text-sm leading-6 text-white/58">Инструменты для подписок, бонусов, сотрудников, выплат и роста повторных продаж.</p>
+                <p className="mt-2 text-sm leading-6 text-white/58">Инструменты для бонусов, сотрудников, выплат и роста повторных продаж.</p>
               </div>
               <Link href="/business" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-5 text-sm font-semibold text-[#07101e] transition hover:bg-white/90">
                 Перейти
@@ -230,7 +235,7 @@ export default function HomePage() {
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">Контакт</p>
             <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Хотите попробовать NearLoy?</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
-              Напишите, какой сценарий интересен: бонусы, подписки, карта партнёров, клиентское приложение или пилот с конкретной компанией.
+              Напишите, какой сценарий интересен: бонусы, карта партнёров, клиентское приложение или пилот с конкретной компанией.
             </p>
           </div>
           <LandingLeadForm source="user_landing" title="Запросить демонстрацию" />

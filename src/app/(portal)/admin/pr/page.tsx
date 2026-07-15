@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Megaphone, RefreshCcw, TicketPercent } from "lucide-react";
+import { Megaphone, RefreshCcw } from "lucide-react";
 import { AdminPrDashboardSection } from "@/components/admin/AdminPrDashboardSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,26 +37,16 @@ export default function AdminPrPage() {
               <Megaphone className="h-3.5 w-3.5" /> PR
             </Badge>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-              {locale === "ru" ? "PR-кабинет привлечения компаний" : "Company acquisition PR desk"}
+              {locale === "ru" ? "PR-кабинет" : "PR workspace"}
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
-              {locale === "ru"
-                ? "Отдельный рабочий экран для воронки привлечения, закреплённых компаний, оборота и выплат PR-менеджерам."
-                : "A dedicated workspace for acquisition funnel, assigned companies, turnover and PR manager payouts."}
+            <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
+              {locale === "ru" ? "Хорошего дня." : "Have a good day."}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="secondary">
-              <Link href="/admin/company-billing-promos">
-                <TicketPercent className="h-4 w-4" />
-                {locale === "ru" ? "Промокоды оплаты" : "Billing promo codes"}
-              </Link>
-            </Button>
           <Button variant="secondary" onClick={() => void load()} disabled={loading}>
             <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
             {locale === "ru" ? "Обновить" : "Refresh"}
           </Button>
-          </div>
         </div>
       </section>
 
@@ -65,7 +54,7 @@ export default function AdminPrPage() {
 
       {loading && !dashboard ? (
         <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-6 text-muted-foreground">
-          {locale === "ru" ? "Загружаю PR-кабинет..." : "Loading PR desk..."}
+          {locale === "ru" ? "Загружаю PR-кабинет..." : "Loading PR workspace..."}
         </div>
       ) : dashboard?.pr ? (
         <AdminPrDashboardSection dashboard={dashboard.pr} locale={locale} />

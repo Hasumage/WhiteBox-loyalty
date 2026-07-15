@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowLeft, ChevronRight, Heart, Search, SlidersHorizontal, X } from "lucide-react";
@@ -292,28 +293,37 @@ export default function CompaniesPage() {
             >
               <Link href={`/wallet/${company.slug}`}>
                 <Card className="glass cursor-pointer border-white/10 transition-all active:scale-[0.98] hover:border-white/20">
-                  <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 py-3 pb-1">
-                    <div className="min-w-0">
-                      <CardTitle className="truncate text-base font-semibold">{company.name}</CardTitle>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {badges.map((category) => (
-                          <Badge
-                            key={category.slug}
-                            variant="secondary"
-                            className="inline-flex items-center gap-1 text-[10px] font-normal"
-                          >
-                            <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
-                            {categoryName(category, t)}
-                          </Badge>
-                        ))}
-                        {extraCount > 0 && (
-                          <Badge variant="outline" className="text-[10px] font-normal">
-                            +{extraCount}
-                          </Badge>
+                  <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 px-4 py-3 pb-1">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                        {company.logoUrl ? (
+                          <Image src={company.logoUrl} alt={company.name} fill sizes="56px" className="object-cover" />
+                        ) : (
+                          <CategoryIcon iconName={company.category?.icon ?? "Building2"} className="h-6 w-6 text-primary" />
                         )}
                       </div>
+                      <div className="min-w-0 flex-1 pt-0.5">
+                        <CardTitle className="truncate text-base font-semibold">{company.name}</CardTitle>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {badges.map((category) => (
+                            <Badge
+                              key={category.slug}
+                              variant="secondary"
+                              className="inline-flex items-center gap-1 text-[10px] font-normal"
+                            >
+                              <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
+                              {categoryName(category, t)}
+                            </Badge>
+                          ))}
+                          {extraCount > 0 && (
+                            <Badge variant="outline" className="text-[10px] font-normal">
+                              +{extraCount}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                    <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
                   </CardHeader>
                   <CardContent className="px-4 pb-4 pt-0">
                     <p className="mb-2 text-xl font-bold tabular-nums text-primary">

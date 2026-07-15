@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
+  CompanyMediaKind,
   CompanyBillingStatus,
   LoyaltyTransactionStatus,
   LoyaltyTransactionType,
@@ -33,6 +34,10 @@ export class RegisteredService {
 
   private decimalToMoney(value: Prisma.Decimal | number | string) {
     return this.decimalToNumber(value).toFixed(2);
+  }
+
+  private companyMediaUrl(storageKey: string | null | undefined) {
+    return storageKey ? `/api/company/media/files/${encodeURIComponent(storageKey)}` : null;
   }
 
   private normalizeCode(code: string) {
@@ -910,6 +915,12 @@ export class RegisteredService {
               isMain: true,
             },
           },
+          mediaAssets: {
+            where: { kind: CompanyMediaKind.LOGO, isActive: true },
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+            take: 1,
+            select: { storageKey: true },
+          },
           userLinks: {
             where: { userId },
             select: {
@@ -949,6 +960,7 @@ export class RegisteredService {
         slug: company.slug,
         name: company.name,
         description: company.description,
+        logoUrl: this.companyMediaUrl(company.mediaAssets?.[0]?.storageKey),
         isActive: company.isActive,
         operatesOnline: company.operatesOnline,
         isFavorite: link?.isFavorite ?? false,
@@ -1114,6 +1126,8 @@ export class RegisteredService {
       totalBalance: companies.reduce((sum, company) => sum + company.points.balance, 0),
       companies: companies.filter(
         (company) =>
+          company.isFavorite ||
+          company.points.updatedAt ||
           company.points.balance > 0 ||
           company.points.totalEarnedPoints > 0 ||
           company.points.totalSpentPoints > 0,

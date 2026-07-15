@@ -121,7 +121,6 @@ export default function HomePage() {
   const displayCategories = useMemo(() => {
     const source = new Map<string, ApiCategory>();
     for (const company of dashboard?.wallet.companies ?? []) {
-      if (company.points.totalEarnedPoints <= 0) continue;
       for (const category of companyCategories(company)) {
         source.set(category.slug, category);
       }
@@ -141,7 +140,7 @@ export default function HomePage() {
 
   const filteredCompanies = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    const loyaltyCompanies = dashboard?.wallet.companies.filter((company) => company.points.totalEarnedPoints > 0) ?? [];
+    const loyaltyCompanies = dashboard?.wallet.companies ?? [];
 
     return loyaltyCompanies.filter((company) => {
       const categories = companyCategories(company);
@@ -293,7 +292,7 @@ export default function HomePage() {
         </motion.div>
       </motion.section>
 
-      {/* Active Subscriptions */}
+      {/* #SubNearloyCode: активные клиентские подписки скрыты до отдельного запуска. */}
       {SUBSCRIPTIONS_ENABLED ? (
       <motion.section
         initial={{ y: 8, opacity: 0 }}

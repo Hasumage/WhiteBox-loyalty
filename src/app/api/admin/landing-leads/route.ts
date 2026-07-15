@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { LandingLeadStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminScope } from "@/lib/admin/require-admin-scope";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -16,6 +17,11 @@ function clampNumber(value: string | null, fallback: number, min: number, max: n
 export async function GET(request: NextRequest) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
+  const supportAccess = await requireAdminScope(session, "SUPPORT", "canView");
+  if (!supportAccess.ok) {
+    const prAccess = await requireAdminScope(session, "PR", "canView");
+    if (!prAccess.ok) return supportAccess.response;
+  }
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query")?.trim() ?? "";
