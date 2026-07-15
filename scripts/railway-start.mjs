@@ -49,6 +49,50 @@ function npmRun(name, args, env = process.env, options = {}) {
   return child;
 }
 
+function npmRunOnce(name, args, env = process.env) {
+  const command = npmCommand;
+  const finalArgs = process.platform === "win32" ? ["/d", "/s", "/c", "npm", ...args] : args;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, finalArgs, {
+      env,
+      stdio: "inherit",
+    });
+
+    children.add(child);
+    child.on("exit", (code) => {
+      children.delete(child);
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${name} exited with code ${code ?? 1}`));
+      }
+    });
+    child.on("error", (error) => {
+      children.delete(child);
+      reject(error);
+    });
+  });
+}
+
+async function runMigrationsIfConfigured() {
+  if (!process.env.DATABASE_URL) {
+    console.log("DATABASE_URL is not set, skipping database migrations.");
+    return;
+  }
+
+  console.log("Applying database migrations before service start.");
+  await npmRunOnce("db:migrate", ["run", "db:migrate"]);
+}
+
+try {
+  await runMigrationsIfConfigured();
+} catch (error) {
+  console.error("Database migration failed before service start", error);
+  shutdown();
+  process.exit(1);
+}
+
 if (isApiService) {
   const env = {
     ...process.env,
