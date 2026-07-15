@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, GripVertical, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
+import { Building2, ExternalLink, GripVertical, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,8 @@ import { fetchWithAuthRecovery } from "@/lib/api/authenticated-fetch";
 import { cn } from "@/lib/utils";
 
 type PipelineStatus = "LEAD" | "NEGOTIATION" | "TRIAL" | "CONNECTED" | "REVENUE_ACTIVE" | "LOST";
+type ManualPipelineStatus = Exclude<PipelineStatus, "REVENUE_ACTIVE">;
+type AutoColumnKind = "active" | "expired";
 type FunnelModalMode = "create" | "edit";
 
 type FunnelItem = {
@@ -42,8 +45,48 @@ type FunnelDraft = {
   description: string;
   source: string;
   contact: string;
-  status: PipelineStatus;
+  status: ManualPipelineStatus;
 };
+
+type ReferralCompany = {
+  uuid: string;
+  referralPercent: number;
+  updatedAt: string;
+  company: {
+    id: number;
+    slug: string;
+    name: string;
+    ownerUuid: string | null;
+    ownerName: string | null;
+    ownerEmail: string | null;
+    billingStatus: string | null;
+    billingEndsAt: string | null;
+    lastPaidInvoiceAt: string | null;
+    lastPaidPeriodEndsAt: string | null;
+  };
+  referrer: {
+    uuid: string;
+    name: string | null;
+    email: string;
+  };
+};
+
+type ManualColumn = {
+  status: ManualPipelineStatus;
+  title: string;
+  hint: string;
+  tone: string;
+};
+
+type AutoColumn = {
+  key: "REVENUE_ACTIVE" | "SUBSCRIPTION_EXPIRED";
+  auto: AutoColumnKind;
+  title: string;
+  hint: string;
+  tone: string;
+};
+
+type BoardColumn = ManualColumn | AutoColumn;
 
 const emptyDraft: FunnelDraft = {
   name: "",
@@ -53,19 +96,20 @@ const emptyDraft: FunnelDraft = {
   status: "LEAD",
 };
 
-const columns: Array<{
-  status: PipelineStatus;
-  title: string;
-  hint: string;
-  tone: string;
-}> = [
+const manualColumns: ManualColumn[] = [
   { status: "LEAD", title: "Новый лид", hint: "Только нашли компанию", tone: "from-sky-400/18 to-cyan-300/5" },
   { status: "NEGOTIATION", title: "Переговоры", hint: "Есть контакт и интерес", tone: "from-violet-400/18 to-fuchsia-300/5" },
   { status: "TRIAL", title: "Тест", hint: "Демо, созвон, условия", tone: "from-amber-300/18 to-orange-300/5" },
   { status: "CONNECTED", title: "Договорились", hint: "Готовим подключение", tone: "from-emerald-300/18 to-teal-300/5" },
-  { status: "REVENUE_ACTIVE", title: "Приносит прибыль", hint: "Компания уже даёт оборот", tone: "from-lime-300/20 to-emerald-300/5" },
   { status: "LOST", title: "Отказ", hint: "Закрыто без сделки", tone: "from-red-300/18 to-rose-300/5" },
 ];
+
+const autoColumns: AutoColumn[] = [
+  { key: "REVENUE_ACTIVE", auto: "active", title: "Приносит прибыль", hint: "Активная подписка NearLoy", tone: "from-lime-300/20 to-emerald-300/5" },
+  { key: "SUBSCRIPTION_EXPIRED", auto: "expired", title: "Не оплачивают подписку", hint: "Раньше платили, но срок истёк", tone: "from-orange-300/18 to-red-300/5" },
+];
+
+const columns: BoardColumn[] = [...manualColumns, ...autoColumns];
 
 function normalizeDraft(item: FunnelItem): FunnelDraft {
   return {
@@ -73,16 +117,39 @@ function normalizeDraft(item: FunnelItem): FunnelDraft {
     description: item.description ?? "",
     source: item.source ?? "",
     contact: item.contact ?? "",
-    status: item.status,
+    status: item.status === "REVENUE_ACTIVE" ? "CONNECTED" : item.status,
   };
 }
 
-function makeDraft(status: PipelineStatus): FunnelDraft {
+function makeDraft(status: ManualPipelineStatus): FunnelDraft {
   return { ...emptyDraft, status };
+}
+
+function isManualColumn(column: BoardColumn): column is ManualColumn {
+  return "status" in column;
+}
+
+function filterReferralCompanies(companies: ReferralCompany[], query: string) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return companies;
+  return companies.filter((item) =>
+    [
+      item.company.name,
+      item.company.slug,
+      item.company.ownerName,
+      item.company.ownerEmail,
+      item.referrer.name,
+      item.referrer.email,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(needle)),
+  );
 }
 
 export default function AdminPrFunnelPage() {
   const [items, setItems] = useState<FunnelItem[]>([]);
+  const [activeCompanies, setActiveCompanies] = useState<ReferralCompany[]>([]);
+  const [expiredCompanies, setExpiredCompanies] = useState<ReferralCompany[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
@@ -103,8 +170,14 @@ export default function AdminPrFunnelPage() {
       setLoading(false);
       return;
     }
-    const data = (await response.json()) as { items: FunnelItem[] };
+    const data = (await response.json()) as {
+      items: FunnelItem[];
+      activeCompanies?: ReferralCompany[];
+      expiredCompanies?: ReferralCompany[];
+    };
     setItems(data.items);
+    setActiveCompanies(data.activeCompanies ?? []);
+    setExpiredCompanies(data.expiredCompanies ?? []);
     setLoading(false);
   }
 
@@ -125,18 +198,21 @@ export default function AdminPrFunnelPage() {
   const grouped = useMemo(
     () =>
       Object.fromEntries(
-        columns.map((column) => [
+        manualColumns.map((column) => [
           column.status,
           filteredItems
             .filter((item) => item.status === column.status)
             .sort((left, right) => left.position - right.position || new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()),
         ]),
-      ) as Record<PipelineStatus, FunnelItem[]>,
+      ) as Record<ManualPipelineStatus, FunnelItem[]>,
     [filteredItems],
   );
 
-  const modalColumn = columns.find((column) => column.status === modalDraft.status) ?? columns[0];
-  const modalSaving = saving === "modal" || saving === activeUuid;
+  const filteredActiveCompanies = useMemo(() => filterReferralCompanies(activeCompanies, query), [activeCompanies, query]);
+  const filteredExpiredCompanies = useMemo(() => filterReferralCompanies(expiredCompanies, query), [expiredCompanies, query]);
+
+  const modalColumn = manualColumns.find((column) => column.status === modalDraft.status) ?? manualColumns[0];
+  const modalSaving = saving === "modal" || (Boolean(activeUuid) && saving === activeUuid);
 
   function closeModal() {
     setModalMode(null);
@@ -144,7 +220,7 @@ export default function AdminPrFunnelPage() {
     setModalDraft(makeDraft("LEAD"));
   }
 
-  function openCreate(status: PipelineStatus) {
+  function openCreate(status: ManualPipelineStatus) {
     setError("");
     setNotice("");
     setActiveUuid("");
@@ -278,74 +354,115 @@ export default function AdminPrFunnelPage() {
       {notice && <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm text-emerald-100">{notice}</div>}
 
       <div className="overflow-x-auto pb-3 pr-1 [scrollbar-color:rgba(103,232,249,.45)_rgba(255,255,255,.06)] [scrollbar-width:thin]">
-        <div className="grid min-w-[1380px] grid-cols-6 gap-3">
-          {columns.map((column) => (
-            <section
-              key={column.status}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={() => {
-                if (draggingUuid) void updateItem(draggingUuid, { status: column.status }, { silent: true });
-                setDraggingUuid("");
-              }}
-              className={cn(
-                "min-h-[520px] rounded-[1.75rem] border border-white/10 bg-gradient-to-b p-3",
-                column.tone,
-              )}
-            >
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold">{column.title}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{column.hint}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Badge variant="outline" className="border-white/10 bg-black/25">{grouped[column.status].length}</Badge>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="secondary"
-                    className="rounded-full border border-white/10 bg-white/10 hover:bg-white/15"
-                    aria-label={`Добавить компанию в этап ${column.title}`}
-                    onClick={() => openCreate(column.status)}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+        <div className="grid min-w-[2080px] grid-cols-7 gap-4">
+          {columns.map((column) => {
+            const manualColumn = isManualColumn(column);
+            const manualItems = manualColumn ? grouped[column.status] : [];
+            const autoItems = !manualColumn
+              ? column.auto === "active"
+                ? filteredActiveCompanies
+                : filteredExpiredCompanies
+              : [];
+            const count = manualColumn ? manualItems.length : autoItems.length;
 
-              <div className="space-y-3">
-                {grouped[column.status].map((item) => (
-                  <article
-                    key={item.uuid}
-                    draggable
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openEdit(item)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") openEdit(item);
-                    }}
-                    onDragStart={() => setDraggingUuid(item.uuid)}
-                    onDragEnd={() => setDraggingUuid("")}
-                    className="group flex cursor-pointer items-center gap-3 rounded-3xl border border-white/10 bg-black/35 p-3 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-cyan-200/25 hover:bg-black/45 focus:outline-none focus:ring-2 focus:ring-cyan-200/30"
-                  >
-                    <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground transition group-hover:text-cyan-100" />
-                    <p className="min-w-0 truncate font-semibold">{item.name}</p>
-                  </article>
-                ))}
-                {!grouped[column.status].length && (
-                  <button
-                    type="button"
-                    onClick={() => openCreate(column.status)}
-                    className="flex min-h-28 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-white/15 p-5 text-sm text-muted-foreground transition hover:border-cyan-200/30 hover:bg-white/[0.03] hover:text-cyan-100"
-                  >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/25">
-                      <Plus className="h-4 w-4" />
-                    </span>
-                    <span>Добавить компанию на этот этап</span>
-                  </button>
+            return (
+              <section
+                key={manualColumn ? column.status : column.key}
+                onDragOver={manualColumn ? (event) => event.preventDefault() : undefined}
+                onDrop={
+                  manualColumn
+                    ? () => {
+                        if (draggingUuid) void updateItem(draggingUuid, { status: column.status }, { silent: true });
+                        setDraggingUuid("");
+                      }
+                    : undefined
+                }
+                className={cn(
+                  "min-h-[520px] rounded-[1.75rem] border border-white/10 bg-gradient-to-b p-3",
+                  !manualColumn && "border-cyan-200/15",
+                  column.tone,
                 )}
-              </div>
-            </section>
-          ))}
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{column.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{column.hint}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant="outline" className="border-white/10 bg-black/25">{count}</Badge>
+                    {manualColumn && (
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="secondary"
+                        className="rounded-full border border-white/10 bg-white/10 hover:bg-white/15"
+                        aria-label={`Добавить компанию в этап ${column.title}`}
+                        onClick={() => openCreate(column.status)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {manualColumn &&
+                    manualItems.map((item) => (
+                      <article
+                        key={item.uuid}
+                        draggable
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openEdit(item)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") openEdit(item);
+                        }}
+                        onDragStart={() => setDraggingUuid(item.uuid)}
+                        onDragEnd={() => setDraggingUuid("")}
+                        className="group flex cursor-pointer items-center gap-3 rounded-3xl border border-white/10 bg-black/35 p-3 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-cyan-200/25 hover:bg-black/45 focus:outline-none focus:ring-2 focus:ring-cyan-200/30"
+                      >
+                        <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground transition group-hover:text-cyan-100" />
+                        <p className="min-w-0 truncate font-semibold">{item.name}</p>
+                      </article>
+                    ))}
+
+                  {!manualColumn &&
+                    autoItems.map((item) => {
+                      const href = item.company.ownerUuid ? `/admin/companies/${item.company.ownerUuid}` : `/admin/pr/companies`;
+                      return (
+                        <Link
+                          key={item.uuid}
+                          href={href}
+                          className="group flex items-center justify-between gap-3 rounded-3xl border border-white/10 bg-black/35 p-3 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-cyan-200/30 hover:bg-black/45 focus:outline-none focus:ring-2 focus:ring-cyan-200/30"
+                        >
+                          <p className="min-w-0 truncate font-semibold">{item.company.name}</p>
+                          <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-cyan-100" />
+                        </Link>
+                      );
+                    })}
+
+                  {manualColumn && !manualItems.length && (
+                    <button
+                      type="button"
+                      onClick={() => openCreate(column.status)}
+                      className="flex min-h-28 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-white/15 p-5 text-sm text-muted-foreground transition hover:border-cyan-200/30 hover:bg-white/[0.03] hover:text-cyan-100"
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/25">
+                        <Plus className="h-4 w-4" />
+                      </span>
+                      <span>Добавить компанию на этот этап</span>
+                    </button>
+                  )}
+
+                  {!manualColumn && !autoItems.length && (
+                    <div className="flex min-h-28 w-full items-center justify-center rounded-3xl border border-dashed border-white/15 p-5 text-center text-sm text-muted-foreground">
+                      Таких компаний нет.
+                    </div>
+                  )}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </div>
 
@@ -417,9 +534,9 @@ export default function AdminPrFunnelPage() {
               Этап
               <SelectField
                 value={modalDraft.status}
-                onChange={(event) => setModalDraft((current) => ({ ...current, status: event.target.value as PipelineStatus }))}
+                onChange={(event) => setModalDraft((current) => ({ ...current, status: event.target.value as ManualPipelineStatus }))}
               >
-                {columns.map((column) => (
+                {manualColumns.map((column) => (
                   <option key={column.status} value={column.status}>{column.title}</option>
                 ))}
               </SelectField>

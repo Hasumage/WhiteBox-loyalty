@@ -6,12 +6,11 @@ import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
-const PIPELINE_STATUSES = new Set<CompanyReferralPipelineStatus>([
+const MANUAL_PIPELINE_STATUSES = new Set<CompanyReferralPipelineStatus>([
   "LEAD",
   "NEGOTIATION",
   "TRIAL",
   "CONNECTED",
-  "REVENUE_ACTIVE",
   "LOST",
 ]);
 
@@ -32,6 +31,38 @@ const funnelInclude = {
   owner: { select: { uuid: true, name: true, email: true } },
 } satisfies Prisma.PrFunnelCompanyInclude;
 
+const referralInclude = {
+  company: {
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      isActive: true,
+      owner: { select: { uuid: true, name: true, email: true } },
+      billingAccount: {
+        select: {
+          status: true,
+          currentPeriodEndsAt: true,
+        },
+      },
+      billingInvoices: {
+        where: { status: { in: ["PAID", "WAIVED"] } },
+        orderBy: { periodEndsAt: "desc" },
+        take: 1,
+        select: {
+          uuid: true,
+          status: true,
+          periodEndsAt: true,
+          paidAt: true,
+        },
+      },
+    },
+  },
+  referrer: { select: { uuid: true, name: true, email: true } },
+} satisfies Prisma.CompanyReferralInclude;
+
+type ReferralCompany = Prisma.CompanyReferralGetPayload<{ include: typeof referralInclude }>;
+
 function serialize(item: Prisma.PrFunnelCompanyGetPayload<{ include: typeof funnelInclude }>) {
   return {
     uuid: item.uuid,
@@ -47,21 +78,75 @@ function serialize(item: Prisma.PrFunnelCompanyGetPayload<{ include: typeof funn
   };
 }
 
+function hasActiveNearloySubscription(referral: ReferralCompany, now: Date) {
+  const account = referral.company.billingAccount;
+  return Boolean(
+    referral.company.isActive &&
+      account &&
+      account.status === "ACTIVE" &&
+      account.currentPeriodEndsAt.getTime() > now.getTime(),
+  );
+}
+
+function hadNearloySubscriptionButExpired(referral: ReferralCompany, now: Date) {
+  const account = referral.company.billingAccount;
+  if (!referral.company.isActive || !account) return false;
+  const hadPaidPeriod = referral.company.billingInvoices.length > 0;
+  if (!hadPaidPeriod) return false;
+  return account.status === "PAST_DUE" || account.status === "SUSPENDED" || account.currentPeriodEndsAt.getTime() <= now.getTime();
+}
+
+function serializeReferralCompany(referral: ReferralCompany) {
+  const account = referral.company.billingAccount;
+  const lastInvoice = referral.company.billingInvoices[0] ?? null;
+  return {
+    uuid: referral.uuid,
+    referralPercent: Number(referral.referralPercent),
+    updatedAt: referral.updatedAt.toISOString(),
+    company: {
+      id: referral.company.id,
+      slug: referral.company.slug,
+      name: referral.company.name,
+      ownerUuid: referral.company.owner?.uuid ?? null,
+      ownerName: referral.company.owner?.name ?? null,
+      ownerEmail: referral.company.owner?.email ?? null,
+      billingStatus: account?.status ?? null,
+      billingEndsAt: account?.currentPeriodEndsAt.toISOString() ?? null,
+      lastPaidInvoiceAt: lastInvoice?.paidAt?.toISOString() ?? null,
+      lastPaidPeriodEndsAt: lastInvoice?.periodEndsAt.toISOString() ?? null,
+    },
+    referrer: referral.referrer,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
   const access = await requireAdminScope(session, "PR", "canView");
   if (!access.ok) return access.response;
 
+  const canViewAll = canSeeAll(access.actor.role);
+  const now = new Date();
   const items = await prisma.prFunnelCompany.findMany({
-    where: canSeeAll(access.actor.role) ? {} : { ownerUserId: session.userId },
+    where: canViewAll
+      ? { status: { not: "REVENUE_ACTIVE" } }
+      : { ownerUserId: session.userId, status: { not: "REVENUE_ACTIVE" } },
     orderBy: [{ status: "asc" }, { position: "asc" }, { updatedAt: "desc" }],
     include: funnelInclude,
   });
+  const referrals = await prisma.companyReferral.findMany({
+    where: canViewAll
+      ? { status: "ACTIVE" }
+      : { referrerUserId: session.userId, status: "ACTIVE" },
+    orderBy: [{ updatedAt: "desc" }],
+    include: referralInclude,
+  });
 
   return NextResponse.json({
-    scope: canSeeAll(access.actor.role) ? "ALL" : "OWN",
+    scope: canViewAll ? "ALL" : "OWN",
     items: items.map(serialize),
+    activeCompanies: referrals.filter((referral) => hasActiveNearloySubscription(referral, now)).map(serializeReferralCompany),
+    expiredCompanies: referrals.filter((referral) => hadNearloySubscriptionButExpired(referral, now)).map(serializeReferralCompany),
   });
 }
 
@@ -80,7 +165,10 @@ export async function POST(request: NextRequest) {
   };
   const name = text(body.name, 160);
   if (!name) return NextResponse.json({ message: "Company name is required" }, { status: 400 });
-  const status = body.status && PIPELINE_STATUSES.has(body.status) ? body.status : "LEAD";
+  if (body.status === "REVENUE_ACTIVE") {
+    return NextResponse.json({ message: "Revenue stage is automatic" }, { status: 400 });
+  }
+  const status = body.status && MANUAL_PIPELINE_STATUSES.has(body.status) ? body.status : "LEAD";
   const last = await prisma.prFunnelCompany.aggregate({
     where: { ownerUserId: session.userId, status },
     _max: { position: true },
@@ -138,7 +226,10 @@ export async function PATCH(request: NextRequest) {
   if (body.description !== undefined) data.description = nullableText(body.description, 4000);
   if (body.source !== undefined) data.source = nullableText(body.source, 120);
   if (body.contact !== undefined) data.contact = nullableText(body.contact, 160);
-  if (body.status && PIPELINE_STATUSES.has(body.status)) data.status = body.status;
+  if (body.status === "REVENUE_ACTIVE") {
+    return NextResponse.json({ message: "Revenue stage is automatic" }, { status: 400 });
+  }
+  if (body.status && MANUAL_PIPELINE_STATUSES.has(body.status)) data.status = body.status;
   if (Number.isFinite(body.position)) data.position = Math.max(0, Math.trunc(Number(body.position)));
 
   const item = await prisma.prFunnelCompany.update({
