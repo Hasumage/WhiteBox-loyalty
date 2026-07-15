@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Megaphone, RefreshCcw } from "lucide-react";
+import { Building2, Gift, Inbox, Megaphone, RefreshCcw, WalletCards } from "lucide-react";
 import { AdminPrDashboardSection } from "@/components/admin/AdminPrDashboardSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,33 @@ export default function AdminPrPage() {
           </Button>
         </div>
       </section>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Button asChild variant="secondary" className="min-h-14 justify-start rounded-2xl">
+          <Link href="/admin/pr/companies">
+            <Building2 className="h-4 w-4" />
+            {locale === "ru" ? "Мои компании" : "My companies"}
+          </Link>
+        </Button>
+        <Button asChild variant="secondary" className="min-h-14 justify-start rounded-2xl">
+          <Link href="/admin/pr/payouts">
+            <WalletCards className="h-4 w-4" />
+            {locale === "ru" ? "PR-выплаты" : "PR payouts"}
+          </Link>
+        </Button>
+        <Button asChild variant="secondary" className="min-h-14 justify-start rounded-2xl">
+          <Link href="/admin/leads">
+            <Inbox className="h-4 w-4" />
+            {locale === "ru" ? "Заявки с лендинга" : "Landing leads"}
+          </Link>
+        </Button>
+        <Button asChild variant="secondary" className="min-h-14 justify-start rounded-2xl">
+          <Link href="/admin/company-billing-promos">
+            <Gift className="h-4 w-4" />
+            {locale === "ru" ? "Промокоды" : "Promo codes"}
+          </Link>
+        </Button>
+      </div>
 
       {error && <div className="rounded-2xl border border-red-300/25 bg-red-300/10 p-4 text-sm text-red-100">{error}</div>}
 

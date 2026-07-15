@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { LandingLeadStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminScope } from "@/lib/admin/require-admin-scope";
 import { updateLandingLeadStatus } from "@/lib/leads/landing-leads";
 import { prisma } from "@/lib/prisma";
 
@@ -13,6 +14,11 @@ type Params = { params: Promise<{ uuid: string }> };
 export async function GET(request: NextRequest, { params }: Params) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
+  const supportAccess = await requireAdminScope(session, "SUPPORT", "canView");
+  if (!supportAccess.ok) {
+    const prAccess = await requireAdminScope(session, "PR", "canView");
+    if (!prAccess.ok) return supportAccess.response;
+  }
 
   const { uuid } = await params;
   const lead = await prisma.landingLead.findUnique({
@@ -27,6 +33,11 @@ export async function GET(request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
+  const supportAccess = await requireAdminScope(session, "SUPPORT", "canEdit");
+  if (!supportAccess.ok) {
+    const prAccess = await requireAdminScope(session, "PR", "canEdit");
+    if (!prAccess.ok) return supportAccess.response;
+  }
 
   const { uuid } = await params;
   const body = (await request.json().catch(() => ({}))) as { status?: LandingLeadStatus; notes?: string };

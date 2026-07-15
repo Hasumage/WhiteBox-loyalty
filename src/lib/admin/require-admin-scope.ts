@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { AdminSession } from "@/lib/admin/require-admin-session";
 import {
+  clampPermissionToRole,
   resolveEffectivePermission,
   type AdminPermissionAction,
   type AdminPermissionScope,
@@ -25,18 +26,16 @@ export async function requireAdminScope(
       },
     },
   });
+  const explicitPermission = actor?.permissions.find((permission) => permission.scope === scope) ?? null;
   const isPrWorkspaceManager =
     actor?.role === "MANAGER" && actor.permissions.some((permission) => permission.scope === "PR" && permission.canView);
-  if (isPrWorkspaceManager && scope !== "PR") {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ message: `${scope} ${action.replace("can", "").toLowerCase()} access is not allowed` }, { status: 403 }),
-    };
-  }
+  const permission = isPrWorkspaceManager
+    ? explicitPermission
+      ? clampPermissionToRole(actor.role, explicitPermission)
+      : null
+    : resolveEffectivePermission(actor?.role ?? "CLIENT", explicitPermission, scope);
 
-  const explicitPermission = actor?.permissions.find((permission) => permission.scope === scope) ?? null;
-  const permission = resolveEffectivePermission(actor?.role ?? "CLIENT", explicitPermission, scope);
-  if (!actor || !permission[action]) {
+  if (!actor || !permission?.[action]) {
     return {
       ok: false as const,
       response: NextResponse.json({ message: `${scope} ${action.replace("can", "").toLowerCase()} access is not allowed` }, { status: 403 }),

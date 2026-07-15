@@ -49,6 +49,12 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     role: actor.role,
     workspace,
+    explicitPermissions: explicitPermissions.map((permission) => ({
+      scope: permission.scope as AdminPermissionScope,
+      canView: permission.canView,
+      canEdit: permission.canEdit,
+      canApprove: permission.canApprove,
+    })),
     permissions: effectivePermissions.map((permission) => ({
       scope: permission.scope as AdminPermissionScope,
       canView: permission.canView,

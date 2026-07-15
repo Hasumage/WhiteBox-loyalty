@@ -56,12 +56,14 @@ type AdminNavigationProfile = {
   role: string;
   workspace: AdminWorkspace;
   permissions: Array<{ scope: AdminPermissionScope; canView: boolean }>;
+  explicitPermissions?: Array<{ scope: AdminPermissionScope; canView: boolean }>;
 };
 type AdminMenuItem = {
   href: string;
   labelKey: TranslationKey;
   icon: PortalIcon;
   scope?: AdminPermissionScope;
+  anyScopes?: AdminPermissionScope[];
   prWorkspace?: boolean;
   supportWorkspace?: boolean;
 };
@@ -89,7 +91,13 @@ const adminMenu: AdminMenuSection[] = [
       { href: "/admin/companies", labelKey: "admin.nav.companies", icon: Building2, scope: "COMPANIES" },
       { href: "/admin/profile-statuses", labelKey: "admin.nav.profileStatuses", icon: Trophy, scope: "USERS" },
       { href: "/admin/categories", labelKey: "admin.nav.categories", icon: Tag, scope: "COMPANIES" },
-      { href: "/admin/company-verifications", labelKey: "admin.nav.companyVerification", icon: FileCheck, scope: "COMPANY_VERIFICATIONS" },
+      {
+        href: "/admin/company-verifications",
+        labelKey: "admin.nav.companyVerification",
+        icon: FileCheck,
+        scope: "COMPANY_VERIFICATIONS",
+        prWorkspace: true,
+      },
     ],
   },
   {
@@ -97,7 +105,10 @@ const adminMenu: AdminMenuSection[] = [
     items: [
       { href: "/admin/subscriptions", labelKey: "admin.nav.statistics", icon: LayoutDashboard, scope: "COMPANIES" },
       { href: "/admin/pr", labelKey: "admin.nav.prDesk", icon: Megaphone, scope: "PR", prWorkspace: true },
+      { href: "/admin/pr/companies", labelKey: "admin.nav.prCompanies", icon: Building2, scope: "PR", prWorkspace: true },
+      { href: "/admin/pr/payouts", labelKey: "admin.nav.prPayouts", icon: CreditCard, scope: "PR", prWorkspace: true },
       { href: "/admin/growth", labelKey: "admin.nav.growth", icon: Gift, scope: "PR" },
+      { href: "/admin/company-billing-promos", labelKey: "admin.nav.companyBillingPromos", icon: Gift, scope: "PR", prWorkspace: true },
       { href: "/admin/test-screens", labelKey: "admin.nav.testScreens", icon: FlaskConical, scope: "SETTINGS" },
     ],
   },
@@ -107,7 +118,14 @@ const adminMenu: AdminMenuSection[] = [
       { href: "/admin/payments", labelKey: "admin.nav.payments", icon: CreditCard, scope: "FINANCE" },
       { href: "/admin/finance", labelKey: "admin.nav.finance", icon: CreditCard, scope: "FINANCE" },
       { href: "/admin/compliance", labelKey: "admin.nav.compliance", icon: FileCheck, scope: "AUDIT" },
-      { href: "/admin/leads", labelKey: "admin.nav.leads", icon: Inbox, scope: "SUPPORT" },
+      {
+        href: "/admin/leads",
+        labelKey: "admin.nav.leads",
+        icon: Inbox,
+        anyScopes: ["SUPPORT", "PR"],
+        prWorkspace: true,
+        supportWorkspace: true,
+      },
       { href: "/admin/support", labelKey: "admin.nav.support", icon: Headphones, scope: "SUPPORT", supportWorkspace: true },
     ],
   },
@@ -219,17 +237,32 @@ function fallbackAdminWorkspace(role?: string): AdminWorkspace {
   return "ADMIN";
 }
 
-function hasAdminScope(profile: AdminNavigationProfile | null, scope: AdminPermissionScope) {
-  return profile?.permissions.some((permission) => permission.scope === scope && permission.canView) === true;
+function hasAdminScope(profile: AdminNavigationProfile | null, scope: AdminPermissionScope, source: "effective" | "explicit" = "effective") {
+  const permissions = source === "explicit" ? profile?.explicitPermissions : profile?.permissions;
+  return permissions?.some((permission) => permission.scope === scope && permission.canView) === true;
+}
+
+function hasAdminMenuScope(
+  item: AdminMenuItem,
+  profile: AdminNavigationProfile | null,
+  source: "effective" | "explicit" = "effective",
+) {
+  const scopes = item.anyScopes ?? (item.scope ? [item.scope] : []);
+  if (scopes.length === 0) return true;
+  return scopes.some((scope) => hasAdminScope(profile, scope, source));
 }
 
 function isAdminMenuItemVisible(item: AdminMenuItem, profile: AdminNavigationProfile | null, role?: string) {
   const workspace = profile?.workspace ?? fallbackAdminWorkspace(role);
-  if (workspace === "PR") return item.prWorkspace === true;
+  if (workspace === "PR") {
+    if (item.prWorkspace !== true) return false;
+    if (!profile) return role === "MANAGER" || role === "ADMIN" || role === "SUPER_ADMIN";
+    return hasAdminMenuScope(item, profile, "explicit");
+  }
   if (workspace === "SUPPORT") return item.supportWorkspace === true;
-  if (!item.scope) return true;
+  if (!item.scope && !item.anyScopes) return true;
   if (!profile) return role === "SUPER_ADMIN" || role === "ADMIN";
-  return hasAdminScope(profile, item.scope);
+  return hasAdminMenuScope(item, profile);
 }
 
 function adminWorkspaceHome(workspace: AdminWorkspace) {
@@ -238,10 +271,8 @@ function adminWorkspaceHome(workspace: AdminWorkspace) {
   return "/admin";
 }
 
-function isAdminPathAllowed(pathname: string, workspace: AdminWorkspace) {
-  if (workspace === "PR") return pathname === "/admin/pr" || pathname.startsWith("/admin/pr/");
-  if (workspace === "SUPPORT") return pathname === "/admin/support" || pathname.startsWith("/admin/support/");
-  return true;
+function isAdminPathAllowed(pathname: string, allowedHrefs: string[]) {
+  return allowedHrefs.some((href) => pathname === href || pathname.startsWith(`${href}/`));
 }
 
 export default function PortalLayout({
@@ -284,6 +315,7 @@ export default function PortalLayout({
         .flatMap((g) => g.items)
         .map((item) => ({ ...item, label: t(item.labelKey) }))
     : visibleCompanyMenu;
+  const adminAllowedHrefs = useMemo(() => adminSections.flatMap((section) => section.items.map((item) => item.href)), [adminSections]);
   const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : COMPANY_WORKSPACE_LABEL);
   const billingWarning = getCompanyBillingWarning(companyBillingData);
   const canManageCompanyBilling = !isAdmin && companyMemberRole !== null && companyMemberRole !== "CASHIER";
@@ -319,10 +351,10 @@ export default function PortalLayout({
 
   useEffect(() => {
     if (!isAdmin || !adminNavigation) return;
-    if (!isAdminPathAllowed(pathname, adminNavigation.workspace)) {
-      router.replace(adminWorkspaceHome(adminNavigation.workspace));
+    if (adminNavigation.workspace !== "ADMIN" && !isAdminPathAllowed(pathname, adminAllowedHrefs)) {
+      router.replace(adminHomeHref);
     }
-  }, [adminNavigation, isAdmin, pathname, router]);
+  }, [adminAllowedHrefs, adminHomeHref, adminNavigation, isAdmin, pathname, router]);
 
   useEffect(() => {
     if (!isAdmin) return;

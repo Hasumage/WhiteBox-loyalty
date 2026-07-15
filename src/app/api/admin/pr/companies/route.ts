@@ -1,0 +1,171 @@
+import { NextResponse, type NextRequest } from "next/server";
+import type { CompanyReferralPipelineStatus, CompanyReferralStatus, Prisma } from "@prisma/client";
+import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminScope } from "@/lib/admin/require-admin-scope";
+import { prisma } from "@/lib/prisma";
+
+export const runtime = "nodejs";
+
+const REFERRAL_STATUSES = new Set<CompanyReferralStatus>(["ACTIVE", "PAUSED", "ENDED"]);
+const PIPELINE_STATUSES = new Set<CompanyReferralPipelineStatus>([
+  "LEAD",
+  "NEGOTIATION",
+  "TRIAL",
+  "CONNECTED",
+  "REVENUE_ACTIVE",
+  "LOST",
+]);
+
+function canSeeAllPrCompanies(role: string) {
+  return role === "SUPER_ADMIN" || role === "ADMIN";
+}
+
+function text(value: unknown, max: number) {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+function serializeReferral(referral: Prisma.CompanyReferralGetPayload<{
+  include: {
+    company: {
+      select: {
+        id: true;
+        slug: true;
+        name: true;
+        isActive: true;
+        operatesOnline: true;
+        verificationStatus: true;
+        billingAccount: {
+          select: {
+            status: true;
+            currentPeriodEndsAt: true;
+          };
+        };
+      };
+    };
+    referrer: {
+      select: {
+        uuid: true;
+        name: true;
+        email: true;
+      };
+    };
+  };
+}>) {
+  return {
+    uuid: referral.uuid,
+    status: referral.status,
+    pipelineStatus: referral.pipelineStatus,
+    source: referral.source,
+    notes: referral.notes,
+    referralPercent: Number(referral.referralPercent),
+    startedAt: referral.startedAt.toISOString(),
+    endedAt: referral.endedAt?.toISOString() ?? null,
+    updatedAt: referral.updatedAt.toISOString(),
+    company: {
+      id: referral.company.id,
+      slug: referral.company.slug,
+      name: referral.company.name,
+      isActive: referral.company.isActive,
+      operatesOnline: referral.company.operatesOnline,
+      verificationStatus: referral.company.verificationStatus,
+      billingStatus: referral.company.billingAccount?.status ?? null,
+      billingEndsAt: referral.company.billingAccount?.currentPeriodEndsAt.toISOString() ?? null,
+    },
+    referrer: referral.referrer,
+  };
+}
+
+const referralInclude = {
+  company: {
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      isActive: true,
+      operatesOnline: true,
+      verificationStatus: true,
+      billingAccount: {
+        select: {
+          status: true,
+          currentPeriodEndsAt: true,
+        },
+      },
+    },
+  },
+  referrer: {
+    select: {
+      uuid: true,
+      name: true,
+      email: true,
+    },
+  },
+} satisfies Prisma.CompanyReferralInclude;
+
+export async function GET(request: NextRequest) {
+  const session = await requireAdminSession(request);
+  if (isAuthResponse(session)) return session;
+  const access = await requireAdminScope(session, "PR", "canView");
+  if (!access.ok) return access.response;
+
+  const referrals = await prisma.companyReferral.findMany({
+    where: canSeeAllPrCompanies(access.actor.role) ? {} : { referrerUserId: session.userId },
+    orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+    include: referralInclude,
+  });
+
+  return NextResponse.json({
+    scope: canSeeAllPrCompanies(access.actor.role) ? "ALL" : "OWN",
+    items: referrals.map(serializeReferral),
+  });
+}
+
+export async function PATCH(request: NextRequest) {
+  const session = await requireAdminSession(request);
+  if (isAuthResponse(session)) return session;
+  const access = await requireAdminScope(session, "PR", "canEdit");
+  if (!access.ok) return access.response;
+
+  const body = (await request.json().catch(() => ({}))) as {
+    referralUuid?: string;
+    companyName?: string;
+    status?: CompanyReferralStatus;
+    pipelineStatus?: CompanyReferralPipelineStatus;
+    source?: string;
+    notes?: string | null;
+  };
+  const referralUuid = text(body.referralUuid, 80);
+  if (!referralUuid) return NextResponse.json({ message: "Referral uuid is required" }, { status: 400 });
+
+  const current = await prisma.companyReferral.findUnique({
+    where: { uuid: referralUuid },
+    select: { companyId: true, referrerUserId: true },
+  });
+  if (!current) return NextResponse.json({ message: "Referral not found" }, { status: 404 });
+  if (!canSeeAllPrCompanies(access.actor.role) && current.referrerUserId !== session.userId) {
+    return NextResponse.json({ message: "This company is assigned to another PR manager" }, { status: 403 });
+  }
+
+  const referralData: Prisma.CompanyReferralUpdateInput = {};
+  if (body.status && REFERRAL_STATUSES.has(body.status)) referralData.status = body.status;
+  if (body.pipelineStatus && PIPELINE_STATUSES.has(body.pipelineStatus)) referralData.pipelineStatus = body.pipelineStatus;
+  if (typeof body.source === "string") referralData.source = text(body.source, 80) || "PR";
+  if (body.notes !== undefined) referralData.notes = text(body.notes, 4000) || null;
+
+  const companyName = text(body.companyName, 120);
+  const referral = await prisma.$transaction(async (tx) => {
+    if (companyName) {
+      await tx.company.update({
+        where: { id: current.companyId },
+        data: { name: companyName },
+      });
+    }
+
+    return tx.companyReferral.update({
+      where: { uuid: referralUuid },
+      data: referralData,
+      include: referralInclude,
+    });
+  });
+
+  return NextResponse.json(serializeReferral(referral));
+}
