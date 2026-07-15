@@ -1,10 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, GripVertical, Plus, RefreshCcw, Save, Search, Trash2 } from "lucide-react";
+import { Building2, GripVertical, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +19,7 @@ import { fetchWithAuthRecovery } from "@/lib/api/authenticated-fetch";
 import { cn } from "@/lib/utils";
 
 type PipelineStatus = "LEAD" | "NEGOTIATION" | "TRIAL" | "CONNECTED" | "REVENUE_ACTIVE" | "LOST";
+type FunnelModalMode = "create" | "edit";
 
 type FunnelItem = {
   uuid: string;
@@ -69,20 +77,21 @@ function normalizeDraft(item: FunnelItem): FunnelDraft {
   };
 }
 
-function date(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium" }).format(new Date(value));
+function makeDraft(status: PipelineStatus): FunnelDraft {
+  return { ...emptyDraft, status };
 }
 
 export default function AdminPrFunnelPage() {
   const [items, setItems] = useState<FunnelItem[]>([]);
-  const [edits, setEdits] = useState<Record<string, FunnelDraft>>({});
-  const [draft, setDraft] = useState<FunnelDraft>(emptyDraft);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [draggingUuid, setDraggingUuid] = useState("");
+  const [modalMode, setModalMode] = useState<FunnelModalMode | null>(null);
+  const [modalDraft, setModalDraft] = useState<FunnelDraft>(makeDraft("LEAD"));
+  const [activeUuid, setActiveUuid] = useState("");
 
   async function load() {
     setLoading(true);
@@ -96,7 +105,6 @@ export default function AdminPrFunnelPage() {
     }
     const data = (await response.json()) as { items: FunnelItem[] };
     setItems(data.items);
-    setEdits(Object.fromEntries(data.items.map((item) => [item.uuid, normalizeDraft(item)])));
     setLoading(false);
   }
 
@@ -127,42 +135,68 @@ export default function AdminPrFunnelPage() {
     [filteredItems],
   );
 
-  async function createItem() {
-    if (!draft.name.trim()) {
+  const modalColumn = columns.find((column) => column.status === modalDraft.status) ?? columns[0];
+  const modalSaving = saving === "modal" || saving === activeUuid;
+
+  function closeModal() {
+    setModalMode(null);
+    setActiveUuid("");
+    setModalDraft(makeDraft("LEAD"));
+  }
+
+  function openCreate(status: PipelineStatus) {
+    setError("");
+    setNotice("");
+    setActiveUuid("");
+    setModalDraft(makeDraft(status));
+    setModalMode("create");
+  }
+
+  function openEdit(item: FunnelItem) {
+    setError("");
+    setNotice("");
+    setActiveUuid(item.uuid);
+    setModalDraft(normalizeDraft(item));
+    setModalMode("edit");
+  }
+
+  async function createItem(nextDraft: FunnelDraft) {
+    if (!nextDraft.name.trim()) {
       setError("Введите название компании.");
-      return;
+      return false;
     }
-    setSaving("new");
+    setSaving("modal");
     setError("");
     setNotice("");
     const response = await fetchWithAuthRecovery("/api/admin/pr/funnel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(draft),
+      body: JSON.stringify(nextDraft),
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       setError(data.message ?? "Не удалось создать карточку.");
       setSaving("");
-      return;
+      return false;
     }
     const item = (await response.json()) as FunnelItem;
     setItems((current) => [item, ...current]);
-    setEdits((current) => ({ ...current, [item.uuid]: normalizeDraft(item) }));
-    setDraft(emptyDraft);
     setNotice("Карточка добавлена в воронку.");
     setSaving("");
+    closeModal();
+    return true;
   }
 
-  async function updateItem(uuid: string, patch?: Partial<FunnelDraft>) {
-    const next = { ...(edits[uuid] ?? emptyDraft), ...(patch ?? {}) };
+  async function updateItem(uuid: string, patch?: Partial<FunnelDraft>, options?: { closeModal?: boolean; silent?: boolean }) {
+    const currentItem = items.find((item) => item.uuid === uuid);
+    const next = { ...(currentItem ? normalizeDraft(currentItem) : makeDraft("LEAD")), ...(patch ?? {}) };
     if (!next.name.trim()) {
       setError("Название компании не может быть пустым.");
-      return;
+      return false;
     }
     setSaving(uuid);
     setError("");
-    setNotice("");
+    if (!options?.silent) setNotice("");
     const response = await fetchWithAuthRecovery("/api/admin/pr/funnel", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -172,16 +206,27 @@ export default function AdminPrFunnelPage() {
       const data = await response.json().catch(() => ({}));
       setError(data.message ?? "Не удалось сохранить карточку.");
       setSaving("");
-      return;
+      return false;
     }
     const item = (await response.json()) as FunnelItem;
     setItems((current) => current.map((currentItem) => (currentItem.uuid === uuid ? item : currentItem)));
-    setEdits((current) => ({ ...current, [uuid]: normalizeDraft(item) }));
-    setNotice("Карточка обновлена.");
+    if (!options?.silent) setNotice("Карточка обновлена.");
     setSaving("");
+    if (options?.closeModal) closeModal();
+    return true;
   }
 
-  async function deleteItem(uuid: string) {
+  async function saveModal() {
+    if (modalMode === "create") {
+      await createItem(modalDraft);
+      return;
+    }
+    if (modalMode === "edit" && activeUuid) {
+      await updateItem(activeUuid, modalDraft, { closeModal: true });
+    }
+  }
+
+  async function deleteItem(uuid: string, options?: { closeModal?: boolean }) {
     if (!window.confirm("Удалить карточку из воронки?")) return;
     setSaving(uuid);
     setError("");
@@ -195,16 +240,8 @@ export default function AdminPrFunnelPage() {
       return;
     }
     setItems((current) => current.filter((item) => item.uuid !== uuid));
-    setEdits((current) => {
-      const next = { ...current };
-      delete next[uuid];
-      return next;
-    });
     setSaving("");
-  }
-
-  function setEdit(uuid: string, patch: Partial<FunnelDraft>) {
-    setEdits((current) => ({ ...current, [uuid]: { ...(current[uuid] ?? emptyDraft), ...patch } }));
+    if (options?.closeModal) closeModal();
   }
 
   return (
@@ -227,38 +264,6 @@ export default function AdminPrFunnelPage() {
         </div>
       </section>
 
-      <Card className="border-white/10 bg-white/[0.035] p-4">
-        <div className="grid gap-3 xl:grid-cols-[1.1fr_1.4fr_0.8fr_0.8fr_180px] xl:items-end">
-          <Input
-            value={draft.name}
-            onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-            maxLength={160}
-            placeholder="Название компании"
-          />
-          <Input
-            value={draft.description}
-            onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
-            maxLength={4000}
-            placeholder="Короткое описание или что пообещали"
-          />
-          <Input
-            value={draft.contact}
-            onChange={(event) => setDraft((current) => ({ ...current, contact: event.target.value }))}
-            maxLength={160}
-            placeholder="Контакт"
-          />
-          <SelectField value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as PipelineStatus }))}>
-            {columns.map((column) => (
-              <option key={column.status} value={column.status}>{column.title}</option>
-            ))}
-          </SelectField>
-          <Button onClick={() => void createItem()} disabled={saving === "new"}>
-            <Plus className="h-4 w-4" />
-            Добавить
-          </Button>
-        </div>
-      </Card>
-
       <div className="relative">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -279,7 +284,7 @@ export default function AdminPrFunnelPage() {
               key={column.status}
               onDragOver={(event) => event.preventDefault()}
               onDrop={() => {
-                if (draggingUuid) void updateItem(draggingUuid, { status: column.status });
+                if (draggingUuid) void updateItem(draggingUuid, { status: column.status }, { silent: true });
                 setDraggingUuid("");
               }}
               className={cn(
@@ -288,93 +293,161 @@ export default function AdminPrFunnelPage() {
               )}
             >
               <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="font-semibold">{column.title}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{column.hint}</p>
                 </div>
-                <Badge variant="outline" className="border-white/10 bg-black/25">{grouped[column.status].length}</Badge>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant="outline" className="border-white/10 bg-black/25">{grouped[column.status].length}</Badge>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="secondary"
+                    className="rounded-full border border-white/10 bg-white/10 hover:bg-white/15"
+                    aria-label={`Добавить компанию в этап ${column.title}`}
+                    onClick={() => openCreate(column.status)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-3">
-                {grouped[column.status].map((item) => {
-                  const edit = edits[item.uuid] ?? normalizeDraft(item);
-                  return (
-                    <article
-                      key={item.uuid}
-                      draggable
-                      onDragStart={() => setDraggingUuid(item.uuid)}
-                      onDragEnd={() => setDraggingUuid("")}
-                      className="rounded-3xl border border-white/10 bg-black/35 p-3 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-cyan-200/25"
-                    >
-                      <div className="mb-3 flex items-start gap-2">
-                        <GripVertical className="mt-2 h-4 w-4 shrink-0 cursor-grab text-muted-foreground" />
-                        <Input
-                          value={edit.name}
-                          onChange={(event) => setEdit(item.uuid, { name: event.target.value })}
-                          maxLength={160}
-                          className="h-10 border-white/10 bg-white/[0.04] font-semibold"
-                        />
-                      </div>
-                      <Textarea
-                        value={edit.description}
-                        onChange={(event) => setEdit(item.uuid, { description: event.target.value })}
-                        maxLength={4000}
-                        className="min-h-20 border-white/10 bg-white/[0.035] text-sm"
-                        placeholder="Описание, договорённости, следующий шаг"
-                      />
-                      <div className="mt-3 grid gap-2">
-                        <Input
-                          value={edit.contact}
-                          onChange={(event) => setEdit(item.uuid, { contact: event.target.value })}
-                          maxLength={160}
-                          className="h-9 border-white/10 bg-white/[0.035]"
-                          placeholder="Контакт"
-                        />
-                        <Input
-                          value={edit.source}
-                          onChange={(event) => setEdit(item.uuid, { source: event.target.value })}
-                          maxLength={120}
-                          className="h-9 border-white/10 bg-white/[0.035]"
-                          placeholder="Источник"
-                        />
-                        <SelectField
-                          value={edit.status}
-                          onChange={(event) => {
-                            const status = event.target.value as PipelineStatus;
-                            setEdit(item.uuid, { status });
-                            void updateItem(item.uuid, { status });
-                          }}
-                          className="border-white/10 bg-white/[0.035]"
-                        >
-                          {columns.map((option) => (
-                            <option key={option.status} value={option.status}>{option.title}</option>
-                          ))}
-                        </SelectField>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-muted-foreground">Обновлено: {date(item.updatedAt)}</span>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => void updateItem(item.uuid)} disabled={saving === item.uuid}>
-                            <Save className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button size="sm" variant="destructive" onClick={() => void deleteItem(item.uuid)} disabled={saving === item.uuid}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
+                {grouped[column.status].map((item) => (
+                  <article
+                    key={item.uuid}
+                    draggable
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openEdit(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") openEdit(item);
+                    }}
+                    onDragStart={() => setDraggingUuid(item.uuid)}
+                    onDragEnd={() => setDraggingUuid("")}
+                    className="group flex cursor-pointer items-center gap-3 rounded-3xl border border-white/10 bg-black/35 p-3 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-cyan-200/25 hover:bg-black/45 focus:outline-none focus:ring-2 focus:ring-cyan-200/30"
+                  >
+                    <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground transition group-hover:text-cyan-100" />
+                    <p className="min-w-0 truncate font-semibold">{item.name}</p>
+                  </article>
+                ))}
                 {!grouped[column.status].length && (
-                  <div className="rounded-3xl border border-dashed border-white/15 p-5 text-sm text-muted-foreground">
-                    Пусто. Перетащите карточку сюда или создайте новую.
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openCreate(column.status)}
+                    className="flex min-h-28 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-white/15 p-5 text-sm text-muted-foreground transition hover:border-cyan-200/30 hover:bg-white/[0.03] hover:text-cyan-100"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/25">
+                      <Plus className="h-4 w-4" />
+                    </span>
+                    <span>Добавить компанию на этот этап</span>
+                  </button>
                 )}
               </div>
             </section>
           ))}
         </div>
       </div>
+
+      <Dialog open={Boolean(modalMode)} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent className="nearloy-scrollbar max-h-[92vh] max-w-3xl overflow-y-auto rounded-[2rem] border-cyan-300/15 bg-[#070b10] p-0 shadow-2xl shadow-black/50">
+          <div className="border-b border-white/10 bg-[radial-gradient(circle_at_0%_0%,rgba(103,232,249,0.16),transparent_40%),rgba(255,255,255,0.025)] p-5">
+            <DialogHeader>
+              <div className="flex flex-wrap items-center gap-2 pr-8">
+                <Badge variant="outline" className="border-cyan-200/25 bg-cyan-300/10 text-cyan-100">
+                  {modalColumn.title}
+                </Badge>
+                <Badge variant="outline" className="border-white/10 bg-black/25">
+                  {modalMode === "create" ? "Новая компания" : "Редактирование"}
+                </Badge>
+              </div>
+              <DialogTitle className="text-2xl">
+                {modalMode === "create" ? "Добавить компанию в воронку" : modalDraft.name || "Карточка компании"}
+              </DialogTitle>
+              <DialogDescription>
+                На доске показываем только название. Контакт, источник и договорённости храним здесь.
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+
+          <div className="grid gap-4 p-5">
+            <label className="grid gap-2 text-sm font-medium">
+              Название компании
+              <Input
+                value={modalDraft.name}
+                onChange={(event) => setModalDraft((current) => ({ ...current, name: event.target.value }))}
+                maxLength={160}
+                placeholder="Например, Aurora Coffee"
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm font-medium">
+              Комментарий
+              <Textarea
+                value={modalDraft.description}
+                onChange={(event) => setModalDraft((current) => ({ ...current, description: event.target.value }))}
+                maxLength={4000}
+                className="min-h-[220px] resize-y"
+                placeholder="Описание, договорённости, следующий шаг, важные детали общения..."
+              />
+            </label>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="grid gap-2 text-sm font-medium">
+                Контакт
+                <Input
+                  value={modalDraft.contact}
+                  onChange={(event) => setModalDraft((current) => ({ ...current, contact: event.target.value }))}
+                  maxLength={160}
+                  placeholder="Телефон, Telegram, email"
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-medium">
+                Источник
+                <Input
+                  value={modalDraft.source}
+                  onChange={(event) => setModalDraft((current) => ({ ...current, source: event.target.value }))}
+                  maxLength={120}
+                  placeholder="Лендинг, рекомендация, холодный контакт"
+                />
+              </label>
+            </div>
+
+            <label className="grid gap-2 text-sm font-medium">
+              Этап
+              <SelectField
+                value={modalDraft.status}
+                onChange={(event) => setModalDraft((current) => ({ ...current, status: event.target.value as PipelineStatus }))}
+              >
+                {columns.map((column) => (
+                  <option key={column.status} value={column.status}>{column.title}</option>
+                ))}
+              </SelectField>
+            </label>
+          </div>
+
+          <DialogFooter className="border-t border-white/10 p-5">
+            {modalMode === "edit" && activeUuid && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="mr-auto"
+                onClick={() => void deleteItem(activeUuid, { closeModal: true })}
+                disabled={modalSaving}
+              >
+                <Trash2 className="h-4 w-4" />
+                Удалить
+              </Button>
+            )}
+            <Button type="button" variant="secondary" onClick={closeModal} disabled={modalSaving}>
+              Отмена
+            </Button>
+            <Button type="button" onClick={() => void saveModal()} disabled={modalSaving}>
+              {modalSaving ? "Сохраняю..." : "Сохранить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
