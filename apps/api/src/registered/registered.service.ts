@@ -960,7 +960,7 @@ export class RegisteredService {
         slug: company.slug,
         name: company.name,
         description: company.description,
-        logoUrl: this.companyMediaUrl(company.mediaAssets[0]?.storageKey),
+        logoUrl: this.companyMediaUrl(company.mediaAssets?.[0]?.storageKey),
         isActive: company.isActive,
         operatesOnline: company.operatesOnline,
         isFavorite: link?.isFavorite ?? false,
