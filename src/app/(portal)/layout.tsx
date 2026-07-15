@@ -105,6 +105,7 @@ const adminMenu: AdminMenuSection[] = [
     items: [
       { href: "/admin/subscriptions", labelKey: "admin.nav.statistics", icon: LayoutDashboard, scope: "COMPANIES" },
       { href: "/admin/pr", labelKey: "admin.nav.prDesk", icon: Megaphone, scope: "PR", prWorkspace: true },
+      { href: "/admin/pr/funnel", labelKey: "admin.nav.prFunnel", icon: ClipboardList, scope: "PR", prWorkspace: true },
       { href: "/admin/pr/companies", labelKey: "admin.nav.prCompanies", icon: Building2, scope: "PR", prWorkspace: true },
       { href: "/admin/pr/payouts", labelKey: "admin.nav.prPayouts", icon: CreditCard, scope: "PR", prWorkspace: true },
       { href: "/admin/growth", labelKey: "admin.nav.growth", icon: Gift, scope: "PR" },

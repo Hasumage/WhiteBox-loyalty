@@ -330,6 +330,7 @@ model User {
   referralInvites                        ReferralInvite[]                @relation("ReferralInviter")
   redeemedReferralInvites                ReferralInvite[]                @relation("ReferralInvited")
   companyReferrals                       CompanyReferral[]               @relation("CompanyReferralOwner")
+  prFunnelCompanies                      PrFunnelCompany[]               @relation("PrFunnelOwner")
   supportedCompanies                     Company[]                       @relation("CompanySupportManager")
   telegramLinkTokens                     TelegramLinkToken[]
   customerLookupCodes                    CustomerLookupCode[]
@@ -672,6 +673,25 @@ model CompanyReferral {
   @@index([referrerUserId, status])
   @@index([pipelineStatus])
   @@index([status, startedAt])
+}
+
+model PrFunnelCompany {
+  id          Int                           @id @default(autoincrement())
+  uuid        String                        @unique @default(uuid())
+  ownerUserId Int
+  name        String                        @db.VarChar(160)
+  description String?                       @db.Text
+  status      CompanyReferralPipelineStatus @default(LEAD)
+  source      String?                       @db.VarChar(120)
+  contact     String?                       @db.VarChar(160)
+  position    Int                           @default(0)
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+
+  owner User @relation("PrFunnelOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@index([ownerUserId, status, position])
+  @@index([ownerUserId, updatedAt])
 }
 
 model CompanyVerificationApplication {
