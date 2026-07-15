@@ -35,6 +35,7 @@ export type TwaCompany = {
   slug: string;
   name: string;
   description: string | null;
+  logoUrl?: string | null;
   isActive: boolean;
   operatesOnline: boolean;
   isFavorite: boolean;

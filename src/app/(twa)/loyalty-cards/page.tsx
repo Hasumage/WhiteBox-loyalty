@@ -59,7 +59,7 @@ export default function LoyaltyCardsPage() {
   }, []);
 
   const loyaltyCompanies = useMemo(
-    () => dashboard?.wallet.companies.filter((company) => company.points.totalEarnedPoints > 0) ?? [],
+    () => dashboard?.wallet.companies ?? [],
     [dashboard?.wallet.companies],
   );
 

@@ -295,6 +295,7 @@ function peakChartItem(items: CompanySubscription[], mode: MetricMode) {
 }
 
 export default function CompanySubscriptionsPage() {
+  // #SubNearloyCode: страница управления клиентскими подписками закрыта до продуктового запуска.
   if (!SUBSCRIPTIONS_ENABLED) {
     return <SubscriptionsComingSoon mode="company" primaryHref="/company/clients" />;
   }

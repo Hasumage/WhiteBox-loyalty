@@ -49,7 +49,8 @@ const tiers = [
 const missions = [
   { title: { en: "Earn 300 points", ru: "Получить 300 баллов" }, detail: { en: "Any partner this week", ru: "У любого партнера на этой неделе" }, progress: 220, total: 300, icon: Zap, accent: "text-cyan-200" },
   { title: { en: "Build one route", ru: "Построить один маршрут" }, detail: { en: "Open Yandex route to a partner", ru: "Откройте маршрут до партнера" }, progress: 0, total: 1, icon: Route, accent: "text-emerald-200" },
-  { title: { en: "Activate a subscription", ru: "Подключить подписку" }, detail: { en: "Any marketplace plan", ru: "Любой план из маркетплейса" }, progress: 0, total: 1, icon: Ticket, accent: "text-amber-200" },
+  // #SubNearloyCode: клиентская подписочная миссия скрыта до запуска модуля.
+  { title: { en: "Visit a partner", ru: "Посетить партнёра" }, detail: { en: "Scan QR at any company", ru: "Отсканируйте QR у компании" }, progress: 0, total: 1, icon: Ticket, accent: "text-amber-200" },
 ];
 
 const rewards = [

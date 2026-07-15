@@ -205,6 +205,7 @@ export default function SettingsPage() {
         icon: Store,
         done: profile.stats.partnerCount > 0,
       },
+      // #SubNearloyCode: быстрый сценарий клиентских подписок скрыт до запуска.
       ...(SUBSCRIPTIONS_ENABLED
         ? [{
             href: "/marketplace",
@@ -263,6 +264,7 @@ export default function SettingsPage() {
   const newStatusCount = profileStatusState?.summary.new ?? 0;
   const metrics = [
     { label: t("client.profile.partners"), value: profile.stats.partnerCount, icon: Store },
+    // #SubNearloyCode: метрика клиентских подписок скрыта до запуска.
     ...(SUBSCRIPTIONS_ENABLED ? [{ label: t("client.profile.subs"), value: profile.stats.activeSubscriptions, icon: WalletCards }] : []),
     { label: t("client.profile.favorites"), value: profile.stats.favoriteCategories, icon: Heart },
   ];
@@ -314,6 +316,7 @@ export default function SettingsPage() {
     ["/settings/partnership", ShieldCheck, t("client.profile.partnership"), t("client.profile.partnershipSubtitle")],
     ["/settings/business", BriefcaseBusiness, t("client.profile.forBusiness"), t("client.profile.forBusinessSubtitle")],
     ...(SHOW_LAUNCH_REFERRALS ? [["/settings/company-referrals", Handshake, t("client.profile.companyReferrals"), t("client.profile.companyReferralsSubtitle")] as const] : []),
+    // #SubNearloyCode: ссылка на marketplace скрыта до запуска клиентских подписок.
     ...(SUBSCRIPTIONS_ENABLED ? [["/marketplace", Ticket, t("client.profile.trySubscriptions"), t("client.profile.unlockPerks")] as const] : []),
   ] as const;
 
@@ -504,7 +507,7 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold">{t("client.profile.rewardsCenter")}</h2>
           <p className="text-xs text-muted-foreground">{t("client.profile.rewardsCenterSubtitle")}</p>
         </div>
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid gap-3">
           <Card className="glass border-white/10">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -513,9 +516,9 @@ export default function SettingsPage() {
               </CardTitle>
               <CardDescription>{t("client.profile.promoCodesSubtitle")}</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-2 pb-4 lg:grid-cols-[minmax(0,1fr)_auto]">
-              <Input className="glass border-white/10 uppercase" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder={t("client.profile.promoPlaceholder")} />
-              <Button type="button" className="w-full lg:w-auto lg:px-5" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>
+            <CardContent className="grid gap-2 pb-4">
+              <Input className="glass h-11 min-w-0 border-white/10 uppercase" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder={t("client.profile.promoPlaceholder")} />
+              <Button type="button" className="h-11 w-full" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>
                 {t("client.profile.apply")}
               </Button>
             </CardContent>
@@ -545,9 +548,9 @@ export default function SettingsPage() {
                 </div>
                 <Copy className="h-4 w-4 shrink-0 text-primary" />
               </button>
-              <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
-                <Input className="glass border-white/10 uppercase" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder={t("client.profile.referralPlaceholder")} />
-                <Button type="button" variant="secondary" className="glass w-full border-white/10 lg:w-auto lg:px-5" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>
+              <div className="grid gap-2">
+                <Input className="glass h-11 min-w-0 border-white/10 uppercase" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder={t("client.profile.referralPlaceholder")} />
+                <Button type="button" variant="secondary" className="glass h-11 w-full border-white/10" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>
                   {t("client.profile.redeem")}
                 </Button>
               </div>

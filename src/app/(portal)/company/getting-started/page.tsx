@@ -27,8 +27,9 @@ export default function CompanyGettingStartedPage() {
 
   const steps = useMemo(() => [
     { title: "Оформите профиль", detail: "Название, описание, категории и формат работы.", done: Boolean(profile?.company.description && profile.company.categories.length), href: "/company/settings", icon: Settings2 },
-    { title: "Пройдите верификацию", detail: "После проверки станут доступны операции и подписки.", done: Boolean(profile?.company.identityVerificationCompleted), href: "/company/compliance", icon: BadgeCheck },
+    { title: "Пройдите верификацию", detail: "После проверки станут доступны финансовые операции и расширенные действия.", done: Boolean(profile?.company.identityVerificationCompleted), href: "/company/compliance", icon: BadgeCheck },
     { title: "Настройте уровни", detail: "Определите пороги покупок и процент возврата баллов.", done: Boolean(profile?.company.levels.length), href: "/company/loyalty", icon: Coins },
+    // #SubNearloyCode: шаг создания клиентской подписки скрыт до запуска модуля.
     ...(SUBSCRIPTIONS_ENABLED
       ? [{ title: "Создайте подписку", detail: "Опишите тариф и правила выдачи услуг на кассе.", done: subscriptionCount > 0, href: "/company/subscriptions", icon: WalletCards }]
       : []),

@@ -31,7 +31,9 @@ import {
   type CompanyClubData,
   type EntitlementWindow,
 } from "@/lib/api/company-client";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { cn } from "@/lib/utils";
+import { SubscriptionsComingSoon } from "@/components/subscriptions/SubscriptionsComingSoon";
 
 const MIN_SUBSCRIPTION_PRICE_RUB = 299;
 
@@ -223,6 +225,13 @@ function BundleCard({
 }
 
 export default function CompanyClubPage() {
+  // #SubNearloyCode: парные клиентские подписки скрыты до запуска модуля.
+  if (!SUBSCRIPTIONS_ENABLED) return <SubscriptionsComingSoon mode="company" backHref="/company" primaryHref="/company/clients" />;
+
+  return <CompanyClubEnabledPage />;
+}
+
+function CompanyClubEnabledPage() {
   const [data, setData] = useState<CompanyClubData | null>(null);
   const [form, setForm] = useState<ClubForm>(defaultForm);
   const [loading, setLoading] = useState(true);
