@@ -114,6 +114,7 @@ export default function CompanyClientsPage() {
   const [loading, setLoading] = useState(false);
   const [commentSaving, setCommentSaving] = useState(false);
 
+  // #SubNearloyCode: погашение клиентских подписок скрыто до запуска модуля.
   const redeemableItems = useMemo<RedeemableItem[]>(() => {
     if (!SUBSCRIPTIONS_ENABLED || !selected) return [];
     const ordinary = selected.activeSubscriptions.flatMap((plan) =>

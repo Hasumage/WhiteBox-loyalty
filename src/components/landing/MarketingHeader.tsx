@@ -25,7 +25,6 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
           users: "Для клиентов",
           business: "Для бизнеса",
           features: "Возможности",
-          subscriptions: "Подписки",
           contacts: "Контакты",
           signIn: "Войти",
           becomePartner: "Стать партнёром",
@@ -39,7 +38,6 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
           users: "For customers",
           business: "For business",
           features: "Features",
-          subscriptions: "Subscriptions",
           contacts: "Contacts",
           signIn: "Sign in",
           becomePartner: "Become a partner",
@@ -50,10 +48,11 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
   const navItems = [
     { label: labels.users, href: "/", active: active === "users" },
     { label: labels.business, href: "/business", active: active === "business" },
+    // #SubNearloyCode: клиентские подписки скрыты до запуска, поэтому на лендинге ведём в общий блок возможностей.
     {
-      label: isBusiness ? labels.features : labels.subscriptions,
-      href: isBusiness ? "#features" : "#subscriptions",
-      sectionId: isBusiness ? "features" : "subscriptions",
+      label: labels.features,
+      href: "#features",
+      sectionId: "features",
     },
     { label: labels.contacts, href: "#contact", sectionId: "contact" },
   ];

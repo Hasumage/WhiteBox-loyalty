@@ -21,12 +21,21 @@ export async function requireAdminScope(
       email: true,
       name: true,
       permissions: {
-        where: { scope },
         select: { scope: true, canView: true, canEdit: true, canApprove: true },
       },
     },
   });
-  const permission = resolveEffectivePermission(actor?.role ?? "CLIENT", actor?.permissions[0] ?? null, scope);
+  const isPrWorkspaceManager =
+    actor?.role === "MANAGER" && actor.permissions.some((permission) => permission.scope === "PR" && permission.canView);
+  if (isPrWorkspaceManager && scope !== "PR") {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ message: `${scope} ${action.replace("can", "").toLowerCase()} access is not allowed` }, { status: 403 }),
+    };
+  }
+
+  const explicitPermission = actor?.permissions.find((permission) => permission.scope === scope) ?? null;
+  const permission = resolveEffectivePermission(actor?.role ?? "CLIENT", explicitPermission, scope);
   if (!actor || !permission[action]) {
     return {
       ok: false as const,

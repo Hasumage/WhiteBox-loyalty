@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { companyProfile, updateCompanyLoyaltySettings } from "@/lib/api/company-client";
+import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 type SubscriptionSpendPolicy = "EXCLUDE" | "INCLUDE_NO_BONUS" | "INCLUDE_WITH_BONUS";
 type LevelRule = { rowId: string; levelName: string; minTotalSpend: string; cashbackPercent: string };
@@ -126,24 +127,29 @@ export default function CompanyLoyaltyPage() {
       )}
       <Card className="glass border-white/10 py-0">
         <CardContent className="space-y-6 p-5">
-          <div>
-            <h2 className="flex items-center gap-2 font-semibold"><SlidersHorizontal className="h-4 w-4 text-cyan-100" /> Покупки подписок и уровень</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Отдельно выберите, влияют ли оплаты подписок на программу баллов.</p>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-3">
-            {policyOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                disabled={!canManage}
-                onClick={() => setPolicy(option.value)}
-                className={`rounded-2xl border p-4 text-left transition ${policy === option.value ? "border-cyan-200/35 bg-cyan-200/[0.08]" : "border-white/10 bg-white/[0.02] hover:bg-white/[0.045]"}`}
-              >
-                <p className="font-semibold">{option.title}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{option.detail}</p>
-              </button>
-            ))}
-          </div>
+          {/* #SubNearloyCode: влияние клиентских подписок на уровни скрыто до запуска модуля. */}
+          {SUBSCRIPTIONS_ENABLED && (
+            <>
+              <div>
+                <h2 className="flex items-center gap-2 font-semibold"><SlidersHorizontal className="h-4 w-4 text-cyan-100" /> Покупки подписок и уровень</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Отдельно выберите, влияют ли оплаты подписок на программу баллов.</p>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-3">
+                {policyOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={!canManage}
+                    onClick={() => setPolicy(option.value)}
+                    className={`rounded-2xl border p-4 text-left transition ${policy === option.value ? "border-cyan-200/35 bg-cyan-200/[0.08]" : "border-white/10 bg-white/[0.02] hover:bg-white/[0.045]"}`}
+                  >
+                    <p className="font-semibold">{option.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{option.detail}</p>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <div>
             <h2 className="flex items-center gap-2 font-semibold"><Coins className="h-4 w-4 text-cyan-100" /> Уровни клиентов</h2>
             <p className="mt-1 text-sm text-muted-foreground">Чем выше уровень клиента, тем больше его сумма покупок и не меньше процент начисляемых баллов.</p>

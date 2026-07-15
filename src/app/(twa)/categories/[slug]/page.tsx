@@ -87,6 +87,7 @@ export default function CategoryDetailPage() {
       </div>
       <p className="mb-4 text-sm text-muted-foreground">{t("client.category.partnersPlans")}</p>
 
+      {/* #SubNearloyCode: блок клиентских подписок в категории скрыт до запуска. */}
       {SUBSCRIPTIONS_ENABLED && (
         <section className="mb-6">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">

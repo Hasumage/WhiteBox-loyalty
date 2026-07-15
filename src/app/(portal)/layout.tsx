@@ -40,6 +40,7 @@ import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { PageTransition } from "@/components/PageTransition";
 import { AuthRecoveryOverlay } from "@/components/auth/AuthRecoveryOverlay";
+import type { AdminPermissionScope } from "@/lib/admin/access-control";
 import { clearStoredSession, getStoredUser } from "@/lib/api/auth-client";
 import { fetchWithAuthRecovery } from "@/lib/api/authenticated-fetch";
 import { companyBilling, companyProfile, type CompanyBillingData, type CompanyMemberRole } from "@/lib/api/company-client";
@@ -50,7 +51,20 @@ import type { TranslationKey } from "@/lib/i18n/dictionary";
 import { cn } from "@/lib/utils";
 
 type PortalIcon = ComponentType<{ className?: string }>;
-type AdminMenuItem = { href: string; labelKey: TranslationKey; icon: PortalIcon };
+type AdminWorkspace = "ADMIN" | "PR" | "SUPPORT";
+type AdminNavigationProfile = {
+  role: string;
+  workspace: AdminWorkspace;
+  permissions: Array<{ scope: AdminPermissionScope; canView: boolean }>;
+};
+type AdminMenuItem = {
+  href: string;
+  labelKey: TranslationKey;
+  icon: PortalIcon;
+  scope?: AdminPermissionScope;
+  prWorkspace?: boolean;
+  supportWorkspace?: boolean;
+};
 type AdminMenuSection = {
   groupKey: TranslationKey;
   defaultOpen?: boolean;
@@ -64,46 +78,46 @@ const adminMenu: AdminMenuSection[] = [
     defaultOpen: true,
     items: [
       { href: "/admin", labelKey: "admin.nav.dashboard", icon: LayoutDashboard },
-      { href: "/admin/tasks", labelKey: "admin.nav.tasks", icon: ClipboardList },
-      { href: "/admin/ai", labelKey: "admin.nav.aiAssistant", icon: Sparkles },
+      { href: "/admin/tasks", labelKey: "admin.nav.tasks", icon: ClipboardList, scope: "AUDIT" },
+      { href: "/admin/ai", labelKey: "admin.nav.aiAssistant", icon: Sparkles, scope: "AUDIT" },
     ],
   },
   {
     groupKey: "admin.nav.usersPartners",
     items: [
-      { href: "/admin/users", labelKey: "admin.nav.users", icon: Users },
-      { href: "/admin/companies", labelKey: "admin.nav.companies", icon: Building2 },
-      { href: "/admin/profile-statuses", labelKey: "admin.nav.profileStatuses", icon: Trophy },
-      { href: "/admin/categories", labelKey: "admin.nav.categories", icon: Tag },
-      { href: "/admin/company-verifications", labelKey: "admin.nav.companyVerification", icon: FileCheck },
+      { href: "/admin/users", labelKey: "admin.nav.users", icon: Users, scope: "USERS" },
+      { href: "/admin/companies", labelKey: "admin.nav.companies", icon: Building2, scope: "COMPANIES" },
+      { href: "/admin/profile-statuses", labelKey: "admin.nav.profileStatuses", icon: Trophy, scope: "USERS" },
+      { href: "/admin/categories", labelKey: "admin.nav.categories", icon: Tag, scope: "COMPANIES" },
+      { href: "/admin/company-verifications", labelKey: "admin.nav.companyVerification", icon: FileCheck, scope: "COMPANY_VERIFICATIONS" },
     ],
   },
   {
     groupKey: "admin.nav.subscriptions",
     items: [
-      { href: "/admin/subscriptions", labelKey: "admin.nav.statistics", icon: LayoutDashboard },
-      { href: "/admin/pr", labelKey: "admin.nav.prDesk", icon: Megaphone },
-      { href: "/admin/growth", labelKey: "admin.nav.growth", icon: Gift },
-      { href: "/admin/test-screens", labelKey: "admin.nav.testScreens", icon: FlaskConical },
+      { href: "/admin/subscriptions", labelKey: "admin.nav.statistics", icon: LayoutDashboard, scope: "COMPANIES" },
+      { href: "/admin/pr", labelKey: "admin.nav.prDesk", icon: Megaphone, scope: "PR", prWorkspace: true },
+      { href: "/admin/growth", labelKey: "admin.nav.growth", icon: Gift, scope: "PR" },
+      { href: "/admin/test-screens", labelKey: "admin.nav.testScreens", icon: FlaskConical, scope: "SETTINGS" },
     ],
   },
   {
     groupKey: "admin.nav.operations",
     items: [
-      { href: "/admin/payments", labelKey: "admin.nav.payments", icon: CreditCard },
-      { href: "/admin/finance", labelKey: "admin.nav.finance", icon: CreditCard },
-      { href: "/admin/compliance", labelKey: "admin.nav.compliance", icon: FileCheck },
-      { href: "/admin/leads", labelKey: "admin.nav.leads", icon: Inbox },
-      { href: "/admin/support", labelKey: "admin.nav.support", icon: Headphones },
+      { href: "/admin/payments", labelKey: "admin.nav.payments", icon: CreditCard, scope: "FINANCE" },
+      { href: "/admin/finance", labelKey: "admin.nav.finance", icon: CreditCard, scope: "FINANCE" },
+      { href: "/admin/compliance", labelKey: "admin.nav.compliance", icon: FileCheck, scope: "AUDIT" },
+      { href: "/admin/leads", labelKey: "admin.nav.leads", icon: Inbox, scope: "SUPPORT" },
+      { href: "/admin/support", labelKey: "admin.nav.support", icon: Headphones, scope: "SUPPORT", supportWorkspace: true },
     ],
   },
   {
     groupKey: "admin.nav.system",
     items: [
-      { href: "/admin/system-health", labelKey: "admin.nav.systemHealth", icon: ServerCrash },
-      { href: "/admin/telegram", labelKey: "admin.nav.telegram", icon: Send },
-      { href: "/admin/audit", labelKey: "admin.nav.audit", icon: Shield },
-      { href: "/admin/database", labelKey: "admin.nav.database", icon: Database },
+      { href: "/admin/system-health", labelKey: "admin.nav.systemHealth", icon: ServerCrash, scope: "AUDIT" },
+      { href: "/admin/telegram", labelKey: "admin.nav.telegram", icon: Send, scope: "TELEGRAM" },
+      { href: "/admin/audit", labelKey: "admin.nav.audit", icon: Shield, scope: "AUDIT" },
+      { href: "/admin/database", labelKey: "admin.nav.database", icon: Database, scope: "DATABASE" },
     ],
   },
 ] satisfies AdminMenuSection[];
@@ -125,7 +139,8 @@ const companyMenuBase: NavItem[] = [
 ];
 
 const companyMenuAvailable: NavItem[] = companyMenuBase.filter(
-  (item) => SUBSCRIPTIONS_ENABLED || item.href !== "/company/subscriptions",
+  // #SubNearloyCode: скрываем создание/управление клиентскими и парными подписками в кабинете компании.
+  (item) => SUBSCRIPTIONS_ENABLED || (item.href !== "/company/subscriptions" && item.href !== "/company/club"),
 );
 
 const companyMenuLocalOnlyHrefs = new Set(["/company/club", "/company/payments"]);
@@ -198,6 +213,37 @@ function isCompanyCashierPathAllowed(pathname: string) {
   return companyCashierMenuHrefs.some((href) => pathname === href || pathname.startsWith(`${href}/`));
 }
 
+function fallbackAdminWorkspace(role?: string): AdminWorkspace {
+  if (role === "SUPPORT") return "SUPPORT";
+  if (role === "MANAGER") return "PR";
+  return "ADMIN";
+}
+
+function hasAdminScope(profile: AdminNavigationProfile | null, scope: AdminPermissionScope) {
+  return profile?.permissions.some((permission) => permission.scope === scope && permission.canView) === true;
+}
+
+function isAdminMenuItemVisible(item: AdminMenuItem, profile: AdminNavigationProfile | null, role?: string) {
+  const workspace = profile?.workspace ?? fallbackAdminWorkspace(role);
+  if (workspace === "PR") return item.prWorkspace === true;
+  if (workspace === "SUPPORT") return item.supportWorkspace === true;
+  if (!item.scope) return true;
+  if (!profile) return role === "SUPER_ADMIN" || role === "ADMIN";
+  return hasAdminScope(profile, item.scope);
+}
+
+function adminWorkspaceHome(workspace: AdminWorkspace) {
+  if (workspace === "PR") return "/admin/pr";
+  if (workspace === "SUPPORT") return "/admin/support";
+  return "/admin";
+}
+
+function isAdminPathAllowed(pathname: string, workspace: AdminWorkspace) {
+  if (workspace === "PR") return pathname === "/admin/pr" || pathname.startsWith("/admin/pr/");
+  if (workspace === "SUPPORT") return pathname === "/admin/support" || pathname.startsWith("/admin/support/");
+  return true;
+}
+
 export default function PortalLayout({
   children,
 }: {
@@ -209,10 +255,13 @@ export default function PortalLayout({
   const isAdmin = pathname.startsWith("/admin");
   const currentRole = typeof window === "undefined" ? undefined : getStoredUser()?.role;
   const [notifications, setNotifications] = useState<MenuNotifications>({ items: {}, sections: {} });
+  const [adminNavigation, setAdminNavigation] = useState<AdminNavigationProfile | null>(null);
   const [companyBillingData, setCompanyBillingData] = useState<CompanyBillingData | null>(null);
   const [companyMemberRole, setCompanyMemberRole] = useState<CompanyMemberRole | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLocalCompanyItems, setShowLocalCompanyItems] = useState(false);
+  const adminWorkspace = adminNavigation?.workspace ?? fallbackAdminWorkspace(currentRole);
+  const adminHomeHref = adminWorkspaceHome(adminWorkspace);
   const companyMenuByRole =
     !isAdmin && pathname.startsWith("/company") && (companyMemberRole === null || companyMemberRole === "CASHIER")
       ? companyMenuAvailable.filter((item) => companyCashierMenuHrefSet.has(item.href))
@@ -220,31 +269,60 @@ export default function PortalLayout({
   const visibleCompanyMenu = companyMenuByRole.filter(
     (item) => showLocalCompanyItems || !companyMenuLocalOnlyHrefs.has(item.href),
   );
+  const adminSections = useMemo(
+    () =>
+      adminMenu
+        .map((section) => ({
+          ...section,
+          items: section.items.filter((item) => isAdminMenuItemVisible(item, adminNavigation, currentRole)),
+        }))
+        .filter((section) => section.items.length > 0),
+    [adminNavigation, currentRole],
+  );
   const menu: NavItem[] = isAdmin
-    ? adminMenu
+    ? adminSections
         .flatMap((g) => g.items)
-        .filter((item) => currentRole !== "SUPPORT" || item.href === "/admin/support")
         .map((item) => ({ ...item, label: t(item.labelKey) }))
     : visibleCompanyMenu;
   const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : COMPANY_WORKSPACE_LABEL);
   const billingWarning = getCompanyBillingWarning(companyBillingData);
   const canManageCompanyBilling = !isAdmin && companyMemberRole !== null && companyMemberRole !== "CASHIER";
 
-  const adminSections = useMemo(
-    () =>
-      adminMenu
-        .map((section) => ({
-          ...section,
-          items: section.items.filter((item) => currentRole !== "SUPPORT" || item.href === "/admin/support"),
-        }))
-        .filter((section) => section.items.length > 0),
-    [currentRole],
-  );
-
   useEffect(() => {
     const host = window.location.hostname;
     setShowLocalCompanyItems(host === "localhost" || host === "127.0.0.1" || host === "[::1]");
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setAdminNavigation(null);
+      return;
+    }
+
+    let active = true;
+    async function loadAdminNavigation() {
+      try {
+        const response = await fetchWithAuthRecovery("/api/admin/navigation", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as AdminNavigationProfile;
+        if (active) setAdminNavigation(data);
+      } catch {
+        // Navigation falls back to a conservative role-based menu.
+      }
+    }
+
+    void loadAdminNavigation();
+    return () => {
+      active = false;
+    };
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin || !adminNavigation) return;
+    if (!isAdminPathAllowed(pathname, adminNavigation.workspace)) {
+      router.replace(adminWorkspaceHome(adminNavigation.workspace));
+    }
+  }, [adminNavigation, isAdmin, pathname, router]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -328,12 +406,7 @@ export default function PortalLayout({
   }
 
   const mobilePrimaryItems = isAdmin
-    ? [
-        { href: "/admin", label: t("admin.layout.mobileHome"), icon: LayoutDashboard },
-        { href: "/admin/users", label: t("admin.nav.users"), icon: Users },
-        { href: "/admin/companies", label: t("admin.nav.companies"), icon: Building2 },
-        { href: "/admin/company-verifications", label: t("admin.layout.mobileVerify"), icon: FileCheck },
-      ].filter((item) => currentRole !== "SUPPORT" || item.href === "/admin/support")
+    ? menu.slice(0, 4)
     : visibleCompanyMenu.slice(0, 4);
   const companyDeskMenu = menu.slice(0, 3);
   const companyManagementMenu = menu.slice(3);
@@ -342,7 +415,7 @@ export default function PortalLayout({
     <div className="min-h-[100dvh] bg-background text-foreground">
       <div className="mx-auto grid w-full max-w-[1600px] lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="hidden border-b border-white/10 bg-muted/10 p-4 [scrollbar-width:none] lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col lg:overflow-y-auto lg:border-b-0 lg:border-r [&::-webkit-scrollbar]:hidden">
-          <Link href={isAdmin ? "/admin" : "/company"} className="mb-5 flex items-center gap-3">
+          <Link href={isAdmin ? adminHomeHref : "/company"} className="mb-5 flex items-center gap-3">
             <NearLoyLogo />
             <div>
               <p className="text-xl font-semibold tracking-tight">NearLoy</p>
@@ -447,7 +520,7 @@ export default function PortalLayout({
         <main className="min-w-0 px-4 pb-24 pt-20 sm:px-6 lg:px-8 lg:py-7">
           <div className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-background/88 px-4 py-3 backdrop-blur-xl lg:hidden">
             <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
-              <Link href={isAdmin ? "/admin" : "/company"} className="flex min-w-0 items-center gap-3">
+              <Link href={isAdmin ? adminHomeHref : "/company"} className="flex min-w-0 items-center gap-3">
                 <NearLoyLogo className="h-9 w-9 shrink-0" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">NearLoy</p>

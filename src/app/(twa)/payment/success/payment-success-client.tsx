@@ -72,6 +72,20 @@ export function PaymentSuccessClient() {
   const title = payment ? statusCopy(payment.status, locale) : locale === "ru" ? "Проверяем оплату" : "Checking payment";
   const expiresAt = payment?.activatedSubscription?.expiresAt ?? null;
   const orderLabel = useMemo(() => payment?.providerPaymentId ?? payment?.uuid ?? paymentUuid, [payment, paymentUuid]);
+  // #SubNearloyCode: результат клиентской подписки показываем как обычный платёж, пока модуль скрыт.
+  const successDescription = SUBSCRIPTIONS_ENABLED
+    ? locale === "ru"
+      ? "Подписка активирована и уже доступна в вашем аккаунте. Можно переходить к QR и пользоваться преимуществами."
+      : "Your subscription is active and available on your account. You can open QR and use the benefits."
+    : locale === "ru"
+      ? "Платёж подтверждён. Можно вернуться в кошелёк и продолжить пользоваться NearLoy."
+      : "Payment confirmed. You can return to your wallet and keep using NearLoy.";
+  const paymentKindLabel = SUBSCRIPTIONS_ENABLED
+    ? locale === "ru" ? "Подписка" : "Subscription"
+    : locale === "ru" ? "Платёж" : "Payment";
+  const paymentKindValue = SUBSCRIPTIONS_ENABLED
+    ? payment?.plan?.name ?? (locale === "ru" ? "Проверяем тариф" : "Checking plan")
+    : payment?.plan?.name ?? (locale === "ru" ? "NearLoy" : "NearLoy");
 
   return (
     <motion.main
@@ -104,9 +118,7 @@ export function PaymentSuccessClient() {
           <h1 className="mt-3 text-3xl font-bold leading-tight text-white">{title}</h1>
           <p className="mt-3 max-w-md text-sm leading-6 text-white/65">
             {isSuccess
-              ? locale === "ru"
-                ? "Подписка активирована и уже доступна в вашем аккаунте. Можно переходить к QR и пользоваться преимуществами."
-                : "Your subscription is active and available on your account. You can open QR and use the benefits."
+              ? successDescription
               : locale === "ru"
                 ? "Если платеж уже списан, нажмите обновить: NearLoy повторно сверит статус с YooKassa."
                 : "If the payment was charged, refresh the status and NearLoy will sync it with YooKassa again."}
@@ -133,17 +145,20 @@ export function PaymentSuccessClient() {
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 h-5 w-5 text-cyan-100" />
               <div>
-                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{locale === "ru" ? "Подписка" : "Subscription"}</p>
-                <p className="mt-1 font-semibold">{payment?.plan?.name ?? (locale === "ru" ? "Проверяем тариф" : "Checking plan")}</p>
+                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{paymentKindLabel}</p>
+                <p className="mt-1 font-semibold">{paymentKindValue}</p>
               </div>
             </div>
-            <div className="flex items-start gap-3">
-              <Clock3 className="mt-0.5 h-5 w-5 text-cyan-100" />
-              <div>
-                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{locale === "ru" ? "Действует до" : "Valid until"}</p>
-                <p className="mt-1 font-semibold">{formatDate(expiresAt, locale)}</p>
+            {/* #SubNearloyCode: срок действия клиентской подписки скрыт до запуска модуля. */}
+            {SUBSCRIPTIONS_ENABLED && (
+              <div className="flex items-start gap-3">
+                <Clock3 className="mt-0.5 h-5 w-5 text-cyan-100" />
+                <div>
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{locale === "ru" ? "Действует до" : "Valid until"}</p>
+                  <p className="mt-1 font-semibold">{formatDate(expiresAt, locale)}</p>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </section>

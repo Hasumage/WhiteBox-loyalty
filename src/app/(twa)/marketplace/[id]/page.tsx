@@ -48,6 +48,7 @@ function entitlementLimit(
 }
 
 export default function SubscriptionDetailPage() {
+  // #SubNearloyCode: карточка клиентской подписки скрыта до отдельного запуска.
   if (!SUBSCRIPTIONS_ENABLED) {
     return <SubscriptionsComingSoon mode="client" backHref="/marketplace" primaryHref="/map" />;
   }

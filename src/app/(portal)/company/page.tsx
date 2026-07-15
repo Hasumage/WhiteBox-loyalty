@@ -46,6 +46,7 @@ export default function CompanyPortalPage() {
   }, []);
 
   const metrics = dashboard?.metrics;
+  // #SubNearloyCode: клиентские подписочные операции не показываем, пока модуль отключён.
   const recentOperations = (dashboard?.recentOperations ?? []).filter(
     (operation) => SUBSCRIPTIONS_ENABLED || operation.kind !== "SUBSCRIPTION",
   );
@@ -109,6 +110,7 @@ export default function CompanyPortalPage() {
             <Button asChild size="lg" className="rounded-xl">
               <Link href="/company/clients"><QrCode /> Сканировать QR клиента</Link>
             </Button>
+            {/* #SubNearloyCode: вход в правила клиентских подписок скрыт до запуска. */}
             {SUBSCRIPTIONS_ENABLED && (
               <Button asChild size="lg" variant="secondary" className="rounded-xl">
                 <Link href="/company/subscriptions"><WalletCards /> Правила подписок</Link>
@@ -322,7 +324,7 @@ export default function CompanyPortalPage() {
               <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.05] p-4">
                 <p className="text-sm font-semibold">Мы создаём кое-что потрясающее</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  В первой версии компании работают с клиентами, QR, баллами и уровнями. Подписки вернутся отдельным стабильным обновлением.
+                  В первой версии компании работают с клиентами, QR, баллами и уровнями. Новые инструменты появятся отдельным стабильным обновлением.
                 </p>
               </div>
             )}

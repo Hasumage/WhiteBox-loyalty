@@ -50,7 +50,7 @@ const steps = [
 }>;
 
 export default function OnboardingPage() {
-  const { t } = useI18n("ru");
+  const { locale, t } = useI18n("ru");
   const router = useRouter();
   const [index, setIndex] = useState(0);
   const [geoStatus, setGeoStatus] = useState<"idle" | "granted" | "denied" | "unsupported">("idle");
@@ -60,7 +60,8 @@ export default function OnboardingPage() {
   const progress = useMemo(() => Math.round(((index + 1) / steps.length) * 100), [index]);
   const valueItems: Array<{ icon: LucideIcon; label: string }> = [
     { icon: WalletCards, label: t("client.onboarding.valueCards") },
-    { icon: BadgePercent, label: t("client.onboarding.valueSubscriptions") },
+    // #SubNearloyCode: клиентские подписки в onboarding временно заменены на статусы.
+    { icon: BadgePercent, label: locale === "ru" ? "Статусы" : "Statuses" },
     { icon: MapPin, label: t("client.onboarding.valueMapRoutes") },
     { icon: Sparkles, label: t("client.onboarding.valueLevels") },
   ];

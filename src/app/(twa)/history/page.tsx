@@ -121,6 +121,7 @@ export default function HistoryPage() {
             <ArrowDownLeft className="mr-1.5 h-4 w-4" />
             {t("client.history.activity")}
           </TabsTrigger>
+          {/* #SubNearloyCode: вкладка истории клиентских подписок скрыта до запуска. */}
           {SUBSCRIPTIONS_ENABLED && (
             <TabsTrigger value="subscriptions" className="flex-1">
               <Archive className="mr-1.5 h-4 w-4" />
@@ -194,6 +195,7 @@ export default function HistoryPage() {
           </ScrollArea>
         </TabsContent>
 
+        {/* #SubNearloyCode: архив клиентских подписок скрыт до запуска. */}
         {SUBSCRIPTIONS_ENABLED && (
           <TabsContent value="subscriptions" className="mt-0">
           <ScrollArea className="h-[calc(100dvh-14rem)] pr-2">
