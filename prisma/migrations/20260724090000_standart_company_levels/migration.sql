@@ -1,0 +1,2 @@
+-- No schema changes.
+-- Company level data is managed by application/API code.
