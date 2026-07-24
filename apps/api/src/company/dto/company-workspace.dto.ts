@@ -93,6 +93,11 @@ export class UpdateCompanyProfileDto {
   @IsBoolean()
   operatesOnline!: boolean;
 
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
   @ApiProperty({ type: [Number], example: [1, 4] })
   @IsArray()
   @ArrayMinSize(1)

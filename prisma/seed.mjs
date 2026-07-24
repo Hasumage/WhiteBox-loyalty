@@ -269,7 +269,7 @@ async function main() {
       }
 
       const levelRules = [
-        { levelName: "Bronze", minTotalSpend: 0, cashbackPercent: 1.5, sortOrder: 1 },
+        { levelName: "Standart", minTotalSpend: 0, cashbackPercent: 1.5, sortOrder: 1 },
         { levelName: "Silver", minTotalSpend: 800, cashbackPercent: 3.5, sortOrder: 2 },
         { levelName: "Gold", minTotalSpend: 2200, cashbackPercent: 6, sortOrder: 3 },
       ];

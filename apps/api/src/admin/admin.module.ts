@@ -5,9 +5,10 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { AdminService } from "./admin.service";
 import { EmailModule } from "../email/email.module";
 import { PrismaModule } from "../prisma/prisma.module";
+import { TelegramNotificationsModule } from "../telegram/telegram-notifications.module";
 
 @Module({
-  imports: [PrismaModule, ConfigModule, EmailModule],
+  imports: [PrismaModule, ConfigModule, EmailModule, TelegramNotificationsModule],
   controllers: [AdminController],
   providers: [RolesGuard, AdminService],
 })

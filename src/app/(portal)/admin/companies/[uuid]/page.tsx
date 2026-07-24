@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -55,11 +55,14 @@ import {
   adminDeleteCompanyUser,
   adminEndCompanyReferral,
   adminExtendCompanyBilling,
+  adminGetCompanyRecommendation,
   adminGetCompanyReferral,
   adminGetCompanyOverview,
   adminGetCompanyUser,
+  adminGetNavigation,
   adminListCategories,
   adminSendEmail,
+  adminUpdateCompanyRecommendation,
   adminUpdateCompanyLocation,
   adminUpdateCompanySubscription,
   adminUpdateCompanyUser,
@@ -70,8 +73,10 @@ import {
   type AdminCompanyReferralResponse,
   type AdminCompanyReferralPipelineStatus,
   type AdminCompanyReferralStatus,
+  type AdminCompanyRecommendation,
   type AdminCompanyOverview,
   type AdminCompanySubscription,
+  type AdminNavigationResponse,
 } from "@/lib/api/admin-client";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 import { useI18n } from "@/lib/i18n/use-i18n";
@@ -281,7 +286,7 @@ function normalizeLevelRules(
       cashbackPercent: Number(rule.cashbackPercent),
     })) ?? [];
 
-  return mapped.length > 0 ? mapped : [{ levelName: "Bronze", minTotalSpend: 0, cashbackPercent: 0 }];
+  return mapped.length > 0 ? mapped : [{ levelName: "Standart", minTotalSpend: 0, cashbackPercent: 0 }];
 }
 
 function statusLabel(value: string, t: (key: TranslationKey) => string) {
@@ -336,6 +341,13 @@ export default function AdminCompanyProfilePage() {
   const [referral, setReferral] = useState<AdminCompanyReferralResponse | null>(null);
   const [overview, setOverview] = useState<AdminCompanyOverview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [recommendation, setRecommendation] = useState<AdminCompanyRecommendation | null>(null);
+  const [recommendationBoost, setRecommendationBoost] = useState("0");
+  const [recommendForEveryone, setRecommendForEveryone] = useState(false);
+  const [recommendationSaving, setRecommendationSaving] = useState(false);
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const [canViewPromotion, setCanViewPromotion] = useState(false);
+  const [canEditPromotion, setCanEditPromotion] = useState(false);
   const [billingExtensionOpen, setBillingExtensionOpen] = useState(false);
   const [billingExtensionSaving, setBillingExtensionSaving] = useState(false);
   const [billingExtensionValue, setBillingExtensionValue] = useState("1");
@@ -518,18 +530,47 @@ export default function AdminCompanyProfilePage() {
     if (!billingExtensionText) setBillingExtensionText(defaultBillingExtensionText);
   }, [billingExtensionText, defaultBillingExtensionText]);
 
+  const hydrateRecommendation = useCallback((next: AdminCompanyRecommendation | null) => {
+    setRecommendation(next);
+    const settings = next?.company.recommendation;
+    setRecommendationBoost(String(settings?.boostPercent ?? 0));
+    setRecommendForEveryone(settings?.recommendForEveryone ?? false);
+  }, []);
+
+  const hydratePromotionAccess = useCallback((navigation: AdminNavigationResponse | null) => {
+    const promotion = navigation?.permissions.find((permission) => permission.scope === "PROMOTION");
+    const canView = promotion?.canView === true;
+    setCanViewPromotion(canView);
+    setCanEditPromotion(promotion?.canEdit === true);
+    if (!canView) {
+      hydrateRecommendation(null);
+      setRecommendationError(null);
+    }
+    return canView;
+  }, [hydrateRecommendation]);
+
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [userRes, cats, overviewRes] = await Promise.all([
+      const navigationRes = await adminGetNavigation();
+      const canLoadRecommendation = hydratePromotionAccess(navigationRes.ok ? navigationRes.data : null);
+      const [userRes, cats, overviewRes, recommendationRes] = await Promise.all([
         adminGetCompanyUser(companyUserUuid),
         adminListCategories(),
         adminGetCompanyOverview(companyUserUuid),
+        canLoadRecommendation ? adminGetCompanyRecommendation(companyUserUuid) : Promise.resolve(null),
       ]);
       setCategories(cats);
       setOverview(overviewRes.ok ? overviewRes.data : null);
       setOverviewError(overviewRes.ok ? null : `${overviewRes.status}: ${overviewRes.message}`);
+      if (recommendationRes?.ok) {
+        hydrateRecommendation(recommendationRes.data);
+        setRecommendationError(null);
+      } else if (canLoadRecommendation) {
+        hydrateRecommendation(null);
+        setRecommendationError(`${recommendationRes?.status ?? 0}: ${recommendationRes?.message ?? "Failed to load promotion settings"}`);
+      }
       if (!userRes.ok) {
         setError(`${t("admin.companyDetail.loadUserFailed")} (${userRes.status}): ${userRes.message}`);
         setLoading(false);
@@ -649,6 +690,37 @@ export default function AdminCompanyProfilePage() {
     setNotice(`Подписка NearLoy продлена без оплаты. Telegram: отправлено ${res.data.notification.telegram.delivered}, в очереди ${res.data.notification.telegram.queued}.`);
   }
 
+  async function handleSaveRecommendation() {
+    if (!canEditPromotion) {
+      setRecommendationError("Нет права изменять продвижение компании.");
+      return;
+    }
+    setRecommendationSaving(true);
+    setRecommendationError(null);
+    setNotice(null);
+    const normalizedBoost = Math.max(0, Math.trunc(Number(String(recommendationBoost).replace(",", ".")) || 0));
+    const res = await adminUpdateCompanyRecommendation(companyUserUuid, {
+      recommendationBoostPercent: normalizedBoost,
+      recommendForEveryone,
+    });
+    setRecommendationSaving(false);
+    if (!res.ok) {
+      setRecommendationError(res.message);
+      return;
+    }
+    hydrateRecommendation(res.data);
+    const settings = res.data.company.recommendation;
+    setNotice(
+      `Настройка рекомендаций обновлена: +${settings.boostPercent}%, множитель ${settings.effectiveMultiplier.toFixed(2)}x${
+        settings.recommendForEveryone ? ", рекомендовать всем включено" : ""
+      }.`,
+    );
+  }
+
+  function setRecommendationPreset(percent: number) {
+    setRecommendationBoost(String(percent));
+  }
+
   function hydrateReferralDraft(next: AdminCompanyReferralResponse | null) {
     const current = next?.referral;
     setReferralDraft({
@@ -679,9 +751,25 @@ export default function AdminCompanyProfilePage() {
     let ignore = false;
     void (async () => {
       try {
-        const [userRes, cats] = await Promise.all([adminGetCompanyUser(companyUserUuid), adminListCategories()]);
+        const navigationRes = await adminGetNavigation();
+        if (ignore) return;
+        const canLoadRecommendation = hydratePromotionAccess(navigationRes.ok ? navigationRes.data : null);
+        const [userRes, cats, recommendationRes] = await Promise.all([
+          adminGetCompanyUser(companyUserUuid),
+          adminListCategories(),
+          canLoadRecommendation ? adminGetCompanyRecommendation(companyUserUuid) : Promise.resolve(null),
+        ]);
         if (ignore) return;
         setCategories(cats);
+        if (recommendationRes?.ok) {
+          hydrateRecommendation(recommendationRes.data);
+          setRecommendationError(null);
+        } else if (canLoadRecommendation) {
+          hydrateRecommendation(null);
+          setRecommendationError(
+            `${recommendationRes?.status ?? 0}: ${recommendationRes?.message ?? "Failed to load promotion settings"}`,
+          );
+        }
         if (!userRes.ok) {
           setError(`${t("admin.companyDetail.loadUserFailed")} (${userRes.status}): ${userRes.message}`);
           setLoading(false);
@@ -771,7 +859,7 @@ export default function AdminCompanyProfilePage() {
     return () => {
       ignore = true;
     };
-  }, [companyUserUuid, t]);
+  }, [companyUserUuid, hydratePromotionAccess, hydrateRecommendation, t]);
 
   async function saveAccount(options?: SaveOptions) {
     if (!accountForm) return;
@@ -1328,6 +1416,113 @@ export default function AdminCompanyProfilePage() {
           </CardContent>
         </Card>
       </div>
+
+      {canViewPromotion ? (
+        <Card className="glass overflow-hidden border-violet-300/20 bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,0.14),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(34,211,238,0.1),transparent_32%),rgba(255,255,255,0.025)]">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="inline-flex items-center gap-2 text-base">
+                  <SlidersHorizontal className="h-4 w-4 text-violet-100" />
+                  Продвижение
+                </CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Ручной приоритет в рекомендациях и выдаче партнёров.
+                </p>
+              </div>
+              <Badge variant={recommendForEveryone ? "default" : "outline"}>
+                {recommendForEveryone ? "Рекомендовать всем" : "Обычный режим"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+            <div>
+              <Label htmlFor="recommendation-boost">Ручная эффективность, %</Label>
+              <Input
+                id="recommendation-boost"
+                type="number"
+                min={0}
+                step={1}
+                value={recommendationBoost}
+                onChange={(event) => setRecommendationBoost(event.target.value)}
+                className="mt-2"
+                placeholder="0"
+                disabled={!canEditPromotion}
+              />
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[20, 50, 100].map((percent) => (
+                  <Button
+                    key={percent}
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setRecommendationPreset(percent)}
+                    disabled={!canEditPromotion}
+                  >
+                    На {percent}% эффективнее
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRecommendationPreset(0)}
+                  disabled={!canEditPromotion}
+                >
+                  Сбросить
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Сейчас: +{Math.max(0, Math.trunc(Number(String(recommendationBoost).replace(",", ".")) || 0))}% ·{" "}
+                {(
+                  1 +
+                  Math.max(0, Math.trunc(Number(String(recommendationBoost).replace(",", ".")) || 0)) / 100
+                ).toFixed(2)}
+                x{recommendation ? ` · сохранено ${recommendation.company.recommendation.effectiveMultiplier.toFixed(2)}x` : ""}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <label
+                className={cn(
+                  "flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 transition",
+                  canEditPromotion
+                    ? "cursor-pointer hover:border-violet-200/30 hover:bg-violet-300/10"
+                    : "cursor-not-allowed opacity-70",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={recommendForEveryone}
+                  onChange={(event) => setRecommendForEveryone(event.target.checked)}
+                  className="mt-1 h-4 w-4 accent-primary"
+                  disabled={!canEditPromotion}
+                />
+                <span>
+                  <span className="block font-semibold">Рекомендовать всем</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">
+                    Приоритетный слой для случаев, когда компанию нужно вывести в топ выдачи.
+                  </span>
+                </span>
+              </label>
+              {recommendationError ? (
+                <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
+                  {recommendationError}
+                </div>
+              ) : null}
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => void handleSaveRecommendation()}
+                disabled={recommendationSaving || !canEditPromotion}
+              >
+                {recommendationSaving ? <RotateCcw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Сохранить настройку
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="glass overflow-hidden border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_38%),rgba(255,255,255,0.025)] pt-4">
         <CardHeader className="pb-3 pt-2">

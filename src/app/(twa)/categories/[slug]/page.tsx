@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { categoryName } from "@/lib/i18n/categories";
+import { companyLevelName } from "@/lib/i18n/company-levels";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { formatPlanPrice as formatLocalizedPlanPrice, interpolate } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/format";
@@ -31,7 +32,7 @@ function formatPlanPrice(plan: TwaSubscriptionPlan, t: TranslateFn) {
 }
 
 export default function CategoryDetailPage() {
-  const { t } = useI18n("ru");
+  const { locale, t } = useI18n("ru");
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
   const [companies, setCompanies] = useState<TwaCompany[]>([]);
@@ -132,7 +133,7 @@ export default function CategoryDetailPage() {
                     <Badge variant="secondary" className="text-[10px] font-normal">
                       {company.points.balance} {t("client.common.pointsShort")}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">{company.level.current?.levelName ?? t("client.common.member")}</span>
+                    <span className="text-xs text-muted-foreground">{companyLevelName(company.level.current?.levelName, locale, t("client.common.member"))}</span>
                   </div>
                 </CardContent>
               </Card>

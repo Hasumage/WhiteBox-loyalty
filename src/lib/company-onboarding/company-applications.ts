@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { CompanyEmploymentType, IdentityVerificationMode, Prisma } from "@prisma/client";
+import type { CompanyEmploymentType, CompanyVerificationStatus, IdentityVerificationMode, Prisma } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
-import { attachCompanyReferral, findCompanyReferralReferrer, normalizeCompanyReferralCode } from "@/lib/company-referrals/company-referrals";
+import {
+  PUBLIC_COMPANY_REFERRAL_SOURCE,
+  attachCompanyReferral,
+  findCompanyReferralReferrer,
+  normalizeCompanyReferralCode,
+} from "@/lib/company-referrals/company-referrals";
 import { supportManagerConnectData } from "@/lib/company-referrals/support-manager";
 import { adminTelegramRecipients } from "@/lib/telegram/admin-chat";
 import { sendTelegramMessageQueued } from "@/lib/telegram/telegram-queue";
@@ -82,8 +87,8 @@ export function parseCompanyApplicationPayload(
   if (employmentType !== "SELF_EMPLOYED" && employmentType !== "INDIVIDUAL_ENTREPRENEUR") {
     throw new Error("Choose employment type.");
   }
-  // Every new partner application requires full verification. The enum stays for historical records.
-  const identityVerificationMode: IdentityVerificationMode = "FULL";
+  const requestedMode = normalizeText(input.identityVerificationMode, 20).toUpperCase();
+  const identityVerificationMode: IdentityVerificationMode = requestedMode === "DEFERRED" ? "DEFERRED" : "FULL";
 
   const legalInn = onlyDigits(input.legalInn, 12);
   if (employmentType === "SELF_EMPLOYED" && legalInn.length !== 12) {
@@ -133,19 +138,26 @@ export function parseCompanyApplicationPayload(
   if (!options.existingCompany && input.termsAccepted !== true) {
     throw new Error("Company terms acceptance is required.");
   }
-  const series = onlyDigits(input.passportSeries, 4);
-  const number = onlyDigits(input.passportNumber, 6);
-  const issuedBy = normalizeText(input.passportIssuedBy, 240);
-  const issuedAt = normalizeText(input.passportIssuedAt, 20);
-  const departmentCode = onlyDigits(input.passportDepartmentCode, 6);
-  if (series.length !== 4 || number.length !== 6 || !issuedBy || !issuedAt) {
-    throw new Error("Fill in passport data.");
+  let passportData: ManualPassportData | undefined;
+  let encryptedPassportData: EncryptedPassportData | undefined;
+  let verificationDeferralReason: string | undefined;
+  if (identityVerificationMode === "FULL") {
+    const series = onlyDigits(input.passportSeries, 4);
+    const number = onlyDigits(input.passportNumber, 6);
+    const issuedBy = normalizeText(input.passportIssuedBy, 240);
+    const issuedAt = normalizeText(input.passportIssuedAt, 20);
+    const departmentCode = onlyDigits(input.passportDepartmentCode, 6);
+    if (series.length !== 4 || number.length !== 6 || !issuedBy || !issuedAt) {
+      throw new Error("Fill in passport data.");
+    }
+    if (!passportPhotoProvided) {
+      throw new Error("Passport photo is required for full verification.");
+    }
+    passportData = { series, number, issuedBy, issuedAt, departmentCode: departmentCode || undefined };
+    encryptedPassportData = encryptPassportData(passportData);
+  } else {
+    verificationDeferralReason = normalizeText(input.verificationDeferralReason, 240) || "Проверка компании отложена при регистрации.";
   }
-  if (!passportPhotoProvided) {
-    throw new Error("Passport photo is required for full verification.");
-  }
-  const passportData: ManualPassportData = { series, number, issuedBy, issuedAt, departmentCode: departmentCode || undefined };
-  const encryptedPassportData: EncryptedPassportData = encryptPassportData(passportData);
 
   return {
     employmentType,
@@ -173,7 +185,7 @@ export function parseCompanyApplicationPayload(
     passportData,
     encryptedPassportData,
     companyReferralCode: companyReferralCode || undefined,
-    verificationDeferralReason: undefined,
+    verificationDeferralReason,
     passportPhotoProvided,
     consentAccepted: true,
     termsAcceptedAt: input.termsAccepted === true ? new Date() : null,
@@ -206,8 +218,11 @@ function applicationData(
   companyId: number,
   params: { ipAddress?: string | null; userAgent?: string | null },
 ) {
+  const status: CompanyVerificationStatus =
+    payload.identityVerificationMode === "DEFERRED" ? "DRAFT" : "SUBMITTED";
   return {
     companyId,
+    status,
     employmentType: payload.employmentType,
     identityVerificationMode: payload.identityVerificationMode,
     contactName: payload.contactName,
@@ -280,6 +295,9 @@ export async function createCompanyVerificationApplication(params: {
     ? await findCompanyReferralReferrer(params.payload.companyReferralCode)
     : null;
   const supportManager = await supportManagerConnectData();
+  const verificationStatus: CompanyVerificationStatus =
+    params.payload.identityVerificationMode === "DEFERRED" ? "DRAFT" : "SUBMITTED";
+  const verificationSubmittedAt = verificationStatus === "SUBMITTED" ? new Date() : null;
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
@@ -302,7 +320,7 @@ export async function createCompanyVerificationApplication(params: {
         employmentType: params.payload.employmentType,
         identityVerificationMode: params.payload.identityVerificationMode,
         identityVerificationCompleted: false,
-        verificationStatus: "SUBMITTED",
+        verificationStatus,
         legalFirstName: params.payload.legalFirstName,
         legalMiddleName: params.payload.legalMiddleName ?? null,
         legalLastName: params.payload.legalLastName,
@@ -316,10 +334,10 @@ export async function createCompanyVerificationApplication(params: {
         payoutAccount: params.payload.payoutAccount ?? null,
         payoutCorrespondentAccount: params.payload.payoutCorrespondentAccount ?? null,
         payoutCardLast4: params.payload.payoutCardLast4 ?? null,
-        passportVerificationStatus: "SUBMITTED",
+        passportVerificationStatus: verificationStatus,
         passportLast4: null,
         passportDataDeletedAt: null,
-        verificationSubmittedAt: new Date(),
+        verificationSubmittedAt,
         termsAcceptedAt: params.payload.termsAcceptedAt ?? new Date(),
         termsVersion: params.payload.termsVersion ?? COMPANY_TERMS_VERSION,
       },
@@ -351,7 +369,7 @@ export async function createCompanyVerificationApplication(params: {
         tx,
         companyId: company.id,
         referrerUserId: referrer.id,
-        source: "PUBLIC_REFERRAL",
+        source: PUBLIC_COMPANY_REFERRAL_SOURCE,
         notes: `Registered with public referral code ${params.payload.companyReferralCode}`,
       }).catch(() => undefined);
     }

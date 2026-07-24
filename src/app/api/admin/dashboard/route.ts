@@ -7,6 +7,11 @@ import { calculatePlatformRevenueSummary } from "@/lib/finance/platform-revenue"
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
+const COMPANY_NEARLOY_REFERRAL_PERCENT = 30;
+
+function referralMoney(value: number) {
+  return Math.round(value / 10) * 10;
+}
 
 function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -148,60 +153,35 @@ export async function GET(request: NextRequest) {
       },
     });
     const referralCompanyIds = referralRows.map((row) => row.companyId);
-    const prRevenueSubscriptions = referralCompanyIds.length
-      ? await prisma.userSubscription.findMany({
-          where: { status: { in: ["ACTIVE", "EXPIRED"] }, subscription: { companyId: { in: referralCompanyIds } } },
-          select: {
-            status: true,
-            activatedAt: true,
-            expiresAt: true,
-            subscription: {
-              select: {
-                price: true,
-                company: {
-                  select: {
-                    id: true,
-                    name: true,
-                    platformCommissionPercent: true,
-                    commissionFreeMonthlyTurnover: true,
-                    commissionGraceEndsAt: true,
-                    supportManagerId: true,
-                    currentReferral: {
-                      select: {
-                        referrerUserId: true,
-                        referralPercent: true,
-                        status: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
+    const paidInvoices = referralCompanyIds.length
+      ? await prisma.companyBillingInvoice.findMany({
+          where: { companyId: { in: referralCompanyIds }, status: "PAID" },
+          select: { companyId: true, paidAmount: true },
         })
       : [];
-    const prRevenue = calculatePlatformRevenueSummary(
-      prRevenueSubscriptions
-        .filter((row) => row.subscription.company)
-        .map((row) => ({
-          companyId: row.subscription.company!.id,
-          companyName: row.subscription.company!.name,
-          price: row.subscription.price,
-          status: row.status,
-          activatedAt: row.activatedAt,
-          expiresAt: row.expiresAt,
-          platformCommissionPercent: row.subscription.company!.platformCommissionPercent,
-          commissionFreeMonthlyTurnover: row.subscription.company!.commissionFreeMonthlyTurnover,
-          commissionGraceEndsAt: row.subscription.company!.commissionGraceEndsAt,
-          supportManagerUserId: row.subscription.company!.supportManagerId,
-          supportManagerPercent: 1,
-          referrerUserId: row.subscription.company!.currentReferral?.referrerUserId ?? null,
-          referralPercent: row.subscription.company!.currentReferral?.referralPercent ?? null,
-          referralStatus: row.subscription.company!.currentReferral?.status ?? null,
-        })),
-      new Date(),
+    const paidNearLoyByCompany = new Map<number, number>();
+    for (const invoice of paidInvoices) {
+      paidNearLoyByCompany.set(invoice.companyId, (paidNearLoyByCompany.get(invoice.companyId) ?? 0) + Number(invoice.paidAmount));
+    }
+    const revenueByCompany = new Map(
+      referralRows.map((row) => {
+        const gross = row.status === "ACTIVE" ? (paidNearLoyByCompany.get(row.companyId) ?? 0) : 0;
+        const referralCommission = referralMoney(gross * (COMPANY_NEARLOY_REFERRAL_PERCENT / 100));
+        return [
+          row.companyId,
+          {
+            recognizedGross: Math.round(gross * 100) / 100,
+            futureGross: 0,
+            whiteBoxCommission: Math.round(Math.max(0, gross - referralCommission) * 100) / 100,
+            referralCommission,
+            activeSubscriptions: 0,
+          },
+        ];
+      }),
     );
-    const revenueByCompany = new Map(prRevenue.companies.map((company) => [company.companyId, company]));
+    const prRecognizedGross = [...revenueByCompany.values()].reduce((sum, row) => sum + row.recognizedGross, 0);
+    const prReferralCommission = [...revenueByCompany.values()].reduce((sum, row) => sum + row.referralCommission, 0);
+    const prWhiteBoxCommission = [...revenueByCompany.values()].reduce((sum, row) => sum + row.whiteBoxCommission, 0);
     const pipeline = referralRows.reduce<Record<CompanyReferralPipelineStatus, number>>(
       (acc, row) => {
         acc[row.pipelineStatus] += 1;
@@ -215,11 +195,11 @@ export async function GET(request: NextRequest) {
       totals: {
         companies: referralRows.length,
         activeCompanies: referralRows.filter((row) => row.status === "ACTIVE" && row.company.isActive).length,
-        recognizedGross: prRevenue.recognizedGross,
-        futureGross: prRevenue.futureGross,
-        whiteBoxNetCommission: prRevenue.whiteBoxCommission,
-        referralCommission: prRevenue.referralCommission,
-        supportManagerCommission: prRevenue.supportManagerCommission,
+        recognizedGross: Math.round(prRecognizedGross * 100) / 100,
+        futureGross: 0,
+        whiteBoxNetCommission: Math.round(prWhiteBoxCommission * 100) / 100,
+        referralCommission: Math.round(prReferralCommission * 100) / 100,
+        supportManagerCommission: 0,
       },
       pipeline,
       companies: referralRows.slice(0, 12).map((row) => {

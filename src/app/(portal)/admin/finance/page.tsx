@@ -39,24 +39,24 @@ const ROW_COMPANY_LIMIT = 28;
 const INSPECTOR_TITLE_LIMIT = 64;
 const INSPECTOR_COMPANY_LIMIT = 36;
 
-const defaultManualDraft: ManualDraft = { method: "Р‘Р°РЅРєРѕРІСЃРєРёР№ РїРµСЂРµРІРѕРґ", reference: "", comment: "" };
+const defaultManualDraft: ManualDraft = { method: "Банковский перевод", reference: "", comment: "" };
 const defaultYooKassaDraft: YooKassaDraft = { destinationType: "bank_card", cardNumber: "", yooMoneyWallet: "" };
 
 const statusFilters: Array<{ value: StatusFilter; label: string }> = [
-  { value: "ACTIONABLE", label: "Рљ СЂР°Р±РѕС‚Рµ" },
-  { value: "ALL", label: "Р’СЃРµ" },
-  { value: "PENDING_APPROVAL", label: "РђРїСЂСѓРІ" },
-  { value: "APPROVED", label: "Р’С‹РїР»Р°С‚РёС‚СЊ" },
-  { value: "PAID", label: "Р—Р°РєСЂС‹С‚С‹" },
-  { value: "REJECTED", label: "РћС‚РєР»РѕРЅРµРЅС‹" },
-  { value: "CANCELED", label: "РћС‚РјРµРЅРµРЅС‹" },
+  { value: "ACTIONABLE", label: "К работе" },
+  { value: "ALL", label: "Все" },
+  { value: "PENDING_APPROVAL", label: "Апрув" },
+  { value: "APPROVED", label: "Выплатить" },
+  { value: "PAID", label: "Закрыты" },
+  { value: "REJECTED", label: "Отклонены" },
+  { value: "CANCELED", label: "Отменены" },
 ];
 
 const targetFilters: Array<{ value: TargetFilter; label: string }> = [
-  { value: "ALL", label: "Р’СЃРµ" },
-  { value: "COMPANY", label: "РљРѕРјРїР°РЅРёРё" },
+  { value: "ALL", label: "Все" },
+  { value: "COMPANY", label: "Компании" },
   { value: "PR_AGENT", label: "PR" },
-  { value: "UNLINKED", label: "Р‘РµР· РёСЃС‚РѕС‡РЅРёРєР°" },
+  { value: "UNLINKED", label: "Без источника" },
 ];
 
 const statusTone: Record<AdminFinanceOperation["status"], string> = {
@@ -141,22 +141,22 @@ function financeText(value: string | null | undefined, locale: string) {
 
 function statusLabel(status: AdminFinanceOperation["status"]) {
   const labels: Record<AdminFinanceOperation["status"], string> = {
-    DRAFT: "Р§РµСЂРЅРѕРІРёРє",
-    PENDING_APPROVAL: "РђРїСЂСѓРІ",
-    APPROVED: "Р’С‹РїР»Р°С‚РёС‚СЊ",
-    REJECTED: "РћС‚РєР»РѕРЅРµРЅРѕ",
-    PAID: "Р’С‹РїР»Р°С‡РµРЅРѕ",
-    CANCELED: "РћС‚РјРµРЅРµРЅРѕ",
+    DRAFT: "Черновик",
+    PENDING_APPROVAL: "Апрув",
+    APPROVED: "Выплатить",
+    REJECTED: "Отклонено",
+    PAID: "Выплачено",
+    CANCELED: "Отменено",
   };
   return labels[status];
 }
 
 function providerStatusLabel(status: string | null) {
-  if (!status) return "вЂ”";
+  if (!status) return "—";
   const labels: Record<string, string> = {
-    pending: "РѕР¶РёРґР°РµС‚",
-    succeeded: "СѓСЃРїРµС€РЅРѕ",
-    canceled: "РѕС‚РјРµРЅРµРЅРѕ",
+    pending: "ожидает",
+    succeeded: "успешно",
+    canceled: "отменено",
   };
   return labels[status] ?? status;
 }
@@ -170,15 +170,15 @@ function TargetGlyph({ target, className }: { target?: AdminFinanceOperation["pa
 function targetLabel(item: AdminFinanceOperation) {
   if (item.payoutChecklist?.targetLabel) return item.payoutChecklist.targetLabel;
   if (item.company) return item.company.name;
-  if (item.payoutTarget === "PR_AGENT") return item.requestedBy?.name ?? item.requestedBy?.email ?? "PR-Р°РіРµРЅС‚";
-  return "Р‘РµР· РёСЃС‚РѕС‡РЅРёРєР°";
+  if (item.payoutTarget === "PR_AGENT") return item.requestedBy?.name ?? item.requestedBy?.email ?? "PR-агент";
+  return "Без источника";
 }
 
 function coverageLabel(item: AdminFinanceOperation) {
   const covered = item.companySnapshot?.requestCovered ?? item.referralSnapshot?.requestCovered ?? null;
-  if (covered === true) return "РџРѕРєСЂС‹С‚Рѕ";
-  if (covered === false) return "РќРµ РїРѕРєСЂС‹С‚Рѕ";
-  return "РЎРІРµСЂРёС‚СЊ";
+  if (covered === true) return "Покрыто";
+  if (covered === false) return "Не покрыто";
+  return "Сверить";
 }
 
 function rowPriority(item: AdminFinanceOperation) {
@@ -284,7 +284,7 @@ export default function AdminFinancePage() {
   async function closeManually(item: AdminFinanceOperation) {
     const draft = manualDrafts[item.uuid] ?? defaultManualDraft;
     if (!draft.reference.trim() && !draft.comment.trim()) {
-      setMessage("Р”Р»СЏ СЂСѓС‡РЅРѕРіРѕ Р·Р°РєСЂС‹С‚РёСЏ СѓРєР°Р¶РёС‚Рµ СЂРµС„РµСЂРµРЅСЃ РїРµСЂРµРІРѕРґР° РёР»Рё РєРѕСЂРѕС‚РєРёР№ РєРѕРјРјРµРЅС‚Р°СЂРёР№.");
+      setMessage("Для ручного закрытия укажите референс перевода или короткий комментарий.");
       return;
     }
     setMessage("");
@@ -305,11 +305,11 @@ export default function AdminFinancePage() {
   async function sendYooKassaPayout(item: AdminFinanceOperation) {
     const draft = yooKassaDrafts[item.uuid] ?? defaultYooKassaDraft;
     if (draft.destinationType === "bank_card" && !draft.cardNumber.trim()) {
-      setMessage("Р’РІРµРґРёС‚Рµ РЅРѕРјРµСЂ С‚РµСЃС‚РѕРІРѕР№ РєР°СЂС‚С‹ РґР»СЏ YooKassa.");
+      setMessage("Введите номер тестовой карты для YooKassa.");
       return;
     }
     if (draft.destinationType === "yoo_money" && !draft.yooMoneyWallet.trim()) {
-      setMessage("Р’РІРµРґРёС‚Рµ РЅРѕРјРµСЂ РєРѕС€РµР»СЊРєР° Р®Money.");
+      setMessage("Введите номер кошелька ЮMoney.");
       return;
     }
     setMessage("");
@@ -344,15 +344,15 @@ export default function AdminFinancePage() {
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
               <Banknote className="h-5 w-5 text-cyan-100" />
-              Р¤РёРЅР°РЅСЃРѕРІС‹Рµ РѕРїРµСЂР°С†РёРё
+              Финансовые операции
             </h1>
-            <StatusPill label="РђРїСЂСѓРІ" value={`${stats.pendingCount} В· ${money(stats.pendingTotal, "RUB", locale)}`} tone="amber" />
-            <StatusPill label="Рљ РІС‹РїР»Р°С‚Рµ" value={`${stats.approvedCount} В· ${money(stats.approvedTotal, "RUB", locale)}`} tone="cyan" />
-            <StatusPill label="YooKassa" value={`${stats.providerPendingCount} Р¶РґСѓС‚`} tone="purple" />
-            <StatusPill label="Р РёСЃРєРё" value={String(stats.warningCount)} tone="red" />
+            <StatusPill label="Апрув" value={`${stats.pendingCount} · ${money(stats.pendingTotal, "RUB", locale)}`} tone="amber" />
+            <StatusPill label="К выплате" value={`${stats.approvedCount} · ${money(stats.approvedTotal, "RUB", locale)}`} tone="cyan" />
+            <StatusPill label="YooKassa" value={`${stats.providerPendingCount} ждут`} tone="purple" />
+            <StatusPill label="Риски" value={String(stats.warningCount)} tone="red" />
           </div>
           <Button size="sm" variant="secondary" onClick={() => load()} disabled={loading}>
-            <RefreshCw className="mr-2 h-4 w-4" /> РћР±РЅРѕРІРёС‚СЊ
+            <RefreshCw className="mr-2 h-4 w-4" /> Обновить
           </Button>
         </div>
       </section>
@@ -403,24 +403,24 @@ export default function AdminFinancePage() {
               </colgroup>
               <thead className="border-b border-white/10 text-xs uppercase tracking-[0.18em] text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Р§С‚Рѕ СЃРґРµР»Р°С‚СЊ</th>
-                  <th className="px-3 py-2 font-medium">РСЃС‚РѕС‡РЅРёРє</th>
-                  <th className="px-3 py-2 font-medium">РЎСѓРјРјР°</th>
-                  <th className="px-3 py-2 font-medium">РџСЂРѕРІР°Р№РґРµСЂ</th>
-                  <th className="px-3 py-2 font-medium">РЎРѕР·РґР°РЅРѕ</th>
+                  <th className="px-3 py-2 font-medium">Что сделать</th>
+                  <th className="px-3 py-2 font-medium">Источник</th>
+                  <th className="px-3 py-2 font-medium">Сумма</th>
+                  <th className="px-3 py-2 font-medium">Провайдер</th>
+                  <th className="px-3 py-2 font-medium">Создано</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
                     <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                      Р—Р°РіСЂСѓР¶Р°СЋ РІС‹РїР»Р°С‚С‹вЂ¦
+                      Загружаю выплаты…
                     </td>
                   </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                      Р’С‹РїР»Р°С‚ РїРѕ СЌС‚РёРј СѓСЃР»РѕРІРёСЏРј РЅРµС‚.
+                      Выплат по этим условиям нет.
                     </td>
                   </tr>
                 ) : (
@@ -456,7 +456,7 @@ export default function AdminFinancePage() {
               onYooKassaSync={() => syncYooKassaPayout(selectedItem)}
             />
           ) : (
-            <div className="p-5 text-sm text-muted-foreground">Р’С‹Р±РµСЂРёС‚Рµ РѕРїРµСЂР°С†РёСЋ СЃР»РµРІР°.</div>
+            <div className="p-5 text-sm text-muted-foreground">Выберите операцию слева.</div>
           )}
         </aside>
       </section>
@@ -557,14 +557,14 @@ function FinanceRow({
           <span className="truncate">{shortText(target, ROW_COMPANY_LIMIT)}</span>
         </p>
         <p className="mt-1 truncate text-xs text-muted-foreground" title={item.requestedBy?.email ?? undefined}>
-          {shortText(item.requestedBy?.email ?? "СЃРёСЃС‚РµРјР°", 32)}
+          {shortText(item.requestedBy?.email ?? "система", 32)}
         </p>
       </td>
       <td className="px-3 py-2.5 font-semibold">{money(item.amount, item.currency, locale)}</td>
       <td className="px-3 py-2.5">
         {item.providerPayoutId ? (
           <div className="space-y-1">
-            <Badge className="border-violet-300/25 bg-violet-300/10 text-violet-100">YooKassa В· {providerStatusLabel(item.providerPayoutStatus)}</Badge>
+            <Badge className="border-violet-300/25 bg-violet-300/10 text-violet-100">YooKassa · {providerStatusLabel(item.providerPayoutStatus)}</Badge>
             <p className="max-w-[150px] truncate text-xs text-muted-foreground">{item.providerPayoutId}</p>
           </div>
         ) : (
@@ -641,26 +641,26 @@ function OperationInspector({
 
       <div className="space-y-2 rounded-xl border border-white/10 bg-black/15 p-3">
         <p className="flex items-center gap-2 font-semibold">
-          <ShieldCheck className="h-4 w-4 text-cyan-100" /> Р РµС€РµРЅРёРµ
+          <ShieldCheck className="h-4 w-4 text-cyan-100" /> Решение
         </p>
         <div className="flex flex-wrap gap-2">
           {item.status === "PENDING_APPROVAL" && (
             <>
               <Button size="sm" variant="secondary" disabled={!canApprove} onClick={onApprove}>
-                <CircleCheckBig className="mr-2 h-4 w-4" /> РћРґРѕР±СЂРёС‚СЊ
+                <CircleCheckBig className="mr-2 h-4 w-4" /> Одобрить
               </Button>
               <Button size="sm" variant="destructive" onClick={onReject}>
-                <XCircle className="mr-2 h-4 w-4" /> РћС‚РєР»РѕРЅРёС‚СЊ
+                <XCircle className="mr-2 h-4 w-4" /> Отклонить
               </Button>
             </>
           )}
           {item.status === "APPROVED" && (
             <Button size="sm" variant="outline" onClick={onCancel}>
-              РћС‚РјРµРЅРёС‚СЊ
+              Отменить
             </Button>
           )}
           {item.status !== "PENDING_APPROVAL" && item.status !== "APPROVED" && (
-            <p className="text-sm text-muted-foreground">РђРєС‚РёРІРЅС‹С… РґРµР№СЃС‚РІРёР№ РЅРµС‚.</p>
+            <p className="text-sm text-muted-foreground">Активных действий нет.</p>
           )}
         </div>
       </div>
@@ -693,6 +693,8 @@ function PayoutInfoDetails({ item, locale }: { item: AdminFinanceOperation; loca
   const details = financeText(item.details, locale);
   const target = targetLabel(item);
   const company = item.company;
+  const requisites = item.payoutChecklist?.requisites;
+  const isPrPayout = item.payoutChecklist?.target === "PR_AGENT";
   const requestedBy = item.requestedBy ? `${item.requestedBy.name} · ${item.requestedBy.email}` : "система";
   const approvedBy = item.approvedBy ? `${item.approvedBy.name} · ${item.approvedBy.email}` : "—";
 
@@ -727,12 +729,23 @@ function PayoutInfoDetails({ item, locale }: { item: AdminFinanceOperation; loca
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Компания / источник</p>
           <div className="space-y-1.5 text-xs">
             <MiniLine label="Источник" value={target} />
-            <MiniLine label="Компания" value={company?.name ?? "—"} />
-            <MiniLine label="Slug" value={company?.slug ?? "—"} />
-            <MiniLine label="Банк" value={company?.payoutBankName ?? "—"} />
-            <MiniLine label="БИК" value={company?.payoutBik ?? "—"} />
-            <MiniLine label="Счёт" value={item.payoutChecklist?.requisites?.accountMasked ?? "—"} />
-            <MiniLine label="Корр. счёт" value={item.payoutChecklist?.requisites?.correspondentAccountMasked ?? "—"} />
+            {isPrPayout ? (
+              <>
+                <MiniLine label="PR-менеджер" value={requestedBy} />
+                <MiniLine label="Банк" value={requisites?.bankName ?? "—"} />
+                <MiniLine label="Телефон" value={requisites?.phone ?? "—"} />
+                <MiniLine label="Карта" value={requisites?.cardMasked ?? "—"} />
+              </>
+            ) : (
+              <>
+                <MiniLine label="Компания" value={company?.name ?? "—"} />
+                <MiniLine label="Slug" value={company?.slug ?? "—"} />
+                <MiniLine label="Банк" value={company?.payoutBankName ?? "—"} />
+                <MiniLine label="БИК" value={company?.payoutBik ?? "—"} />
+                <MiniLine label="Счёт" value={requisites?.accountMasked ?? "—"} />
+                <MiniLine label="Корр. счёт" value={requisites?.correspondentAccountMasked ?? "—"} />
+              </>
+            )}
           </div>
         </div>
 
@@ -771,35 +784,35 @@ function YooKassaPanel({
         {item.providerPayoutId ? (
           <Badge className="border-violet-300/25 bg-violet-300/10 text-violet-100">{providerStatusLabel(item.providerPayoutStatus)}</Badge>
         ) : (
-          <Badge variant="outline">С‚РµСЃС‚РѕРІС‹Р№ С€Р»СЋР·</Badge>
+          <Badge variant="outline">тестовый шлюз</Badge>
         )}
       </div>
 
       {item.providerPayoutId ? (
         <div className="space-y-2 text-sm">
-          <MiniLine label="ID РІС‹РїР»Р°С‚С‹" value={item.providerPayoutId} />
-          <MiniLine label="РљСѓРґР°" value={item.payoutDestinationLabel ?? "вЂ”"} />
-          <MiniLine label="РЎРёРЅС…СЂРѕРЅРёР·РёСЂРѕРІР°РЅРѕ" value={item.payoutProviderSyncedAt ? new Date(item.payoutProviderSyncedAt).toLocaleString("ru-RU") : "вЂ”"} />
+          <MiniLine label="ID выплаты" value={item.providerPayoutId} />
+          <MiniLine label="Куда" value={item.payoutDestinationLabel ?? "—"} />
+          <MiniLine label="Синхронизировано" value={item.payoutProviderSyncedAt ? new Date(item.payoutProviderSyncedAt).toLocaleString("ru-RU") : "—"} />
           <Button size="sm" variant="secondary" className="w-full" onClick={onSync}>
-            <RotateCw className="mr-2 h-4 w-4" /> РџСЂРѕРІРµСЂРёС‚СЊ СЃС‚Р°С‚СѓСЃ YooKassa
+            <RotateCw className="mr-2 h-4 w-4" /> Проверить статус YooKassa
           </Button>
         </div>
       ) : (
         <>
           <label className="block space-y-1.5 text-sm">
-            <span className="text-muted-foreground">РљСѓРґР° РѕС‚РїСЂР°РІР»СЏРµРј</span>
+            <span className="text-muted-foreground">Куда отправляем</span>
             <select
               className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none focus:border-violet-200/40"
               value={draft.destinationType}
               onChange={(event) => onDraftChange({ destinationType: event.target.value as YooKassaDraft["destinationType"] })}
             >
-              <option value="bank_card">РўРµСЃС‚РѕРІР°СЏ РєР°СЂС‚Р°</option>
-              <option value="yoo_money">РљРѕС€РµР»С‘Рє Р®Money</option>
+              <option value="bank_card">Тестовая карта</option>
+              <option value="yoo_money">Кошелёк ЮMoney</option>
             </select>
           </label>
           {draft.destinationType === "bank_card" ? (
             <label className="block space-y-1.5 text-sm">
-              <span className="text-muted-foreground">РќРѕРјРµСЂ С‚РµСЃС‚РѕРІРѕР№ РєР°СЂС‚С‹</span>
+              <span className="text-muted-foreground">Номер тестовой карты</span>
               <input
                 className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none focus:border-violet-200/40"
                 value={draft.cardNumber}
@@ -811,7 +824,7 @@ function YooKassaPanel({
             </label>
           ) : (
             <label className="block space-y-1.5 text-sm">
-              <span className="text-muted-foreground">РљРѕС€РµР»С‘Рє Р®Money</span>
+              <span className="text-muted-foreground">Кошелёк ЮMoney</span>
               <input
                 className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none focus:border-violet-200/40"
                 value={draft.yooMoneyWallet}
@@ -823,10 +836,10 @@ function YooKassaPanel({
             </label>
           )}
           <p className="text-xs leading-5 text-muted-foreground">
-            РџРѕР»РЅС‹Р№ РЅРѕРјРµСЂ РєР°СЂС‚С‹ РЅРµ СЃРѕС…СЂР°РЅСЏРµРј: РІ Р‘Р” СѓС…РѕРґРёС‚ С‚РѕР»СЊРєРѕ ID РІС‹РїР»Р°С‚С‹, СЃС‚Р°С‚СѓСЃ РїСЂРѕРІР°Р№РґРµСЂР° Рё РјР°СЃРєР° РЅР°РїСЂР°РІР»РµРЅРёСЏ.
+            Полный номер карты не сохраняем: в БД уходит только ID выплаты, статус провайдера и маска направления.
           </p>
           <Button className="w-full" disabled={!canMarkPaid} onClick={onPayout}>
-            <Send className="mr-2 h-4 w-4" /> РћС‚РїСЂР°РІРёС‚СЊ С‡РµСЂРµР· YooKassa
+            <Send className="mr-2 h-4 w-4" /> Отправить через YooKassa
           </Button>
         </>
       )}
@@ -848,10 +861,10 @@ function ManualClosePanel({
   return (
     <div className="space-y-3 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.04] p-3">
       <p className="flex items-center gap-2 font-semibold">
-        <ClipboardCheck className="h-4 w-4 text-cyan-100" /> Р—Р°РєСЂС‹С‚СЊ РІСЂСѓС‡РЅСѓСЋ
+        <ClipboardCheck className="h-4 w-4 text-cyan-100" /> Закрыть вручную
       </p>
       <label className="block space-y-1.5 text-sm">
-        <span className="text-muted-foreground">РЎРїРѕСЃРѕР±</span>
+        <span className="text-muted-foreground">Способ</span>
         <input
           className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none focus:border-cyan-200/40"
           value={draft.method}
@@ -860,7 +873,7 @@ function ManualClosePanel({
         />
       </label>
       <label className="block space-y-1.5 text-sm">
-        <span className="text-muted-foreground">Р РµС„РµСЂРµРЅСЃ / РЅРѕРјРµСЂ РїР»Р°С‚С‘Р¶РєРё</span>
+        <span className="text-muted-foreground">Референс / номер платёжки</span>
         <input
           className="h-10 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none focus:border-cyan-200/40"
           value={draft.reference}
@@ -870,17 +883,17 @@ function ManualClosePanel({
         />
       </label>
       <label className="block space-y-1.5 text-sm">
-        <span className="text-muted-foreground">РљРѕРјРјРµРЅС‚Р°СЂРёР№</span>
+        <span className="text-muted-foreground">Комментарий</span>
         <textarea
           className="min-h-20 w-full resize-y rounded-xl border border-white/10 bg-black/20 px-3 py-2 outline-none focus:border-cyan-200/40"
           value={draft.comment}
           maxLength={1000}
-          placeholder="Р§С‚Рѕ СЃРІРµСЂРёР»Рё Рё РіРґРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ."
+          placeholder="Что сверили и где подтверждение."
           onChange={(event) => onDraftChange({ comment: event.target.value })}
         />
       </label>
       <Button className="w-full" disabled={!canMarkPaid} onClick={onManualClose}>
-        <CheckCircle2 className="mr-2 h-4 w-4" /> РџРѕРґС‚РІРµСЂРґРёС‚СЊ СЂСѓС‡РЅСѓСЋ РІС‹РїР»Р°С‚Сѓ
+        <CheckCircle2 className="mr-2 h-4 w-4" /> Подтвердить ручную выплату
       </Button>
     </div>
   );
@@ -890,26 +903,26 @@ function CompactCoverage({ item, locale }: { item: AdminFinanceOperation; locale
   if (item.companySnapshot) {
     return (
       <div className="grid grid-cols-2 gap-2">
-        <MiniMetric label="Р”РѕСЃС‚СѓРїРЅРѕ" value={money(item.companySnapshot.availableBeforeThisRequest, item.currency, locale)} />
-        <MiniMetric label="Р—Р°СЏРІРєР°" value={money(item.amount, item.currency, locale)} />
-        <MiniMetric label="Р РµР·РµСЂРІ" value={money(item.companySnapshot.reservedPayouts, item.currency, locale)} />
-        <MiniMetric label="РџРѕРґРїРёСЃРѕРє" value={String(item.companySnapshot.activeSubscriptions)} />
+        <MiniMetric label="Доступно" value={money(item.companySnapshot.availableBeforeThisRequest, item.currency, locale)} />
+        <MiniMetric label="Заявка" value={money(item.amount, item.currency, locale)} />
+        <MiniMetric label="Резерв" value={money(item.companySnapshot.reservedPayouts, item.currency, locale)} />
+        <MiniMetric label="Подписок" value={String(item.companySnapshot.activeSubscriptions)} />
       </div>
     );
   }
   if (item.referralSnapshot) {
     return (
       <div className="grid grid-cols-2 gap-2">
-        <MiniMetric label="Р”РѕСЃС‚СѓРїРЅРѕ PR" value={money(item.referralSnapshot.availableBeforeThisRequest, item.currency, locale)} />
-        <MiniMetric label="Р—Р°СЏРІРєР°" value={money(item.amount, item.currency, locale)} />
-        <MiniMetric label="Р РµР·РµСЂРІ" value={money(item.referralSnapshot.reserved, item.currency, locale)} />
-        <MiniMetric label="РљРѕРјРїР°РЅРёР№" value={`${item.referralSnapshot.activeCompanies}/${item.referralSnapshot.companies}`} />
+        <MiniMetric label="Доступно PR" value={money(item.referralSnapshot.availableBeforeThisRequest, item.currency, locale)} />
+        <MiniMetric label="Заявка" value={money(item.amount, item.currency, locale)} />
+        <MiniMetric label="Резерв" value={money(item.referralSnapshot.reserved, item.currency, locale)} />
+        <MiniMetric label="Компаний" value={`${item.referralSnapshot.activeCompanies}/${item.referralSnapshot.companies}`} />
       </div>
     );
   }
   return (
     <div className="rounded-xl border border-red-300/15 bg-red-300/[0.04] p-3 text-sm text-muted-foreground">
-      РСЃС‚РѕС‡РЅРёРє РІС‹РїР»Р°С‚С‹ РЅРµ РЅР°Р№РґРµРЅ.
+      Источник выплаты не найден.
     </div>
   );
 }
@@ -930,20 +943,21 @@ function CompactChecklist({ item, locale }: { item: AdminFinanceOperation; local
     <div className="space-y-2 rounded-xl border border-white/10 bg-black/15 p-3">
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 font-semibold">
-          <Wallet className="h-4 w-4 text-cyan-100" /> Р§РµРєР»РёСЃС‚
+          <Wallet className="h-4 w-4 text-cyan-100" /> Чеклист
         </p>
         {warnings.length > 0 ? (
-          <Badge className="border-amber-300/25 bg-amber-300/10 text-amber-100">{warnings.length} СЂРёСЃРє</Badge>
+          <Badge className="border-amber-300/25 bg-amber-300/10 text-amber-100">{warnings.length} риск</Badge>
         ) : (
-          <Badge className="border-emerald-300/25 bg-emerald-300/10 text-emerald-100">РћРє</Badge>
+          <Badge className="border-emerald-300/25 bg-emerald-300/10 text-emerald-100">Ок</Badge>
         )}
       </div>
       {requisites && (
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <Requisite label="Р‘Р°РЅРє" value={requisites.bankName} />
-          <Requisite label="Р‘РРљ" value={requisites.bik} />
-          <Requisite label="РЎС‡С‘С‚" value={requisites.accountMasked} />
-          <Requisite label="РљР°СЂС‚Р°" value={requisites.cardLast4 ? `вЂўвЂўвЂўвЂў ${requisites.cardLast4}` : null} />
+          <Requisite label="Банк" value={requisites.bankName} />
+          <Requisite label="БИК" value={requisites.bik} />
+          <Requisite label="Телефон" value={requisites.phone ?? null} />
+          <Requisite label="Счёт" value={requisites.accountMasked} />
+          <Requisite label="Карта" value={requisites.cardMasked ?? (requisites.cardLast4 ? `•••• ${requisites.cardLast4}` : null)} />
         </div>
       )}
       {warnings.length > 0 && (
@@ -963,7 +977,7 @@ function Requisite({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="rounded-lg border border-white/8 bg-white/[0.03] p-2">
       <p className="text-muted-foreground">{label}</p>
-      <p className="mt-0.5 truncate font-semibold">{value ?? "вЂ”"}</p>
+      <p className="mt-0.5 truncate font-semibold">{value ?? "—"}</p>
     </div>
   );
 }

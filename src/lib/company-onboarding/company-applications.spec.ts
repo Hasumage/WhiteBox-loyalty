@@ -91,8 +91,8 @@ describe("company application helpers", () => {
     expect(payload.payoutBankName).toBeUndefined();
   });
 
-  it("does not allow legacy deferred mode to bypass full verification", () => {
-    expect(() => parseCompanyApplicationPayload({
+  it("allows deferred verification without passport data during company registration", () => {
+    const payload = parseCompanyApplicationPayload({
       ...base,
       identityVerificationMode: "DEFERRED",
       passportSeries: "",
@@ -101,7 +101,12 @@ describe("company application helpers", () => {
       passportIssuedAt: "",
       passportPhotoProvided: false,
       verificationDeferralReason: "I want to test the cabinet first and will provide passport verification before subscriptions and payouts.",
-    })).toThrow("passport data");
+    });
+
+    expect(payload.identityVerificationMode).toBe("DEFERRED");
+    expect(payload.passportData).toBeUndefined();
+    expect(payload.encryptedPassportData).toBeUndefined();
+    expect(payload.verificationDeferralReason).toContain("test the cabinet");
   });
 
   it("requires passport data and photo for full verification", () => {

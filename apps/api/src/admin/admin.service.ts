@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { promises as fs } from "fs";
 import { join, resolve } from "path";
@@ -29,6 +29,7 @@ import { MaintenanceStateService } from "../maintenance/maintenance-state.servic
 import { PrismaService } from "../prisma/prisma.service";
 import { assertSubscriptionsEnabled } from "../common/subscriptions-feature";
 import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../subscriptions/subscription-limits";
+import { TelegramNotificationsService } from "../telegram/telegram-notifications.service";
 import { CreateCategoryDto } from "./dto/create-category.dto";
 import { CreateCompanySubscriptionDto } from "./dto/create-company-subscription.dto";
 import { CreatePairedSubscriptionDto } from "./dto/create-paired-subscription.dto";
@@ -108,6 +109,8 @@ export class AdminService {
     private readonly config: ConfigService,
     private readonly maintenance: MaintenanceStateService,
     private readonly email: EmailService,
+    @Optional()
+    private readonly telegramNotifications?: TelegramNotificationsService,
   ) {}
 
   private paymentMoney(value: Prisma.Decimal | number | string | null | undefined) {
@@ -755,7 +758,7 @@ export class AdminService {
   private normalizeLevelRules(
     levelRules?: Array<{ levelName: string; minTotalSpend: number; cashbackPercent: number }>,
   ) {
-    const rules = (levelRules ?? [{ levelName: "Bronze", minTotalSpend: 0, cashbackPercent: 0 }])
+    const rules = (levelRules ?? [{ levelName: "Standart", minTotalSpend: 0, cashbackPercent: 0 }])
       .map((item, index) => ({
         levelName: item.levelName.trim() || `Level ${index + 1}`,
         minTotalSpend: Number(item.minTotalSpend),
@@ -1625,7 +1628,11 @@ export class AdminService {
     if (next.canEdit || next.canApprove) next.canView = true;
     if (role === UserRole.ADMIN) return next;
     if (role === UserRole.MANAGER) {
-      if (scope === PermissionScope.FINANCE || scope === PermissionScope.SETTINGS) {
+      if (
+        scope === PermissionScope.FINANCE ||
+        scope === PermissionScope.PROMOTION ||
+        scope === PermissionScope.SETTINGS
+      ) {
         return { canView: false, canEdit: false, canApprove: false };
       }
       if (scope === PermissionScope.DATABASE) return { canView: next.canView, canEdit: false, canApprove: false };
@@ -1634,6 +1641,7 @@ export class AdminService {
     if (role === UserRole.SUPPORT) {
       if (
         scope === PermissionScope.FINANCE ||
+        scope === PermissionScope.PROMOTION ||
         scope === PermissionScope.SETTINGS ||
         scope === PermissionScope.COMPANY_VERIFICATIONS
       ) {
@@ -2785,6 +2793,10 @@ export class AdminService {
     }
     const status = dto.status ?? CompanyReferralStatus.ACTIVE;
     const pipelineStatus = dto.pipelineStatus ?? CompanyReferralPipelineStatus.CONNECTED;
+    const previousReferral = await this.prisma.companyReferral.findUnique({
+      where: { companyId: user.managedCompany.id },
+      select: { referrerUserId: true, status: true },
+    });
     const referral = await this.prisma.companyReferral.upsert({
       where: { companyId: user.managedCompany.id },
       create: {
@@ -2822,6 +2834,25 @@ export class AdminService {
       targetLabel: user.managedCompany.name,
       tags: ["PR", "REFERRAL", "COMPANY_REVENUE"],
     });
+    const companyName = user.managedCompany.name;
+    if (
+      previousReferral &&
+      previousReferral.referrerUserId !== referrerUserId &&
+      previousReferral.status !== CompanyReferralStatus.ENDED
+    ) {
+      void this.telegramNotifications?.notifyPrCompanyUnassigned(previousReferral.referrerUserId, companyName);
+    }
+    if (status === CompanyReferralStatus.ENDED) {
+      if (previousReferral?.status !== CompanyReferralStatus.ENDED) {
+        void this.telegramNotifications?.notifyPrCompanyUnassigned(referrerUserId, companyName);
+      }
+    } else if (
+      !previousReferral ||
+      previousReferral.referrerUserId !== referrerUserId ||
+      previousReferral.status === CompanyReferralStatus.ENDED
+    ) {
+      void this.telegramNotifications?.notifyPrCompanyAssigned(referrerUserId, companyName, percent);
+    }
     const revenue = await this.companyReferralRevenue(user.managedCompany.id);
     return {
       company: {
@@ -2860,6 +2891,7 @@ export class AdminService {
       targetLabel: user.managedCompany.name,
       tags: ["PR", "REFERRAL", "ENDED"],
     });
+    void this.telegramNotifications?.notifyPrCompanyUnassigned(existing.referrerUserId, user.managedCompany.name);
     return this.getCompanyReferralAdmin(companyUserUuid);
   }
 

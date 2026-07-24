@@ -210,6 +210,7 @@ enum PermissionScope {
   AUDIT
   DATABASE
   TELEGRAM
+  PROMOTION
   SETTINGS
 }
 
@@ -287,25 +288,33 @@ enum EmailVerificationStatus {
 }
 
 model User {
-  id                  Int           @id @default(autoincrement())
-  uuid                String        @unique @default(uuid())
-  telegramId          BigInt?       @unique
-  phoneNumber         String?       @unique
-  phoneVerifiedAt     DateTime?
-  companyReferralCode String?       @unique
-  name                String
-  email               String        @unique
-  role                UserRole      @default(CLIENT)
+  id                          Int           @id @default(autoincrement())
+  uuid                        String        @unique @default(uuid())
+  telegramId                  BigInt?       @unique
+  phoneNumber                 String?       @unique
+  phoneVerifiedAt             DateTime?
+  companyReferralCode         String?       @unique
+  name                        String
+  email                       String        @unique
+  role                        UserRole      @default(CLIENT)
   /// bcrypt hash; null for Telegram-only or OAuth-only users until password is set
-  passwordHash        String?
-  birthDate           DateTime?
-  emailVerifiedAt     DateTime?
-  termsAcceptedAt     DateTime?
-  termsVersion        String?
-  accountStatus       AccountStatus @default(ACTIVE)
-  deletionScheduledAt DateTime?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  passwordHash                String?
+  birthDate                   DateTime?
+  emailVerifiedAt             DateTime?
+  termsAcceptedAt             DateTime?
+  termsVersion                String?
+  prPayoutBankName            String?
+  prPayoutBankCode            String?
+  prPayoutPhone               String?
+  prPayoutCardEncrypted       Bytes?
+  prPayoutCardIv              String?
+  prPayoutCardTag             String?
+  prPayoutCardLast4           String?
+  prPayoutRequisitesUpdatedAt DateTime?
+  accountStatus               AccountStatus @default(ACTIVE)
+  deletionScheduledAt         DateTime?
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
 
   companyLinks                           UserCompany[]
   subscriptions                          UserSubscription[]
@@ -455,6 +464,8 @@ model Company {
   monthlyFeeOverride            Decimal?                  @db.Decimal(10, 2)
   monthlyFeeOverrideEndsAt      DateTime?
   commissionGraceEndsAt         DateTime?
+  recommendationBoostPercent    Int                       @default(0)
+  recommendForEveryone          Boolean                   @default(false)
   isActive                      Boolean                   @default(true)
   operatesOnline                Boolean                   @default(false)
   ownerUserId                   Int?                      @unique
@@ -518,6 +529,7 @@ model Company {
 
   @@index([categoryId])
   @@index([supportManagerId])
+  @@index([recommendForEveryone, recommendationBoostPercent])
   @@index([verificationStatus, verificationSubmittedAt])
 }
 
@@ -563,14 +575,17 @@ model CompanyBillingInvoice {
   amountDue              Decimal                     @db.Decimal(12, 2)
   paidAmount             Decimal                     @default(0) @db.Decimal(12, 2)
   paidAt                 DateTime?
+  appliedPromoCodeId     String?
   createdAt              DateTime                    @default(now())
   updatedAt              DateTime                    @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company          Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appliedPromoCode CompanyBillingPromoCode? @relation("CompanyBillingInvoicePromo", fields: [appliedPromoCodeId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, periodStartsAt])
   @@index([companyId, status, createdAt])
   @@index([status, periodEndsAt])
+  @@index([appliedPromoCodeId])
 }
 
 model CompanyBillingPromoCode {
@@ -591,6 +606,7 @@ model CompanyBillingPromoCode {
 
   createdBy       User                            @relation("CompanyBillingPromoCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   appliedAccounts CompanyBillingAccount[]         @relation("AppliedCompanyBillingPromo")
+  billingInvoices CompanyBillingInvoice[]         @relation("CompanyBillingInvoicePromo")
   redemptions     CompanyBillingPromoRedemption[]
 
   @@index([isActive, expiresAt])
@@ -1240,17 +1256,19 @@ model SubscriptionBundleRedemption {
 }
 
 model UserProfilePreference {
-  id                    Int       @id @default(autoincrement())
-  userId                Int       @unique
-  onboardingCompletedAt DateTime?
-  onboardingSkippedAt   DateTime?
-  geolocationPromptedAt DateTime?
-  profileVisibility     String    @default("PRIVATE")
-  preferredLocale       String    @default("en")
-  marketingOptIn        Boolean   @default(false)
-  showActivityStats     Boolean   @default(true)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  id                          Int       @id @default(autoincrement())
+  userId                      Int       @unique
+  onboardingCompletedAt       DateTime?
+  onboardingSkippedAt         DateTime?
+  geolocationPromptedAt       DateTime?
+  profileVisibility           String    @default("PRIVATE")
+  preferredLocale             String    @default("en")
+  marketingOptIn              Boolean   @default(false)
+  showActivityStats           Boolean   @default(true)
+  browserNotificationsEnabled Boolean   @default(false)
+  geoNotificationsEnabled     Boolean   @default(false)
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

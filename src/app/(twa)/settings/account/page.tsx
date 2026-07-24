@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CalendarDays, CheckCircle2, Copy, ExternalLink, Lock, LogOut, RefreshCw, Send, Shield, ShieldCheck } from "lucide-react";
+import { Bell, CalendarDays, CheckCircle2, Copy, ExternalLink, Lock, LogOut, MapPin, RefreshCw, Send, Shield, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,10 @@ import {
   type UserTelegramConnectionStatus,
   type UserTelegramLink,
 } from "@/lib/api/twa-client";
+import {
+  getBrowserNotificationPermission,
+  requestBrowserNotificationPermission,
+} from "@/lib/browser-notifications/client-module";
 import { maskEmail } from "@/lib/email-mask";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
@@ -34,6 +38,8 @@ const fallbackPreferences: ProfilePreferences = {
   profileVisibility: "PRIVATE",
   marketingOptIn: false,
   showActivityStats: true,
+  browserNotificationsEnabled: false,
+  geoNotificationsEnabled: false,
 };
 
 function maskTelegramId(value: string | null | undefined) {
@@ -59,10 +65,8 @@ export default function SettingsAccountPage() {
   const [user, setUser] = useState<StoredUser | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const [emailNotif, setEmailNotif] = useState(true);
-  const [pushNotif, setPushNotif] = useState(false);
-  const [marketingNotif, setMarketingNotif] = useState(false);
   const [preferences, setPreferences] = useState<ProfilePreferences>(fallbackPreferences);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [birthDate, setBirthDate] = useState("");
   const [savedBirthDate, setSavedBirthDate] = useState("");
   const [birthDateSaving, setBirthDateSaving] = useState(false);
@@ -74,6 +78,7 @@ export default function SettingsAccountPage() {
 
   useEffect(() => {
     setUser(getStoredUser());
+    setNotificationPermission(getBrowserNotificationPermission());
     void (async () => {
       const [profile, telegram] = await Promise.all([getTwaProfile(), getUserTelegramStatus()]);
       setPreferences(profile.preferences);
@@ -98,6 +103,49 @@ export default function SettingsAccountPage() {
       return;
     }
     setPreferences(res.data);
+  }
+
+  async function ensureBrowserNotificationsAllowed() {
+    const permission = await requestBrowserNotificationPermission();
+    setNotificationPermission(permission);
+    if (permission === "unsupported") {
+      setMessage(t("client.account.browserNotificationsUnsupported"));
+      return false;
+    }
+    if (permission !== "granted") {
+      setMessage(t("client.account.browserNotificationsDenied"));
+      return false;
+    }
+    return true;
+  }
+
+  async function toggleBrowserNotifications(checked: boolean) {
+    setMessage(null);
+    if (checked && !(await ensureBrowserNotificationsAllowed())) return;
+    await updatePreference({ browserNotificationsEnabled: checked });
+  }
+
+  async function toggleGeoNotifications(checked: boolean) {
+    setMessage(null);
+    if (checked && !(await ensureBrowserNotificationsAllowed())) return;
+    if (checked && (typeof navigator === "undefined" || !("geolocation" in navigator))) {
+      setMessage(t("client.account.geoNotificationsUnsupported"));
+      return;
+    }
+    if (checked) {
+      const locationAllowed = await new Promise<boolean>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          () => resolve(true),
+          () => resolve(false),
+          { maximumAge: 5 * 60 * 1000, timeout: 8000, enableHighAccuracy: false },
+        );
+      });
+      if (!locationAllowed) {
+        setMessage(t("client.account.geoNotificationsNeedAccess"));
+        return;
+      }
+    }
+    await updatePreference({ geoNotificationsEnabled: checked });
   }
 
   async function saveBirthDate() {
@@ -166,6 +214,7 @@ export default function SettingsAccountPage() {
 
   const masked = user?.email ? maskEmail(user.email) : "-";
   const canSaveBirthDate = birthDate !== savedBirthDate && !birthDateSaving;
+  const telegramConnected = Boolean(telegramStatus?.connected);
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-4 pt-6">
@@ -270,18 +319,43 @@ export default function SettingsAccountPage() {
           <CardTitle className="text-base">{t("client.account.notifications")}</CardTitle>
           <CardDescription>{t("client.account.notificationsSubtitle")}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex items-center justify-between rounded-lg bg-muted/20 px-3 py-2">
-            <p className="text-sm">{t("client.account.email")}</p>
-            <Switch checked={emailNotif} onCheckedChange={setEmailNotif} aria-label="Email notifications" />
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-muted/10 px-3 py-3">
+            <div className="flex min-w-0 gap-3">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-100">
+                <Bell className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{t("client.account.browserNotifications")}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{t("client.account.browserNotificationsSubtitle")}</p>
+                {telegramConnected && (
+                  <p className="mt-1 text-xs text-cyan-100/70">{t("client.account.browserNotificationsTelegramPriority")}</p>
+                )}
+              </div>
+            </div>
+            <Switch
+              checked={preferences.browserNotificationsEnabled}
+              onCheckedChange={(checked) => void toggleBrowserNotifications(checked)}
+              disabled={notificationPermission === "unsupported"}
+              aria-label="Browser notifications"
+            />
           </div>
-          <div className="flex items-center justify-between rounded-lg bg-muted/20 px-3 py-2">
-            <p className="text-sm">{t("client.account.push")}</p>
-            <Switch checked={pushNotif} onCheckedChange={setPushNotif} aria-label="Push notifications" />
-          </div>
-          <div className="flex items-center justify-between rounded-lg bg-muted/20 px-3 py-2">
-            <p className="text-sm">{t("client.account.offers")}</p>
-            <Switch checked={marketingNotif} onCheckedChange={setMarketingNotif} aria-label="Marketing notifications" />
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-muted/10 px-3 py-3">
+            <div className="flex min-w-0 gap-3">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-emerald-300/10 text-emerald-100">
+                <MapPin className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{t("client.account.geoNotifications")}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{t("client.account.geoNotificationsSubtitle")}</p>
+              </div>
+            </div>
+            <Switch
+              checked={preferences.geoNotificationsEnabled}
+              onCheckedChange={(checked) => void toggleGeoNotifications(checked)}
+              disabled={notificationPermission === "unsupported"}
+              aria-label="Nearby partner notifications"
+            />
           </div>
         </CardContent>
       </Card>

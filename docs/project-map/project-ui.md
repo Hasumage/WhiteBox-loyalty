@@ -24,6 +24,12 @@
 | `/settings/business`, `/settings/partnership`, `/settings/reviews` | Profile subpages/placeholders | CLIENT |
 | `/help/*` | FAQ/contact/privacy | Public |
 | `/landing` | Marketing landing and Telegram-backed lead form | Public |
+| `/business` | Business marketing landing with company CTA and giveaway entry | Public |
+| `/business/giveaway` | 100 000 RUB business giveaway page with active-company progress vessel | Public |
+| `/business/giveaway/rules` | Dedicated giveaway participation rules | Public |
+| `/careers` | Localized careers hub with role cards and SEO job metadata | Public |
+| `/careers/[slug]` | Generic vacancy detail page | Public |
+| `/careers/b2b-manager` | Detailed B2B acquisition manager vacancy | Public |
 | `/company/register` | Company onboarding and verification request | Public |
 | `/company` | Company operational dashboard | COMPANY member |
 | `/company/clients` | Cashier QR, points and subscription redemption workspace | COMPANY member |
@@ -76,6 +82,7 @@
 - Page copy is stored in structured dictionaries under `src/lib/i18n/dictionaries`.
 - Locale is persisted in the `wb_locale` cookie and, for authorized users, in `UserProfilePreference.preferredLocale`.
 - New admin pages should not add local language toggles. Add keys to the relevant dictionary namespace and consume them through `useI18n`.
+- Public marketing pages reuse the same RU/EN locale state. Careers content is stored as typed localized role data under `src/app/careers/careerRoles.ts` instead of hard-coded single-language pages.
 
 ## Client UX state
 
@@ -90,6 +97,19 @@
 - Company cards support slug sharing. Authenticated users can favorite/share/route; unauthenticated visitors see a read-only public card with levels, gallery, offers and NearLoy CTA.
 - The route button hides when a company has no active address and should handle multiple addresses as a route-selection case.
 - The big favorite CTA animates into the header heart; removing favorite does not resurrect the big CTA until reload.
+
+## Public marketing UX
+
+- `MarketingHeader` keeps the normal desktop navigation visible on wide screens and switches to a full-screen mobile overlay on phones.
+- The mobile marketing menu overlays the page instead of pushing layout, and contains navigation links, language switcher, login and partner CTA inside the menu.
+- `/business` links companies into registration and into the 100 000 RUB giveaway flow.
+- `/business/giveaway` visualizes progress toward 50 active companies with a liquid-vessel meter and vertical scenario cards using lightweight themed images.
+- `/business/giveaway/rules` is the authoritative public rule page for the giveaway. It is reachable from the giveaway flow, not from the global footer.
+- `/careers` is a public SEO surface for NearLoy jobs; role cards link to individual detail pages and the hero intentionally avoids heavy CTA buttons.
+- `/careers/b2b-manager` is the detailed launch-role page for B2B acquisition, including conditions, expectations and a Telegram CTA to the project lead.
+- `MarketingFooter` is shared by marketing pages and keeps the footer light: careers plus user/company terms links only.
+- Root metadata uses `NEXT_PUBLIC_SITE_URL` with a production fallback so public SEO URLs remain absolute.
+- Unknown routes render the branded 404 page with mascot artwork and standard recovery actions.
 
 ## Map UX
 
@@ -140,6 +160,8 @@
 ## Key components
 
 - `NearLoyLogo` - portal brand.
+- `MarketingHeader` - public landing navigation, desktop nav and mobile overlay menu.
+- `MarketingFooter` - shared public footer for landing, business, giveaway and careers pages.
 - `BottomNav` - client app nav.
 - `CategoryIcon` - shared category icon renderer.
 - `CategoryChipStrip` - horizontal category chips.

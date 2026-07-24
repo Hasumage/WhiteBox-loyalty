@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ const scopeIcons: Record<AdminPermissionScope, typeof Users> = {
   AUDIT: SlidersHorizontal,
   DATABASE: Database,
   TELEGRAM: Send,
+  PROMOTION: TrendingUp,
   SETTINGS: Settings,
 };
 

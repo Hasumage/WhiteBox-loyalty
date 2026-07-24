@@ -16,4 +16,14 @@ export class UpdateProfilePreferencesDto {
   @IsOptional()
   @IsBoolean()
   showActivityStats?: boolean;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  browserNotificationsEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  geoNotificationsEnabled?: boolean;
 }

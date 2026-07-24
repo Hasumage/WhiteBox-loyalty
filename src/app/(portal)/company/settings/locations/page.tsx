@@ -8,11 +8,13 @@ import {
   CheckCircle2,
   Clock3,
   Crosshair,
+  Globe2,
   LocateFixed,
   MapPin,
   Navigation,
   RefreshCcw,
   Save,
+  Store,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +27,7 @@ import {
   companyCreateCompanyLocation,
   companyLocations,
   companyProfile,
+  updateCompanyProfile,
   type CompanyLocation,
   type CompanyProfile,
 } from "@/lib/api/company-client";
@@ -33,6 +36,7 @@ import { useI18n } from "@/lib/i18n/use-i18n";
 
 type Coordinates = { latitude: number; longitude: number };
 type MapStatus = "idle" | "loading" | "ready" | "error";
+type WorkMode = "PHYSICAL" | "ONLINE";
 type LocationDraft = {
   title: string;
   city: string;
@@ -168,6 +172,8 @@ export default function CompanyLocationMapPage() {
   const [mapStatus, setMapStatus] = useState<MapStatus>("idle");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [modeSaving, setModeSaving] = useState<WorkMode | null>(null);
+  const [workMode, setWorkMode] = useState<WorkMode>("PHYSICAL");
   const [pendingPoint, setPendingPoint] = useState<PendingPoint | null>(null);
   const mapNodeRef = useRef<HTMLDivElement | null>(null);
   const ymapsRef = useRef<YandexV2Api | null>(null);
@@ -186,6 +192,7 @@ export default function CompanyLocationMapPage() {
     try {
       const [profile, nextLocations] = await Promise.all([companyProfile(), companyLocations()]);
       setCompany(profile);
+      setWorkMode(profile.company.operatesOnline ? "ONLINE" : "PHYSICAL");
       setLocations(nextLocations);
       const center = locationCoords(nextLocations.find((location) => location.isMain) ?? nextLocations[0]) ?? MOSCOW_CENTER;
       setDraft((prev) => ({ ...prev, latitude: center.latitude, longitude: center.longitude, isMain: nextLocations.length === 0 }));
@@ -246,6 +253,7 @@ export default function CompanyLocationMapPage() {
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY;
     const node = mapNodeRef.current;
+    if (workMode === "ONLINE") return;
     if (!apiKey) {
       setMapStatus("error");
       setMessage(t("admin.companyMap.missingKey"));
@@ -297,7 +305,7 @@ export default function CompanyLocationMapPage() {
       node.innerHTML = "";
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale]);
+  }, [locale, workMode]);
 
   useEffect(() => {
     if (!mapRef.current || !placemarkRef.current) return;
@@ -352,6 +360,65 @@ export default function CompanyLocationMapPage() {
   }
 
   const currentCompany = company?.company;
+  const canManage = Boolean(company && company.member.role !== "CASHIER");
+  const modeCopy = locale === "ru"
+    ? {
+        title: "Адреса или онлайн",
+        description: "Выберите формат работы: точки на карте или онлайн-компания без публичного адреса.",
+        physicalTitle: "Физические точки",
+        physicalHint: "Показываем адреса на карте, клиенты строят маршрут и видят часы работы.",
+        onlineTitle: "Онлайн-формат",
+        onlineHint: "Компания работает без публичной точки: доставка, выездной сервис или digital-услуги.",
+        active: "Выбрано",
+        saveOnline: "Включить онлайн",
+        savePhysical: "Работать по адресам",
+        onlineSaved: "Онлайн-формат сохранён. Компания может быть активна без точки на карте.",
+        physicalSaved: "Формат с адресами сохранён. Добавьте хотя бы одну точку, чтобы компания появилась на карте.",
+        onlineStatusTitle: "Онлайн-позиционирование включено",
+        onlineStatusHint: "Физические адреса можно добавить позже. Сейчас клиенты увидят компанию как онлайн-сервис.",
+        savedAddresses: "Сохранённые адреса",
+        noAddresses: "Адресов пока нет.",
+      }
+    : {
+        title: "Locations or online",
+        description: "Choose how the company works: map locations or an online company without a public address.",
+        physicalTitle: "Physical locations",
+        physicalHint: "Show addresses on the map, routes and working hours.",
+        onlineTitle: "Online mode",
+        onlineHint: "For delivery, on-site services or digital companies without a public point.",
+        active: "Selected",
+        saveOnline: "Enable online",
+        savePhysical: "Use locations",
+        onlineSaved: "Online mode is saved. The company can be active without a map location.",
+        physicalSaved: "Location mode is saved. Add at least one point so the company appears on the map.",
+        onlineStatusTitle: "Online positioning enabled",
+        onlineStatusHint: "Physical addresses can be added later. Customers will see this company as an online service.",
+        savedAddresses: "Saved addresses",
+        noAddresses: "No addresses yet.",
+      };
+
+  async function saveWorkMode(mode: WorkMode) {
+    if (!currentCompany || !canManage) return;
+    setModeSaving(mode);
+    setMessage("");
+    try {
+      const updated = await updateCompanyProfile({
+        name: currentCompany.name,
+        slug: currentCompany.slug,
+        description: currentCompany.description ?? "",
+        operatesOnline: mode === "ONLINE",
+        categoryIds: currentCompany.categories.map((category) => category.id),
+        isActive: currentCompany.isActive,
+      });
+      setCompany(updated);
+      setWorkMode(mode);
+      setMessage(mode === "ONLINE" ? modeCopy.onlineSaved : modeCopy.physicalSaved);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to update company mode.");
+    } finally {
+      setModeSaving(null);
+    }
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-48px)] flex-col gap-3 overflow-hidden">
@@ -383,9 +450,64 @@ export default function CompanyLocationMapPage() {
           </Button>
         </div>
         <div className="mt-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("admin.companyMap.title")}</h1>
-          <p className="mt-1 max-w-4xl text-sm text-muted-foreground">{t("admin.companyMap.description")}</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{modeCopy.title}</h1>
+          <p className="mt-1 max-w-4xl text-sm text-muted-foreground">{modeCopy.description}</p>
         </div>
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <button
+            type="button"
+            disabled={!canManage || modeSaving !== null}
+            onClick={() => void saveWorkMode("PHYSICAL")}
+            className={cn(
+              "group rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-200/35 hover:bg-cyan-200/[0.07]",
+              workMode === "PHYSICAL" ? "border-cyan-200/35 bg-cyan-200/[0.09]" : "border-white/10 bg-black/20",
+            )}
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/25 bg-cyan-200/10 text-cyan-50">
+                <Store className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-lg font-semibold">{modeCopy.physicalTitle}</p>
+                  {workMode === "PHYSICAL" && <Badge variant="outline">{modeCopy.active}</Badge>}
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{modeCopy.physicalHint}</p>
+                <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-50">
+                  {modeSaving === "PHYSICAL" ? t("admin.companyMap.saving") : modeCopy.savePhysical}
+                  <Navigation className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                </span>
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            disabled={!canManage || modeSaving !== null}
+            onClick={() => void saveWorkMode("ONLINE")}
+            className={cn(
+              "group rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-200/35 hover:bg-cyan-200/[0.07]",
+              workMode === "ONLINE" ? "border-emerald-300/35 bg-emerald-300/[0.08]" : "border-white/10 bg-black/20",
+            )}
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-200/25 bg-emerald-200/10 text-emerald-50">
+                <Globe2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-lg font-semibold">{modeCopy.onlineTitle}</p>
+                  {workMode === "ONLINE" && <Badge variant="outline">{modeCopy.active}</Badge>}
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{modeCopy.onlineHint}</p>
+                <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-50">
+                  {modeSaving === "ONLINE" ? t("admin.companyMap.saving") : modeCopy.saveOnline}
+                  <Navigation className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                </span>
+              </div>
+            </div>
+          </button>
+        </div>
+        {workMode === "PHYSICAL" && (
         <div className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-3">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -461,8 +583,46 @@ export default function CompanyLocationMapPage() {
             <div className={cn("mt-3 rounded-2xl border p-3 text-sm", message.includes("failed") || message.includes("Error") ? "border-red-300/30 bg-red-950/20 text-red-100" : "border-cyan-200/20 bg-cyan-200/10 text-cyan-50")}>{message}</div>
           )}
         </div>
+        )}
+        {workMode === "ONLINE" && (
+          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="rounded-3xl border border-emerald-300/20 bg-[radial-gradient(circle_at_top_left,rgba(110,231,183,0.16),transparent_34%),rgba(16,185,129,0.05)] p-5">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-200/25 bg-emerald-200/10 text-emerald-50">
+                  <Globe2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold">{modeCopy.onlineStatusTitle}</p>
+                  <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{modeCopy.onlineStatusHint}</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+              <p className="flex items-center gap-2 text-base font-semibold">
+                <MapPin className="h-5 w-5 text-primary" />
+                {modeCopy.savedAddresses}
+              </p>
+              <div className="mt-4 space-y-2">
+                {locations.length === 0 && <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm text-muted-foreground">{modeCopy.noAddresses}</p>}
+                {locations.slice(0, 4).map((location) => (
+                  <div key={location.uuid} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold">{location.title || location.city || t("admin.companyDetail.locationLabel")}</p>
+                      {location.isMain && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                    </div>
+                    <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{location.address}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {message && (
+              <div className={cn("rounded-2xl border p-3 text-sm lg:col-span-2", message.includes("failed") || message.includes("Error") ? "border-red-300/30 bg-red-950/20 text-red-100" : "border-cyan-200/20 bg-cyan-200/10 text-cyan-50")}>{message}</div>
+            )}
+          </div>
+        )}
       </section>
 
+      {workMode === "PHYSICAL" && (
       <div className="grid min-h-0 flex-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card className="relative min-h-0 overflow-hidden border-white/10 bg-muted/10">
           <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-md rounded-2xl border border-black/10 bg-black/55 p-3 text-sm shadow-2xl backdrop-blur-xl">
@@ -544,6 +704,7 @@ export default function CompanyLocationMapPage() {
           )}
         </div>
       </div>
+      )}
       <style jsx global>{`
         .map-picker-scroll {
           scrollbar-width: none;

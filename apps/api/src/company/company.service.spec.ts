@@ -1,12 +1,15 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import {
+  AccountStatus,
   CompanyMemberRole,
   FinanceOperationStatus,
+  Prisma,
   SubscriptionBundleParticipantStatus,
   SubscriptionBundleStatus,
   SubscriptionEntitlementWindow,
   SubscriptionSpendPolicy,
   SubscriptionStatus,
+  UserRole,
 } from "@prisma/client";
 import { CompanyService } from "./company.service";
 
@@ -54,7 +57,7 @@ describe("CompanyService", () => {
     companyBillingAccount: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     companyBillingPromoCode: { findUnique: jest.Mock; update: jest.Mock };
     companyBillingPromoRedemption: { findUnique: jest.Mock; create: jest.Mock };
-    companyReferral: { findUnique: jest.Mock };
+    companyReferral: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     userSubscription: { findMany: jest.Mock };
     subscriptionBundle: { findUnique: jest.Mock; findUniqueOrThrow: jest.Mock; update: jest.Mock };
     subscriptionBundleParticipant: { update: jest.Mock };
@@ -74,7 +77,7 @@ describe("CompanyService", () => {
     companyBillingAccount: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     companyBillingPromoCode: { findUnique: jest.Mock; update: jest.Mock };
     companyBillingPromoRedemption: { findUnique: jest.Mock; create: jest.Mock };
-    companyReferral: { findUnique: jest.Mock };
+    companyReferral: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     userSubscription: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     subscription: { findMany: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     userSubscriptionBundle: { findFirst: jest.Mock; findMany: jest.Mock; create: jest.Mock };
@@ -129,7 +132,7 @@ describe("CompanyService", () => {
       companyBillingAccount: { findUnique: jest.fn().mockResolvedValue(activeTrialBillingAccount), create: jest.fn(), update: jest.fn() },
       companyBillingPromoCode: { findUnique: jest.fn(), update: jest.fn() },
       companyBillingPromoRedemption: { findUnique: jest.fn(), create: jest.fn() },
-      companyReferral: { findUnique: jest.fn().mockResolvedValue(null) },
+      companyReferral: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn(), update: jest.fn() },
       userSubscription: { findMany: jest.fn().mockResolvedValue([]) },
       subscriptionBundle: {
         findUnique: jest.fn(),
@@ -1344,7 +1347,8 @@ describe("CompanyService", () => {
       monthlyFeeOverrideEndsAt: null,
       currentReferral: {
         status: "ACTIVE",
-        referrer: { id: 2, uuid: "pr-manager", name: "PR Manager", email: "pr@nearloy.test" },
+        source: "PUBLIC_REFERRAL",
+        referrer: { id: 2, uuid: "pr-manager", name: "PR Manager", email: "pr@nearloy.test", role: UserRole.MANAGER },
       },
     });
     prisma.companyBillingInvoice.findUnique.mockResolvedValue(null);
@@ -1352,7 +1356,8 @@ describe("CompanyService", () => {
     prisma.companyBillingInvoice.findMany.mockResolvedValue([invoice]);
     prisma.companyReferral.findUnique.mockResolvedValue({
       status: "ACTIVE",
-      referrer: { id: 2, uuid: "pr-manager", name: "PR Manager", email: "pr@nearloy.test" },
+      source: "PUBLIC_REFERRAL",
+      referrer: { id: 2, uuid: "pr-manager", name: "PR Manager", email: "pr@nearloy.test", role: UserRole.MANAGER },
     });
     prisma.userSubscription.findMany.mockResolvedValue([]);
 
@@ -1361,9 +1366,198 @@ describe("CompanyService", () => {
     expect(result.referralManager).toEqual(expect.objectContaining({ uuid: "pr-manager" }));
     expect(result.monthlyRevenueSplit).toEqual({
       referralPercent: 30,
-      referralAmount: 1497,
-      platformAmount: 3493,
+      referralAmount: 1500,
+      platformAmount: 3490,
     });
+  });
+
+  it("does not split monthly access revenue when the fallback owner is a super admin", async () => {
+    const now = new Date();
+    const account = {
+      companyId: 7,
+      status: "ACTIVE",
+      trialEndsAt: new Date(now.getTime() - DAY_MS * 31),
+      currentPeriodStartsAt: now,
+      currentPeriodEndsAt: new Date(now.getTime() + DAY_MS * 30),
+      appliedPromoCode: null,
+    };
+    const invoice = {
+      uuid: "current-invoice",
+      status: "OPEN",
+      periodStartsAt: account.currentPeriodStartsAt,
+      periodEndsAt: account.currentPeriodEndsAt,
+      baseFee: 4990,
+      promoDiscountPercent: 0,
+      promoDiscountAmount: 0,
+      commissionCreditAmount: 0,
+      amountDue: 4990,
+      paidAmount: 0,
+    };
+    const systemReferral = {
+      status: "ACTIVE",
+      source: "SYSTEM_SUPER_ADMIN",
+      referrer: { id: 1, uuid: "super-admin", name: "Super Admin", email: "admin@nearloy.test", role: UserRole.SUPER_ADMIN },
+    };
+    prisma.companyBillingAccount.findUnique.mockResolvedValue(account);
+    prisma.companyBillingInvoice.findFirst.mockResolvedValue(null);
+    prisma.company.findUniqueOrThrow.mockResolvedValue({
+      platformMonthlyFee: 4990,
+      monthlyFeeOverride: null,
+      monthlyFeeOverrideEndsAt: null,
+      currentReferral: systemReferral,
+    });
+    prisma.companyBillingInvoice.findUnique.mockResolvedValue(null);
+    prisma.companyBillingInvoice.upsert.mockResolvedValue(invoice);
+    prisma.companyBillingInvoice.findMany.mockResolvedValue([invoice]);
+    prisma.companyReferral.findUnique.mockResolvedValue(systemReferral);
+    prisma.userSubscription.findMany.mockResolvedValue([]);
+
+    const result = await service.billing(50);
+
+    expect(result.referralManager).toBeNull();
+    expect(result.monthlyRevenueSplit).toEqual({
+      referralPercent: 0,
+      referralAmount: 0,
+      platformAmount: 4990,
+    });
+  });
+
+  it("stores the billing promo code without reassigning PR before payment", async () => {
+    prisma.companyBillingPromoCode.findUnique.mockResolvedValue({
+      id: "promo-1",
+      code: "SAVE80",
+      isActive: true,
+      startsAt: null,
+      expiresAt: null,
+      maxRedemptions: null,
+      redemptionCount: 0,
+    });
+    tx.companyBillingPromoRedemption.findUnique.mockResolvedValue(null);
+    const billingSpy = jest.spyOn(service, "billing").mockResolvedValue({ ok: true } as never);
+
+    await service.applyBillingPromo(50, { code: "save80" });
+
+    expect(tx.companyBillingPromoRedemption.create).toHaveBeenCalledWith({
+      data: { promoCodeId: "promo-1", companyId: 7 },
+    });
+    expect(tx.companyBillingAccount.update).toHaveBeenCalledWith({
+      where: { companyId: 7 },
+      data: { appliedPromoCodeId: "promo-1" },
+    });
+    expect(tx.companyReferral.update).not.toHaveBeenCalled();
+    expect(tx.companyReferral.create).not.toHaveBeenCalled();
+    billingSpy.mockRestore();
+  });
+
+  it("reassigns a system-owned company to the PR manager after a discounted billing payment", async () => {
+    const now = new Date();
+    const account = {
+      companyId: 7,
+      status: "ACTIVE",
+      trialEndsAt: new Date(now.getTime() - DAY_MS * 31),
+      currentPeriodStartsAt: now,
+      currentPeriodEndsAt: new Date(now.getTime() + DAY_MS * 30),
+      appliedPromoCode: {
+        id: "promo-1",
+        code: "SAVE80",
+        isActive: true,
+        startsAt: null,
+        expiresAt: null,
+        discountPercent: 80,
+      },
+    };
+    const invoice = {
+      id: "invoice-1",
+      uuid: "current-invoice",
+      status: "OPEN",
+      periodStartsAt: account.currentPeriodStartsAt,
+      periodEndsAt: account.currentPeriodEndsAt,
+      baseFee: 4990,
+      promoDiscountPercent: 80,
+      promoDiscountAmount: 3992,
+      commissionCreditAmount: 0,
+      amountDue: 998,
+      paidAmount: 0,
+      appliedPromoCodeId: "promo-1",
+    };
+    prisma.companyBillingAccount.findUnique.mockResolvedValue(account);
+    prisma.companyBillingInvoice.findFirst.mockResolvedValue(null);
+    prisma.company.findUniqueOrThrow.mockResolvedValue({
+      platformMonthlyFee: 4990,
+      monthlyFeeOverride: null,
+      monthlyFeeOverrideEndsAt: null,
+      currentReferral: null,
+    });
+    prisma.companyBillingInvoice.findUnique.mockResolvedValue(null);
+    prisma.companyBillingInvoice.upsert.mockResolvedValue(invoice);
+    prisma.companyBillingInvoice.findMany.mockResolvedValue([invoice]);
+    tx.userSubscription.findMany.mockResolvedValue([
+      {
+        status: SubscriptionStatus.ACTIVE,
+        activatedAt: new Date(now.getTime() - DAY_MS * 20),
+        expiresAt: new Date(now.getTime() + DAY_MS * 10),
+        subscription: { price: 30000 },
+      },
+    ]);
+    tx.companyBillingPromoCode.findUnique.mockResolvedValue({
+      code: "SAVE80",
+      createdBy: { id: 33, role: UserRole.MANAGER, accountStatus: AccountStatus.ACTIVE },
+    });
+    tx.companyReferral.findUnique.mockResolvedValue({
+      companyId: 7,
+      referrerUserId: 1,
+      status: "ACTIVE",
+      source: "SYSTEM_SUPER_ADMIN",
+      referrer: { id: 1, role: UserRole.SUPER_ADMIN },
+    });
+    const billingSpy = jest.spyOn(service, "billing").mockResolvedValue({ ok: true } as never);
+
+    await service.payBillingInvoice(50);
+
+    expect(tx.companyBillingInvoice.update).toHaveBeenCalledWith({
+      where: { id: "invoice-1" },
+      data: { status: "PAID", paidAmount: invoice.amountDue, paidAt: expect.any(Date) },
+    });
+    expect(tx.companyReferral.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { companyId: 7 },
+        data: expect.objectContaining({
+          referrerUserId: 33,
+          referralPercent: new Prisma.Decimal(30),
+          source: "PROMO_CODE",
+          pipelineStatus: "CONNECTED",
+        }),
+      }),
+    );
+    billingSpy.mockRestore();
+  });
+
+  it("keeps an existing PR manager when another PR promo code is applied", async () => {
+    prisma.companyBillingPromoCode.findUnique.mockResolvedValue({
+      id: "promo-2",
+      code: "OTHERPR",
+      isActive: true,
+      startsAt: null,
+      expiresAt: null,
+      maxRedemptions: null,
+      redemptionCount: 0,
+      createdBy: { id: 33, role: UserRole.MANAGER, accountStatus: AccountStatus.ACTIVE },
+    });
+    tx.companyBillingPromoRedemption.findUnique.mockResolvedValue(null);
+    tx.companyReferral.findUnique.mockResolvedValue({
+      companyId: 7,
+      referrerUserId: 44,
+      status: "ACTIVE",
+      source: "PUBLIC_REFERRAL",
+      referrer: { id: 44, role: UserRole.MANAGER },
+    });
+    const billingSpy = jest.spyOn(service, "billing").mockResolvedValue({ ok: true } as never);
+
+    await service.applyBillingPromo(50, { code: "otherpr" });
+
+    expect(tx.companyReferral.update).not.toHaveBeenCalled();
+    expect(tx.companyReferral.create).not.toHaveBeenCalled();
+    billingSpy.mockRestore();
   });
 
   it("rejects a payout above the earned unreserved balance", async () => {

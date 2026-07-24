@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, BarChart3, Building2, CircleDollarSign, Handshake, MapPinned, QrCode, ShieldCheck, Store, TicketCheck, Trophy, Users } from "lucide-react";
+import { ArrowRight, BarChart3, Building2, CircleDollarSign, Gift, Handshake, MapPinned, QrCode, ShieldCheck, Sparkles, Store, TicketCheck, Trophy, Users } from "lucide-react";
 import { LandingLeadForm } from "@/components/landing/LandingLeadForm";
+import { MarketingFooter } from "@/components/landing/MarketingFooter";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
 
 export const metadata: Metadata = {
@@ -92,6 +93,45 @@ export default function BusinessLandingPage() {
           title="Кабинет с финансовой картиной"
           text="Подписки, клиенты, выплаты, текущая и будущая прибыль в одном рабочем пространстве."
         />
+      </section>
+
+      <section className="relative z-10 px-4 pb-16 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <GlowCard className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_0.72fr] lg:items-center">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(168,85,247,0.20),transparent_30%),radial-gradient(circle_at_88%_12%,rgba(34,211,238,0.16),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.09),transparent_42%)]" />
+            <div className="relative">
+              <div className="inline-flex items-center gap-2 rounded-full border border-violet-200/25 bg-violet-300/10 px-4 py-2 text-sm font-semibold text-violet-50">
+                <Gift className="h-4 w-4" />
+                Розыгрыш для бизнеса
+              </div>
+              <h2 className="mt-5 max-w-3xl text-3xl font-semibold tracking-tight sm:text-5xl">
+                100 000 ₽ на развитие компании после 50 активных компаний
+              </h2>
+              <p className="mt-4 max-w-2xl text-lg leading-8 text-white/62">
+                Подключите российскую компанию к NearLoy и участвуйте в розыгрыше гранта на развитие бизнеса. Чем ближе отметка 50 активных компаний, тем ближе день выбора победителя.
+              </p>
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+                <Link href="/business/giveaway" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-sm font-semibold text-[#07101e] transition hover:bg-white/90">
+                  Смотреть розыгрыш
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link href="/business/giveaway/rules" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/7 px-6 text-sm font-semibold text-white transition hover:bg-white/12">
+                  Правила участия
+                </Link>
+              </div>
+            </div>
+            <div className="relative overflow-hidden rounded-[1.75rem] border border-cyan-100/18 bg-black/30 p-6">
+              <Sparkles className="absolute right-5 top-5 h-8 w-8 text-cyan-100/70" />
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-100/58">Цель</p>
+              <p className="mt-4 text-5xl font-semibold">50</p>
+              <p className="mt-2 text-sm leading-6 text-white/58">активных компаний в NearLoy</p>
+              <div className="mt-6 h-3 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-cyan-200 via-violet-300 to-fuchsia-300" />
+              </div>
+              <p className="mt-3 text-xs text-white/45">Актуальный прогресс — на странице розыгрыша.</p>
+            </div>
+          </GlowCard>
+        </div>
       </section>
 
       <section id="features" className="relative z-10 border-y border-white/10 bg-white/[0.035] py-16">
@@ -207,6 +247,8 @@ export default function BusinessLandingPage() {
           <LandingLeadForm source="business_landing" title="Подключить компанию" note="Опишите бизнес и желаемый сценарий: бонусы, подписки, касса, онлайн-формат или партнёрская подписка." />
         </div>
       </section>
+
+      <MarketingFooter />
     </main>
   );
 }

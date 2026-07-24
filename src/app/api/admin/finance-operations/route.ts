@@ -55,7 +55,18 @@ export async function GET(request: NextRequest) {
           payoutCardLast4: true,
         },
       },
-      requestedBy: { select: { id: true, uuid: true, email: true, name: true } },
+      requestedBy: {
+        select: {
+          id: true,
+          uuid: true,
+          email: true,
+          name: true,
+          prPayoutBankName: true,
+          prPayoutBankCode: true,
+          prPayoutPhone: true,
+          prPayoutCardLast4: true,
+        },
+      },
       approvedBy: { select: { id: true, uuid: true, email: true, name: true } },
     },
   });

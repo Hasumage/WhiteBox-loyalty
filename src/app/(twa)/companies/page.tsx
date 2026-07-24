@@ -4,12 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, ChevronRight, Heart, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Gift, Heart, Search, SlidersHorizontal, X } from "lucide-react";
 import type { ApiCategory } from "@/lib/api/categories-client";
 import { getCachedFavoriteCategorySlugs, getFavoriteCategorySlugs } from "@/lib/api/categories-client";
 import { getCachedTwaCompanies, getTwaCompanies, type TwaCompany } from "@/lib/api/twa-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +26,7 @@ import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { categoryName } from "@/lib/i18n/categories";
+import { companyLevelName } from "@/lib/i18n/company-levels";
 
 const POPULAR_CATEGORY_SLUGS = ["coffee", "books", "auto", "barber", "beauty", "food", "fitness", "retail"];
 
@@ -279,6 +279,11 @@ export default function CompaniesPage() {
       <ul className="space-y-3">
         {filteredCompanies.map((company, index) => {
           const progressPercent = company.level.progressPercent;
+          const visualProgressPercent = company.level.next ? Math.max(progressPercent, 6) : 100;
+          const nextLevelName = company.level.next
+            ? companyLevelName(company.level.next.levelName, locale, t("client.common.topLevel"))
+            : t("client.common.topLevel");
+          const isWarmAccent = index % 2 === 1;
           const companyCategories = uniqueCompanyCategories(company);
           const badges = companyCategories.slice(0, 3);
           const extraCount = Math.max(0, companyCategories.length - badges.length);
@@ -292,14 +297,35 @@ export default function CompaniesPage() {
               transition={{ delay: Math.min(index * 0.04, 0.24) }}
             >
               <Link href={`/wallet/${company.slug}`}>
-                <Card className="glass cursor-pointer border-white/10 transition-all active:scale-[0.98] hover:border-white/20">
-                  <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 px-4 py-3 pb-1">
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <Card
+                  className={cn(
+                    "glass group relative overflow-hidden rounded-[1.75rem] border-white/10 bg-[#070c13]/90 shadow-[0_18px_50px_rgba(0,0,0,0.28)] transition-all active:scale-[0.98] hover:border-white/20",
+                    isWarmAccent ? "hover:shadow-amber-950/25" : "hover:shadow-sky-950/25",
+                  )}
+                >
+                  <div
+                    aria-hidden
+                    className={cn(
+                      "pointer-events-none absolute -left-16 -top-16 h-44 w-44 rounded-full opacity-25 blur-3xl transition-opacity group-hover:opacity-35",
+                      isWarmAccent ? "bg-amber-500" : "bg-sky-500",
+                    )}
+                  />
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent"
+                  />
+                  <CardHeader className="relative flex flex-row items-start justify-between gap-3 space-y-0 px-4 pb-2 pt-4">
+                    <div className="flex min-w-0 flex-1 items-start gap-3.5">
+                      <div
+                        className={cn(
+                          "relative flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_24px_rgba(56,189,248,0.16)]",
+                          isWarmAccent ? "border-amber-300/25" : "border-sky-300/25",
+                        )}
+                      >
                         {company.logoUrl ? (
-                          <Image src={company.logoUrl} alt={company.name} fill sizes="56px" className="object-cover" />
+                          <Image src={company.logoUrl} alt={company.name} fill sizes="72px" className="object-cover" />
                         ) : (
-                          <CategoryIcon iconName={company.category?.icon ?? "Building2"} className="h-6 w-6 text-primary" />
+                          <CategoryIcon iconName={company.category?.icon ?? "Building2"} className="h-8 w-8 text-primary" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1 pt-0.5">
@@ -325,19 +351,57 @@ export default function CompaniesPage() {
                     </div>
                     <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
                   </CardHeader>
-                  <CardContent className="px-4 pb-4 pt-0">
-                    <p className="mb-2 text-xl font-bold tabular-nums text-primary">
-                      {company.points.balance}
-                      <span className="ml-1 text-sm font-normal text-muted-foreground">{t("client.common.pointsShort")}</span>
-                    </p>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{company.level.current?.levelName ?? t("client.common.member")}</span>
-                        <span>
-                          {company.level.next ? `${company.level.next.pointsToNext} ${t("client.common.ptsLeft")}` : t("client.common.topLevel")}
-                        </span>
+                  <CardContent className="relative px-4 pb-4 pt-0">
+                    <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                      <p className="mb-2 truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                        {locale === "ru" ? `Прогресс к уровню ${nextLevelName}` : `Progress to ${nextLevelName}`}
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className={cn(
+                                "h-full rounded-full bg-gradient-to-r shadow-[0_0_14px_rgba(56,189,248,0.45)] transition-all",
+                                isWarmAccent ? "from-amber-400 via-orange-400 to-yellow-200" : "from-sky-400 via-blue-400 to-cyan-200",
+                              )}
+                              style={{ width: `${visualProgressPercent}%` }}
+                            />
+                          </div>
+                          <div className="mt-2 flex justify-between gap-3 text-xs">
+                            <span className={cn("text-base tabular-nums", isWarmAccent ? "text-amber-200" : "text-sky-200")}>
+                              <span className="font-extrabold">{company.level.totalSpentPoints}</span>{" "}
+                              <span className="font-normal text-muted-foreground">{t("client.common.pointsShort")}</span>
+                            </span>
+                            <span className="shrink-0 text-muted-foreground">
+                              {company.level.next
+                                ? `${company.level.next.minTotalSpend} ${t("client.common.pointsShort")}`
+                                : t("client.common.topLevel")}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2 border-l border-white/10 pl-3">
+                          <span
+                            className={cn(
+                              "flex h-9 w-9 items-center justify-center rounded-full",
+                              isWarmAccent ? "bg-amber-400/15 text-amber-200" : "bg-sky-400/15 text-sky-200",
+                            )}
+                          >
+                            <Gift className="h-5 w-5" />
+                          </span>
+                          <span className="hidden min-[420px]:block text-xs text-muted-foreground">
+                            {company.level.next ? (
+                              <>
+                                {locale === "ru" ? "До " : "To "}
+                                <b className={cn("block font-semibold", isWarmAccent ? "text-amber-200" : "text-sky-200")}>
+                                  {nextLevelName}
+                                </b>
+                              </>
+                            ) : (
+                              <b className="font-semibold text-foreground">{t("client.common.topLevel")}</b>
+                            )}
+                          </span>
+                        </div>
                       </div>
-                      <Progress value={progressPercent} className="h-1.5" />
                     </div>
                   </CardContent>
                 </Card>

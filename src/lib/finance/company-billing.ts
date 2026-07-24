@@ -17,6 +17,10 @@ function money(value: number) {
   return Math.round(Math.max(0, value) * 100) / 100;
 }
 
+function referralMoney(value: number) {
+  return Math.round(money(value) / 10) * 10;
+}
+
 export function calculateCompanyBilling(input: CompanyBillingCalculationInput): CompanyBillingCalculation {
   const baseFee = money(input.baseFee);
   const promoDiscountPercent = Math.min(100, Math.max(0, input.promoDiscountPercent ?? 0));
@@ -36,7 +40,7 @@ export function calculateCompanyBilling(input: CompanyBillingCalculationInput): 
 
 export function calculateMonthlyAccessSplit(paidAmount: number, hasReferralManager: boolean) {
   const referralPercent = hasReferralManager ? 30 : 0;
-  const referralAmount = money(paidAmount * (referralPercent / 100));
+  const referralAmount = referralPercent > 0 ? referralMoney(paidAmount * (referralPercent / 100)) : 0;
   return {
     referralPercent,
     referralAmount,

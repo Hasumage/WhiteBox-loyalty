@@ -2,9 +2,10 @@ import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDes
 import { CompanyMemberRole, PaymentProvider, PaymentPurpose, PaymentStatus, Prisma, SubscriptionBundleStatus, SubscriptionStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
+import { reassignCompanyReferralFromBillingPromo } from "../company/company-referral-attribution";
+import { assertSubscriptionsEnabled } from "../common/subscriptions-feature";
 import { PrismaService } from "../prisma/prisma.service";
 import { RegisteredService } from "../registered/registered.service";
-import { assertSubscriptionsEnabled } from "../common/subscriptions-feature";
 import { decryptPaymentMethodId, encryptPaymentMethodId } from "./payment-method-crypto";
 import { YooKassaPaymentObject, YooKassaService } from "./yookassa.service";
 
@@ -606,6 +607,12 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           currentPeriodStartsAt: periodStartsAt,
           currentPeriodEndsAt: periodEndsAt,
         },
+      });
+
+      await reassignCompanyReferralFromBillingPromo({
+        tx,
+        companyId: invoice.companyId,
+        promoCodeId: invoice.appliedPromoCodeId,
       });
 
       const savedPaymentMethod = this.extractSavedPaymentMethod(payment.providerPayload);

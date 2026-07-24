@@ -1,16 +1,23 @@
 import { randomUUID } from "node:crypto";
-import type { CompanyReferralStatus, FinanceOperationStatus, Prisma } from "@prisma/client";
+import { AccountStatus, Prisma, UserRole, type CompanyReferralStatus, type FinanceOperationStatus } from "@prisma/client";
 import { supportManagerSharePercent } from "./support-manager";
 import { calculatePlatformRevenueSummary, type PlatformRevenueSubscription } from "@/lib/finance/platform-revenue";
 import { prisma } from "@/lib/prisma";
+import { hasPrPayoutDestination, serializePrPayoutRequisites } from "@/lib/pr-payout/requisites";
 
 export const COMPANY_REFERRAL_PAYOUT_TITLE = "Company referral payout request";
-const MIN_REFERRAL_PAYOUT_RUB = 5_000;
+const MIN_REFERRAL_PAYOUT_RUB = 1_000;
+const COMPANY_NEARLOY_REFERRAL_PERCENT = 30;
+const CUSTOMER_SUBSCRIPTION_REFERRAL_ENABLED = false;
 const REFERRAL_PAYOUT_LOCK_NAMESPACE = 79_1337;
+export const PUBLIC_COMPANY_REFERRAL_SOURCE = "PUBLIC_REFERRAL";
+export const SYSTEM_COMPANY_REFERRAL_SOURCE = "SYSTEM_SUPER_ADMIN";
+export const PROMO_COMPANY_REFERRAL_SOURCE = "PROMO_CODE";
 
 type PrismaLike = typeof prisma | Prisma.TransactionClient;
 type CompanyReferralRevenueRow = Prisma.CompanyReferralGetPayload<{
   include: {
+    referrer: { select: { role: true } };
     company: {
       select: {
         id: true;
@@ -33,6 +40,12 @@ type CompanyReferralRevenueRow = Prisma.CompanyReferralGetPayload<{
                 expiresAt: true;
               };
             };
+          };
+        };
+        billingInvoices: {
+          select: {
+            status: true;
+            paidAmount: true;
           };
         };
       };
@@ -83,8 +96,30 @@ export async function findCompanyReferralReferrer(code: string) {
       companyReferralCode: normalized,
       accountStatus: "ACTIVE",
     },
-    select: { id: true, uuid: true, name: true, email: true },
+    select: { id: true, uuid: true, name: true, email: true, role: true },
   });
+}
+
+export async function findFallbackCompanyReferralReferrer(db: PrismaLike = prisma) {
+  return db.user.findFirst({
+    where: {
+      role: UserRole.SUPER_ADMIN,
+      accountStatus: AccountStatus.ACTIVE,
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, uuid: true, name: true, email: true, role: true },
+  });
+}
+
+export function isCompanyReferralCommissionable(referral: {
+  status: CompanyReferralStatus | string;
+  source?: string | null;
+  referrer?: { role?: UserRole | string | null } | null;
+}) {
+  if (referral.status !== "ACTIVE") return false;
+  if (referral.source === SYSTEM_COMPANY_REFERRAL_SOURCE) return false;
+  if (referral.referrer?.role === UserRole.SUPER_ADMIN) return false;
+  return true;
 }
 
 export async function attachCompanyReferral(params: {
@@ -94,16 +129,68 @@ export async function attachCompanyReferral(params: {
   source?: string;
   notes?: string | null;
 }) {
+  const isSystemReferral = params.source === SYSTEM_COMPANY_REFERRAL_SOURCE;
   return params.tx.companyReferral.create({
     data: {
       companyId: params.companyId,
       referrerUserId: params.referrerUserId,
-      source: params.source ?? "PUBLIC_REFERRAL",
-      pipelineStatus: "LEAD",
-      referralPercent: 1,
+      source: params.source ?? PUBLIC_COMPANY_REFERRAL_SOURCE,
+      pipelineStatus: isSystemReferral ? "CONNECTED" : "LEAD",
+      referralPercent: isSystemReferral ? 0 : 1,
       notes: params.notes ?? null,
     },
   });
+}
+
+export async function reassignCompanyReferralFromSystemToPromoOwner(params: {
+  tx: Prisma.TransactionClient;
+  companyId: number;
+  promoCode: string;
+  promoOwner?: {
+    id: number;
+    role?: UserRole | string | null;
+    accountStatus?: string | null;
+  } | null;
+}) {
+  const owner = params.promoOwner;
+  if (!owner || owner.accountStatus !== AccountStatus.ACTIVE || owner.role !== UserRole.MANAGER) {
+    return { changed: false, reason: "PROMO_OWNER_IS_NOT_PR_MANAGER" };
+  }
+
+  const current = await params.tx.companyReferral.findUnique({
+    where: { companyId: params.companyId },
+    include: { referrer: { select: { id: true, role: true } } },
+  });
+
+  if (current && current.referrerUserId !== owner.id && isCompanyReferralCommissionable(current)) {
+    return { changed: false, reason: "COMPANY_ALREADY_HAS_PR_MANAGER" };
+  }
+
+  const data = {
+    referrerUserId: owner.id,
+    status: "ACTIVE" as const,
+    pipelineStatus: "CONNECTED" as const,
+    source: PROMO_COMPANY_REFERRAL_SOURCE,
+    referralPercent: new Prisma.Decimal(COMPANY_NEARLOY_REFERRAL_PERCENT),
+    endedAt: null,
+    notes: `Promo code ${params.promoCode} applied.`,
+  };
+
+  if (current) {
+    await params.tx.companyReferral.update({
+      where: { companyId: params.companyId },
+      data,
+    });
+    return { changed: true, reason: "SYSTEM_REFERRAL_REASSIGNED" };
+  }
+
+  await params.tx.companyReferral.create({
+    data: {
+      companyId: params.companyId,
+      ...data,
+    },
+  });
+  return { changed: true, reason: "PROMO_REFERRAL_CREATED" };
 }
 
 function statusLabel(status: CompanyReferralStatus) {
@@ -116,10 +203,15 @@ function money(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function referralMoney(value: number) {
+  return Math.round(money(value) / 10) * 10;
+}
+
 function toRevenueRows(referrals: CompanyReferralRevenueRow[]) {
   const rows: PlatformRevenueSubscription[] = [];
 
   for (const referral of referrals) {
+    const referralIsCommissionable = isCompanyReferralCommissionable(referral);
     for (const subscription of referral.company.subscriptions) {
       for (const userPlan of subscription.userPlans) {
         rows.push({
@@ -134,9 +226,9 @@ function toRevenueRows(referrals: CompanyReferralRevenueRow[]) {
           commissionGraceEndsAt: referral.company.commissionGraceEndsAt,
           supportManagerUserId: referral.company.supportManagerId,
           supportManagerPercent: supportManagerSharePercent(),
-          referralPercent: referral.referralPercent,
-          referralStatus: referral.status,
-          referrerUserId: referral.referrerUserId,
+          referralPercent: referralIsCommissionable ? referral.referralPercent : new Prisma.Decimal(0),
+          referralStatus: referralIsCommissionable ? referral.status : "ENDED",
+          referrerUserId: referralIsCommissionable ? referral.referrerUserId : null,
         });
       }
     }
@@ -145,11 +237,66 @@ function toRevenueRows(referrals: CompanyReferralRevenueRow[]) {
   return rows;
 }
 
+function calculateCompanyReferralRevenueSummary(referrals: CompanyReferralRevenueRow[]) {
+  const customerSubscriptionSummary = calculatePlatformRevenueSummary(toRevenueRows(referrals));
+  const customerSubscriptionByCompany = new Map(
+    customerSubscriptionSummary.companies.map((company) => [company.companyId, company]),
+  );
+
+  const companies = referrals.map((referral) => {
+    const customerSubscriptionRevenue = customerSubscriptionByCompany.get(referral.companyId);
+    const referralIsCommissionable = isCompanyReferralCommissionable(referral);
+    const paidNearLoyGross =
+      referralIsCommissionable
+        ? referral.company.billingInvoices
+            .filter((invoice) => invoice.status === "PAID")
+            .reduce((sum, invoice) => sum + Number(invoice.paidAmount), 0)
+        : 0;
+    const nearLoyReferralCommission = referralIsCommissionable
+      ? referralMoney(paidNearLoyGross * (COMPANY_NEARLOY_REFERRAL_PERCENT / 100))
+      : 0;
+    const customerSubscriptionReferralCommission = CUSTOMER_SUBSCRIPTION_REFERRAL_ENABLED
+      ? (customerSubscriptionRevenue?.referralCommission ?? 0)
+      : 0;
+    const referralCommission = nearLoyReferralCommission + customerSubscriptionReferralCommission;
+
+    return {
+      companyId: referral.companyId,
+      companyName: referral.company.name,
+      gross: money(paidNearLoyGross),
+      recognizedGross: money(paidNearLoyGross),
+      futureGross: 0,
+      whiteBoxCommission: money(Math.max(0, paidNearLoyGross - referralCommission)),
+      referralCommission: money(referralCommission),
+      nearLoyReferralCommission: money(nearLoyReferralCommission),
+      customerSubscriptionReferralCommission: money(customerSubscriptionReferralCommission),
+      activeSubscriptions: customerSubscriptionRevenue?.activeSubscriptions ?? 0,
+      referralUserId: referralIsCommissionable ? referral.referrerUserId : null,
+    };
+  });
+
+  return {
+    gross: money(companies.reduce((sum, company) => sum + company.gross, 0)),
+    recognizedGross: money(companies.reduce((sum, company) => sum + company.recognizedGross, 0)),
+    futureGross: money(companies.reduce((sum, company) => sum + company.futureGross, 0)),
+    whiteBoxCommission: money(companies.reduce((sum, company) => sum + company.whiteBoxCommission, 0)),
+    referralCommission: money(companies.reduce((sum, company) => sum + company.referralCommission, 0)),
+    nearLoyReferralCommission: money(companies.reduce((sum, company) => sum + company.nearLoyReferralCommission, 0)),
+    customerSubscriptionReferralCommission: money(
+      companies.reduce((sum, company) => sum + company.customerSubscriptionReferralCommission, 0),
+    ),
+    activeSubscriptions: companies.reduce((sum, company) => sum + company.activeSubscriptions, 0),
+    companiesWithReferral: companies.filter((company) => company.referralUserId !== null).length,
+    companies,
+  };
+}
+
 async function loadReferralRows(userId: number, db: PrismaLike = prisma) {
   return db.companyReferral.findMany({
     where: { referrerUserId: userId },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     include: {
+      referrer: { select: { role: true } },
       company: {
         select: {
           id: true,
@@ -169,6 +316,12 @@ async function loadReferralRows(userId: number, db: PrismaLike = prisma) {
                 where: { status: { in: ["ACTIVE", "EXPIRED"] } },
                 select: { status: true, activatedAt: true, expiresAt: true },
               },
+            },
+          },
+          billingInvoices: {
+            select: {
+              status: true,
+              paidAmount: true,
             },
           },
         },
@@ -192,8 +345,21 @@ async function loadReferralPayouts(userId: number, db: PrismaLike = prisma) {
 
 export async function getCompanyReferralDashboard(userId: number) {
   const code = await ensureCompanyReferralCode(userId);
-  const [referrals, payouts] = await Promise.all([loadReferralRows(userId), loadReferralPayouts(userId)]);
-  const summary = calculatePlatformRevenueSummary(toRevenueRows(referrals));
+  const [user, referrals, payouts] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        prPayoutBankCode: true,
+        prPayoutBankName: true,
+        prPayoutPhone: true,
+        prPayoutCardLast4: true,
+        prPayoutRequisitesUpdatedAt: true,
+      },
+    }),
+    loadReferralRows(userId),
+    loadReferralPayouts(userId),
+  ]);
+  const summary = calculateCompanyReferralRevenueSummary(referrals);
   const companyRevenue = new Map(summary.companies.map((company) => [company.companyId, company]));
   const reservedStatuses = new Set<FinanceOperationStatus>(["PENDING_APPROVAL", "APPROVED"]);
   const paidStatuses = new Set<FinanceOperationStatus>(["PAID"]);
@@ -204,6 +370,7 @@ export async function getCompanyReferralDashboard(userId: number) {
   return {
     code,
     minPayoutRub: MIN_REFERRAL_PAYOUT_RUB,
+    requisites: serializePrPayoutRequisites(user ?? {}),
     totals: {
       companies: referrals.length,
       activeCompanies: referrals.filter((row) => row.status === "ACTIVE" && row.company.isActive).length,
@@ -246,13 +413,22 @@ export async function createCompanyReferralPayoutRequest(userId: number, amount:
     throw new Error(`Минимальная сумма выплаты - ${MIN_REFERRAL_PAYOUT_RUB} ₽.`);
   }
 
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { prPayoutBankName: true, prPayoutPhone: true, prPayoutCardLast4: true },
+  });
+
+  if (!user || !hasPrPayoutDestination(user)) {
+    throw new Error("Перед созданием выплаты сохраните банк и телефон или карту.");
+  }
+
   return prisma.$transaction(async (tx) => {
     // Serialize payout reservations per referrer so concurrent requests cannot reserve the same balance twice.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${REFERRAL_PAYOUT_LOCK_NAMESPACE}, ${userId})`;
 
     const referrals = await loadReferralRows(userId, tx);
     const payouts = await loadReferralPayouts(userId, tx);
-    const summary = calculatePlatformRevenueSummary(toRevenueRows(referrals));
+    const summary = calculateCompanyReferralRevenueSummary(referrals);
     const reservedOrPaid = payouts
       .filter((row) => ["PENDING_APPROVAL", "APPROVED", "PAID"].includes(row.status))
       .reduce((sum, row) => sum + Number(row.amount), 0);
@@ -269,7 +445,7 @@ export async function createCompanyReferralPayoutRequest(userId: number, amount:
         amount,
         currency: "RUB",
         title: `${COMPANY_REFERRAL_PAYOUT_TITLE}: ${amount} RUB`,
-        details: "Public company referral payout request. Source: invited companies and recognized subscription turnover, paid from the NearLoy share.",
+        details: "Public company referral payout request. Source: 30% of paid company NearLoy subscriptions. Customer subscription turnover commission is disabled for launch.",
         requestedById: userId,
         requestedAt: new Date(),
       },
@@ -300,7 +476,7 @@ export async function calculateCompanyReferralPayoutCoverage(
   db: PrismaLike = prisma,
 ) {
   const [referrals, payouts] = await Promise.all([loadReferralRows(userId, db), loadReferralPayouts(userId, db)]);
-  const summary = calculatePlatformRevenueSummary(toRevenueRows(referrals));
+  const summary = calculateCompanyReferralRevenueSummary(referrals);
   const reservedStatuses = new Set<FinanceOperationStatus>(["PENDING_APPROVAL", "APPROVED"]);
   const paidStatuses = new Set<FinanceOperationStatus>(["PAID"]);
   const reserved = money(
@@ -332,7 +508,7 @@ export async function getCompanyReferralLiabilityReport(db: PrismaLike = prisma)
     db.companyReferral.findMany({
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       include: {
-        referrer: { select: { id: true, uuid: true, name: true, email: true } },
+        referrer: { select: { id: true, uuid: true, name: true, email: true, role: true } },
         company: {
           select: {
             id: true,
@@ -354,6 +530,12 @@ export async function getCompanyReferralLiabilityReport(db: PrismaLike = prisma)
                 },
               },
             },
+            billingInvoices: {
+              select: {
+                status: true,
+                paidAmount: true,
+              },
+            },
           },
         },
       },
@@ -370,7 +552,7 @@ export async function getCompanyReferralLiabilityReport(db: PrismaLike = prisma)
     }),
   ]);
 
-  const summary = calculatePlatformRevenueSummary(toRevenueRows(referrals));
+  const summary = calculateCompanyReferralRevenueSummary(referrals);
   const byAgent = new Map<
     number,
     {

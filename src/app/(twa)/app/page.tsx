@@ -126,17 +126,19 @@ export default function HomePage() {
       }
     }
     const categories = [...source.values()];
-    if (favoriteSlugs.length === 0) return categories;
+    const byTranslatedName = (a: ApiCategory, b: ApiCategory) =>
+      categoryName(a, t).localeCompare(categoryName(b, t));
+    if (favoriteSlugs.length === 0) return categories.sort(byTranslatedName);
     const order = new Map(favoriteSlugs.map((slug, idx) => [slug, idx]));
     return categories.sort((a, b) => {
       const ai = order.get(a.slug);
       const bi = order.get(b.slug);
-      if (ai === undefined && bi === undefined) return a.name.localeCompare(b.name);
+      if (ai === undefined && bi === undefined) return byTranslatedName(a, b);
       if (ai === undefined) return 1;
       if (bi === undefined) return -1;
       return ai - bi;
     });
-  }, [dashboard?.wallet.companies, favoriteSlugs]);
+  }, [dashboard?.wallet.companies, favoriteSlugs, t]);
 
   const filteredCompanies = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -246,7 +248,7 @@ export default function HomePage() {
                   : "glass border border-white/10 text-muted-foreground hover:text-foreground"
               )}
             >
-              {cat.name}
+              {categoryName(cat, t)}
             </button>
           ))}
         </CategoryChipStrip>

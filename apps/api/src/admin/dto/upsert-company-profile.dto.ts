@@ -100,7 +100,7 @@ export class UpsertCompanyProfileDto {
   @ApiPropertyOptional({
     type: [CompanyLevelRuleInputDto],
     example: [
-      { levelName: "Bronze", minTotalSpend: 0, cashbackPercent: 1 },
+      { levelName: "Standart", minTotalSpend: 0, cashbackPercent: 1 },
       { levelName: "Silver", minTotalSpend: 1000, cashbackPercent: 3 },
       { levelName: "Gold", minTotalSpend: 10000, cashbackPercent: 7 },
     ],

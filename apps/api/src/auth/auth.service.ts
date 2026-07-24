@@ -7,6 +7,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -16,6 +17,7 @@ import * as bcrypt from "bcrypt";
 import { createHash, randomBytes, randomInt } from "crypto";
 import { EmailService } from "../email/email.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { TelegramNotificationsService } from "../telegram/telegram-notifications.service";
 import { ConfirmPasswordResetDto } from "./dto/confirm-password-reset.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
@@ -38,6 +40,8 @@ export type SafeUser = {
   accountStatus: AccountStatusValue;
   deletionScheduledAt: string | null;
 };
+
+type SafeUserSource = Pick<User, "uuid" | "id" | "email" | "name" | "role" | "createdAt" | "accountStatus" | "deletionScheduledAt">;
 
 export type LoginContext = {
   ipAddress?: string | null;
@@ -76,6 +80,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly email: EmailService,
+    @Optional()
+    private readonly telegramNotifications?: TelegramNotificationsService,
   ) {}
 
   onModuleInit() {
@@ -641,6 +647,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       });
     });
 
+    void this.telegramNotifications?.notifyPasswordChanged(user.id);
+
     return { success: true as const };
   }
 
@@ -728,6 +736,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       where: { id: userId },
       data: { passwordHash },
     });
+    void this.telegramNotifications?.notifyPasswordChanged(userId);
     return { success: true as const };
   }
 
@@ -903,7 +912,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     return this.issueTokens(row.user);
   }
 
-  async issueTokens(user: User) {
+  async issueTokens<T extends SafeUserSource>(user: T) {
     const expiresIn = this.config.get<string>("JWT_EXPIRES_IN") ?? "15m";
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
@@ -938,7 +947,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  toSafeUser(user: User): SafeUser {
+  toSafeUser(user: SafeUserSource): SafeUser {
     return {
       id: user.uuid,
       legacyId: user.id,

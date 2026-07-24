@@ -40,6 +40,11 @@ export type TwaCompany = {
   operatesOnline: boolean;
   isFavorite: boolean;
   favoritedAt: string | null;
+  recommendation?: {
+    boostPercent: number;
+    recommendForEveryone: boolean;
+    effectiveMultiplier: number;
+  };
   category: ApiCategory;
   categories: ApiCategory[];
   locations: Array<{
@@ -195,6 +200,13 @@ export type TwaWallet = {
   companies: TwaCompany[];
 };
 
+export type TwaCompanyRecommendation = {
+  company: TwaCompany;
+  score: number;
+  reason: "manual_priority" | "manual_boost" | "profile_match";
+  effectiveMultiplier: number;
+};
+
 export type TwaDashboard = {
   wallet: TwaWallet;
   activeSubscriptions: TwaUserSubscription[];
@@ -227,6 +239,8 @@ export type TwaProfile = {
     profileVisibility: "PRIVATE" | "FRIENDS" | "PUBLIC";
     marketingOptIn: boolean;
     showActivityStats: boolean;
+    browserNotificationsEnabled: boolean;
+    geoNotificationsEnabled: boolean;
   };
   stats: {
     totalBalance: number;
@@ -548,6 +562,15 @@ export function getTwaCompanies(force = false) {
   return getJson<TwaCompany[]>("/registered/companies", [], TWA_CACHE_TTL_MS, force);
 }
 
+export function getTwaRecommendations(limit = 8, force = false) {
+  return getJson<TwaCompanyRecommendation[]>(
+    `/registered/recommendations?limit=${encodeURIComponent(String(limit))}`,
+    [],
+    TWA_CACHE_TTL_MS,
+    force,
+  );
+}
+
 export function getCachedTwaMapCompanies() {
   return readCachedJson<TwaCompany[]>("/registered/companies?surface=map", []);
 }
@@ -558,6 +581,13 @@ export function getTwaMapCompanies(force = false) {
 
 export function getPublicTwaCompany(slug: string) {
   return getJson<TwaCompany | null>(`/public/companies/${encodeURIComponent(slug)}`, null, TWA_CACHE_TTL_MS, true);
+}
+
+export function getPublicTwaCompanySuggestions(excludeSlug?: string, limit = 4) {
+  const search = new URLSearchParams();
+  if (excludeSlug) search.set("exclude", excludeSlug);
+  search.set("limit", String(limit));
+  return getJson<TwaCompany[]>(`/public/companies?${search.toString()}`, [], TWA_CACHE_TTL_MS, true);
 }
 
 export async function setTwaCompanyFavorite(companyId: number | string, isFavorite: boolean) {
@@ -585,8 +615,8 @@ export function getCachedTwaWallet() {
   return readCachedJson<TwaWallet>("/registered/wallet", walletFallback);
 }
 
-export function getTwaWallet() {
-  return getJson<TwaWallet>("/registered/wallet", walletFallback);
+export function getTwaWallet(force = false) {
+  return getJson<TwaWallet>("/registered/wallet", walletFallback, TWA_CACHE_TTL_MS, force);
 }
 
 export function getTwaQr() {
@@ -609,6 +639,8 @@ const profileFallback: TwaProfile = {
     profileVisibility: "PRIVATE",
     marketingOptIn: false,
     showActivityStats: true,
+    browserNotificationsEnabled: false,
+    geoNotificationsEnabled: false,
   },
   stats: {
     totalBalance: 0,
@@ -652,8 +684,8 @@ export function getCachedTwaHistory() {
   return readCachedJson<TwaHistory>("/registered/history", historyFallback);
 }
 
-export function getTwaHistory() {
-  return getJson<TwaHistory>("/registered/history", historyFallback);
+export function getTwaHistory(force = false) {
+  return getJson<TwaHistory>("/registered/history", historyFallback, TWA_CACHE_TTL_MS, force);
 }
 
 export function getCachedActiveTwaSubscriptions() {
@@ -734,6 +766,8 @@ export async function updateTwaProfilePreferences(input: {
   profileVisibility?: "PRIVATE" | "FRIENDS" | "PUBLIC";
   marketingOptIn?: boolean;
   showActivityStats?: boolean;
+  browserNotificationsEnabled?: boolean;
+  geoNotificationsEnabled?: boolean;
 }) {
   const result = await putJson<TwaProfile["preferences"]>("/registered/profile/preferences", input, "Failed to update preferences");
   if (result.ok) clearTwaCache();

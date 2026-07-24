@@ -15,12 +15,50 @@ import {
 import { createHash, randomInt } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { assertSubscriptionsEnabled, subscriptionsEnabled } from "../common/subscriptions-feature";
+import {
+  calculateCompanyRecommendationScore,
+  recommendationBoostMultiplier,
+} from "./company-recommendation-score";
 
 const CUSTOMER_LOOKUP_CODE_TTL_MS = 5 * 60 * 1000;
 const MIN_BIRTH_YEAR = 1900;
 
 type ListCompaniesOptions = {
-  surface?: "default" | "map";
+  surface?: "default" | "map" | "wallet";
+};
+
+type PublicCompanyRecord = {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  operatesOnline: boolean;
+  recommendationBoostPercent?: number;
+  recommendForEveryone?: boolean;
+  category: { id: number; slug: string; name: string; icon: string | null };
+  categories: Array<{ category: { id: number; slug: string; name: string; icon: string | null } }>;
+  locations: Array<{
+    uuid: string;
+    title: string | null;
+    address: string;
+    city: string | null;
+    latitude: Prisma.Decimal | number | string;
+    longitude: Prisma.Decimal | number | string;
+    precision: string | null;
+    openTime: string;
+    closeTime: string;
+    workingDays: number[];
+    isMain: boolean;
+  }>;
+  levelRules: Array<{
+    id: number;
+    levelName: string;
+    minTotalSpend: Prisma.Decimal | number | string;
+    cashbackPercent: Prisma.Decimal | number | string;
+    sortOrder: number;
+  }>;
+  mediaAssets?: Array<{ storageKey: string | null }>;
 };
 
 @Injectable()
@@ -53,7 +91,7 @@ export class RegisteredService {
       isActive: true,
       billingAccount: {
         is: {
-          status: CompanyBillingStatus.ACTIVE,
+          status: { in: [CompanyBillingStatus.ACTIVE, CompanyBillingStatus.TRIAL] },
           currentPeriodEndsAt: { gt: now },
         },
       },
@@ -65,10 +103,75 @@ export class RegisteredService {
   }
 
   private companyWhereForClientSurface(options: ListCompaniesOptions = {}, now = new Date()): Prisma.CompanyWhereInput {
+    if (options.surface === "wallet") {
+      return { isActive: true };
+    }
     if (options.surface === "map" && this.canShowUnpaidMapPartnersLocally()) {
       return { isActive: true };
     }
     return this.publicCompanyWhere(now);
+  }
+
+  private companyRecommendationOrderBy(): Prisma.CompanyOrderByWithRelationInput[] {
+    return [
+      { recommendForEveryone: "desc" },
+      { recommendationBoostPercent: "desc" },
+      { name: "asc" },
+    ];
+  }
+
+  private companyRecommendationBaseScore(company: {
+    categories?: Array<{ category?: { slug?: string | null } | null; slug?: string | null }>;
+    locations?: unknown[];
+    operatesOnline?: boolean;
+    mediaAssets?: unknown[];
+    isFavorite?: boolean;
+    userLinks?: Array<{ isFavorite?: boolean | null }>;
+  }) {
+    const categoryScore = Math.min(30, (company.categories?.length ?? 0) * 4);
+    const locationScore = company.operatesOnline ? 10 : Math.min(30, (company.locations?.length ?? 0) * 8);
+    const mediaScore = Math.min(20, (company.mediaAssets?.length ?? 0) * 10);
+    const favoriteScore = company.isFavorite || company.userLinks?.some((link) => link.isFavorite) ? 20 : 0;
+    return 100 + categoryScore + locationScore + mediaScore + favoriteScore;
+  }
+
+  private toPublicCompanyPayload(company: PublicCompanyRecord) {
+    return {
+      id: company.id,
+      slug: company.slug,
+      name: company.name,
+      description: company.description,
+      logoUrl: this.companyMediaUrl(company.mediaAssets?.[0]?.storageKey),
+      isActive: company.isActive,
+      operatesOnline: company.operatesOnline,
+      isFavorite: false,
+      favoritedAt: null,
+      category: company.category,
+      categories: company.categories.map((row) => row.category),
+      locations: (company.locations ?? []).map((location) => ({
+        uuid: location.uuid,
+        title: location.title,
+        address: location.address,
+        city: location.city,
+        latitude: Number(location.latitude),
+        longitude: Number(location.longitude),
+        precision: location.precision,
+        openTime: location.openTime,
+        closeTime: location.closeTime,
+        workingDays: location.workingDays,
+        isMain: location.isMain,
+      })),
+      points: {
+        balance: 0,
+        totalEarnedPoints: 0,
+        totalSpentPoints: 0,
+        pointsToNextReward: null,
+        expiringPoints: null,
+        expiringDate: null,
+        updatedAt: null,
+      },
+      level: this.resolveLevel(0, company.levelRules),
+    };
   }
 
   private async ensurePreferences(userId: number) {
@@ -553,6 +656,8 @@ export class RegisteredService {
     profileVisibility?: "PRIVATE" | "FRIENDS" | "PUBLIC";
     marketingOptIn?: boolean;
     showActivityStats?: boolean;
+    browserNotificationsEnabled?: boolean;
+    geoNotificationsEnabled?: boolean;
   }) {
     return this.prisma.userProfilePreference.upsert({
       where: { userId },
@@ -560,12 +665,16 @@ export class RegisteredService {
         ...(dto.profileVisibility !== undefined ? { profileVisibility: dto.profileVisibility } : {}),
         ...(dto.marketingOptIn !== undefined ? { marketingOptIn: dto.marketingOptIn } : {}),
         ...(dto.showActivityStats !== undefined ? { showActivityStats: dto.showActivityStats } : {}),
+        ...(dto.browserNotificationsEnabled !== undefined ? { browserNotificationsEnabled: dto.browserNotificationsEnabled } : {}),
+        ...(dto.geoNotificationsEnabled !== undefined ? { geoNotificationsEnabled: dto.geoNotificationsEnabled } : {}),
       },
       create: {
         userId,
         profileVisibility: dto.profileVisibility ?? "PRIVATE",
         marketingOptIn: dto.marketingOptIn ?? false,
         showActivityStats: dto.showActivityStats ?? true,
+        browserNotificationsEnabled: dto.browserNotificationsEnabled ?? false,
+        geoNotificationsEnabled: dto.geoNotificationsEnabled ?? false,
       },
     });
   }
@@ -878,7 +987,7 @@ export class RegisteredService {
     const [companies, transactions] = await Promise.all([
       this.prisma.company.findMany({
         where: this.companyWhereForClientSurface(options, now),
-        orderBy: { name: "asc" },
+        orderBy: this.companyRecommendationOrderBy(),
         include: {
           category: { select: { id: true, slug: true, name: true, icon: true } },
           categories: {
@@ -990,6 +1099,11 @@ export class RegisteredService {
           updatedAt: link?.updatedAt ?? null,
         },
         level: this.resolveLevel(totalEarnedPoints, company.levelRules),
+        recommendation: {
+          boostPercent: company.recommendationBoostPercent ?? 0,
+          recommendForEveryone: company.recommendForEveryone ?? false,
+          effectiveMultiplier: recommendationBoostMultiplier(company.recommendationBoostPercent ?? 0),
+        },
       };
     });
   }
@@ -1033,46 +1147,106 @@ export class RegisteredService {
             isMain: true,
           },
         },
+        mediaAssets: {
+          where: { kind: CompanyMediaKind.LOGO, isActive: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+          take: 1,
+          select: { storageKey: true },
+        },
       },
     });
 
     if (!company) throw new NotFoundException("Company not found.");
 
-    return {
-      id: company.id,
-      slug: company.slug,
-      name: company.name,
-      description: company.description,
-      isActive: company.isActive,
-      operatesOnline: company.operatesOnline,
-      isFavorite: false,
-      favoritedAt: null,
-      category: company.category,
-      categories: company.categories.map((row) => row.category),
-      locations: (company.locations ?? []).map((location) => ({
-        uuid: location.uuid,
-        title: location.title,
-        address: location.address,
-        city: location.city,
-        latitude: Number(location.latitude),
-        longitude: Number(location.longitude),
-        precision: location.precision,
-        openTime: location.openTime,
-        closeTime: location.closeTime,
-        workingDays: location.workingDays,
-        isMain: location.isMain,
-      })),
-      points: {
-        balance: 0,
-        totalEarnedPoints: 0,
-        totalSpentPoints: 0,
-        pointsToNextReward: null,
-        expiringPoints: null,
-        expiringDate: null,
-        updatedAt: null,
+    return this.toPublicCompanyPayload(company);
+  }
+
+  async publicCompanySuggestions(excludeSlug?: string, limit?: number | string) {
+    const parsedLimit = typeof limit === "string" ? Number(limit) : limit;
+    const safeLimit = Math.max(1, Math.min(8, Number.isFinite(parsedLimit) ? Math.floor(parsedLimit!) : 4));
+    const normalizedExcludeSlug = excludeSlug?.trim();
+
+    const companies = await this.prisma.company.findMany({
+      where: {
+        ...this.publicCompanyWhere(),
+        ...(normalizedExcludeSlug ? { slug: { not: normalizedExcludeSlug } } : {}),
       },
-      level: this.resolveLevel(0, company.levelRules),
-    };
+      orderBy: this.companyRecommendationOrderBy(),
+      take: safeLimit,
+      include: {
+        category: { select: { id: true, slug: true, name: true, icon: true } },
+        categories: {
+          select: {
+            categoryId: true,
+            category: { select: { id: true, slug: true, name: true, icon: true } },
+          },
+          orderBy: { id: "asc" },
+        },
+        levelRules: {
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            levelName: true,
+            minTotalSpend: true,
+            cashbackPercent: true,
+            sortOrder: true,
+          },
+        },
+        locations: {
+          where: { isActive: true },
+          orderBy: [{ isMain: "desc" }, { createdAt: "asc" }],
+          select: {
+            uuid: true,
+            title: true,
+            address: true,
+            city: true,
+            latitude: true,
+            longitude: true,
+            precision: true,
+            openTime: true,
+            closeTime: true,
+            workingDays: true,
+            isMain: true,
+          },
+        },
+        mediaAssets: {
+          where: { kind: CompanyMediaKind.LOGO, isActive: true },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+          take: 1,
+          select: { storageKey: true },
+        },
+      },
+    });
+
+    return companies.map((company) => this.toPublicCompanyPayload(company));
+  }
+
+  async recommendations(userId: number, limit?: number | string) {
+    const parsedLimit = typeof limit === "string" ? Number(limit) : limit;
+    const safeLimit = Math.max(1, Math.min(20, Number.isFinite(parsedLimit) ? Math.floor(parsedLimit!) : 8));
+    const companies = await this.listCompanies(userId);
+    return companies
+      .map((company) => {
+        const recommendation = company.recommendation;
+        const baseScore = this.companyRecommendationBaseScore(company);
+        const score = calculateCompanyRecommendationScore({
+          baseScore,
+          boostPercent: recommendation.boostPercent,
+          recommendForEveryone: recommendation.recommendForEveryone,
+        });
+        return {
+          company,
+          score,
+          reason: recommendation.recommendForEveryone
+            ? "manual_priority"
+            : recommendation.boostPercent > 0
+              ? "manual_boost"
+              : "profile_match",
+          effectiveMultiplier: recommendation.effectiveMultiplier,
+        };
+      })
+      .sort((a, b) => b.score - a.score || a.company.name.localeCompare(b.company.name))
+      .slice(0, safeLimit);
   }
 
   async setCompanyFavorite(userId: number, companyIdentifier: string, isFavorite: boolean) {
@@ -1121,7 +1295,7 @@ export class RegisteredService {
   }
 
   async wallet(userId: number) {
-    const companies = await this.listCompanies(userId);
+    const companies = await this.listCompanies(userId, { surface: "wallet" });
     return {
       totalBalance: companies.reduce((sum, company) => sum + company.points.balance, 0),
       companies: companies.filter(

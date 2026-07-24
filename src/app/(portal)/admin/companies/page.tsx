@@ -22,17 +22,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { adminListCompanyUsers, type AdminCompanyUser } from "@/lib/api/admin-client";
+import type { TranslationKey } from "@/lib/i18n/dictionary";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
 type CompanyFilter = "ALL" | "ACTIVE" | "ONLINE" | "LOCATIONS" | "UNCONFIGURED";
 type CompanySort = "name" | "email" | "status" | "company" | "createdAt";
 
-const companyFilters: Array<{ value: CompanyFilter; label: string; icon: typeof Building2 }> = [
-  { value: "ALL", label: "Все", icon: Building2 },
-  { value: "ACTIVE", label: "Активные", icon: ShieldCheck },
-  { value: "ONLINE", label: "Онлайн", icon: Globe2 },
-  { value: "LOCATIONS", label: "Точки", icon: MapPin },
-  { value: "UNCONFIGURED", label: "Без профиля", icon: Store },
+const companyFilters: Array<{ value: CompanyFilter; labelKey: TranslationKey; icon: typeof Building2 }> = [
+  { value: "ALL", labelKey: "admin.companies.filterAll", icon: Building2 },
+  { value: "ACTIVE", labelKey: "admin.companies.filterActive", icon: ShieldCheck },
+  { value: "ONLINE", labelKey: "admin.companies.filterOnline", icon: Globe2 },
+  { value: "LOCATIONS", labelKey: "admin.companies.filterLocations", icon: MapPin },
+  { value: "UNCONFIGURED", labelKey: "admin.companies.filterUnconfigured", icon: Store },
 ];
 
 const COMPANY_NAME_PREVIEW_MAX_LENGTH = 34;
@@ -91,7 +92,15 @@ function StatCard({ icon: Icon, label, value, hint }: { icon: typeof Building2; 
   );
 }
 
-function QuickActions({ company }: { company: AdminCompanyUser }) {
+type QuickActionLabels = {
+  actions: string;
+  openProfile: string;
+  payments: string;
+  emailOwner: string;
+  copyUuid: string;
+};
+
+function QuickActions({ company, labels }: { company: AdminCompanyUser; labels: QuickActionLabels }) {
   async function copyUuid() {
     await navigator.clipboard?.writeText(company.uuid).catch(() => undefined);
   }
@@ -100,20 +109,20 @@ function QuickActions({ company }: { company: AdminCompanyUser }) {
     <details className="group relative inline-block text-left">
       <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-medium transition hover:bg-white/[0.1]">
         <MoreHorizontal className="h-4 w-4" />
-        <span className="hidden lg:inline">Actions</span>
+        <span className="hidden lg:inline">{labels.actions}</span>
       </summary>
       <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-white/10 bg-[#111318] p-1.5 shadow-2xl shadow-black/40">
         <Link className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-white/10" href={`/admin/companies/${company.uuid}`}>
-          <ExternalLink className="h-4 w-4" /> Open profile
+          <ExternalLink className="h-4 w-4" /> {labels.openProfile}
         </Link>
         <Link className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-white/10" href={`/admin/companies/${company.uuid}/payments`}>
-          <WalletCards className="h-4 w-4" /> Payments
+          <WalletCards className="h-4 w-4" /> {labels.payments}
         </Link>
         <a className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-white/10" href={`mailto:${company.email}`}>
-          <Mail className="h-4 w-4" /> Email owner
+          <Mail className="h-4 w-4" /> {labels.emailOwner}
         </a>
         <button type="button" onClick={copyUuid} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-white/10">
-          <Copy className="h-4 w-4" /> Copy UUID
+          <Copy className="h-4 w-4" /> {labels.copyUuid}
         </button>
       </div>
     </details>
@@ -128,6 +137,18 @@ export default function AdminCompaniesPage() {
   const [sortBy, setSortBy] = useState<CompanySort>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
+  const quickActionLabels = {
+    actions: t("admin.companies.actions"),
+    openProfile: t("admin.companies.openProfile"),
+    payments: t("admin.companies.payments"),
+    emailOwner: t("admin.companies.emailOwner"),
+    copyUuid: t("admin.companies.copyUuid"),
+  };
+  const accountStatusLabels: Record<AdminCompanyUser["accountStatus"], string> = {
+    ACTIVE: t("admin.companies.statusActive"),
+    BLOCKED: t("admin.companies.statusBlocked"),
+    FROZEN_PENDING_DELETION: t("admin.companies.statusFrozen"),
+  };
 
   async function load(search = query) {
     setLoading(true);
@@ -228,7 +249,7 @@ export default function AdminCompaniesPage() {
           </form>
 
           <div className="flex flex-wrap gap-2">
-            {companyFilters.map(({ value, label, icon: Icon }) => {
+            {companyFilters.map(({ value, labelKey, icon: Icon }) => {
               const active = filter === value;
               return (
                 <button
@@ -243,20 +264,20 @@ export default function AdminCompaniesPage() {
                   aria-pressed={active}
                 >
                   <Icon className="h-4 w-4" />
-                  {label} {companyFilterCount(companies, value)}
+                  {t(labelKey)} {companyFilterCount(companies, value)}
                 </button>
               );
             })}
           </div>
 
-          {loading && companies.length === 0 && <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-muted-foreground">Загружаю компании...</p>}
+          {loading && companies.length === 0 && <p className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-muted-foreground">{t("admin.companies.loading")}</p>}
 
           {visibleCompanies.length > 0 && (
             <>
               {loading && (
                 <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-200/10 px-3 py-1.5 text-xs font-medium text-cyan-50">
                   <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
-                  Обновляю
+                  {t("admin.companies.refreshing")}
                 </div>
               )}
               <div className="hidden overflow-visible rounded-2xl border border-white/10 md:block">
@@ -289,10 +310,10 @@ export default function AdminCompaniesPage() {
                       <th className="px-3">{t("admin.companies.workMode")}</th>
                       <th className="px-3">
                         <button type="button" onClick={() => onSort("createdAt")} className="inline-flex items-center gap-1 hover:text-foreground">
-                          Создан <ArrowUpDown className="h-3.5 w-3.5" />
+                          {t("admin.companies.created")} <ArrowUpDown className="h-3.5 w-3.5" />
                         </button>
                       </th>
-                      <th className="py-3 pl-3 pr-4 text-right">Quick actions</th>
+                      <th className="py-3 pl-3 pr-4 text-right">{t("admin.companies.quickActions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -317,7 +338,7 @@ export default function AdminCompaniesPage() {
                           </a>
                         </td>
                         <td className="px-3 align-middle">
-                          <Badge variant="outline" className={`text-xs ${statusTone(company.accountStatus)}`}>{company.accountStatus}</Badge>
+                          <Badge variant="outline" className={`text-xs ${statusTone(company.accountStatus)}`}>{accountStatusLabels[company.accountStatus]}</Badge>
                         </td>
                         <td className="px-3 align-middle">
                           {company.managedCompany?.operatesOnline ? (
@@ -336,9 +357,9 @@ export default function AdminCompaniesPage() {
                         <td className="py-3 pl-3 pr-4 text-right align-middle">
                           <div className="flex items-center justify-end gap-2">
                             <Button asChild variant="secondary" size="sm">
-                              <Link href={`/admin/companies/${company.uuid}`}>Open</Link>
+                              <Link href={`/admin/companies/${company.uuid}`}>{t("admin.companies.open")}</Link>
                             </Button>
-                            <QuickActions company={company} />
+                            <QuickActions company={company} labels={quickActionLabels} />
                           </div>
                         </td>
                       </tr>
@@ -359,18 +380,18 @@ export default function AdminCompaniesPage() {
                           {compactEmail(company.email, 30)}
                         </a>
                       </div>
-                      <Badge variant="outline" className={`shrink-0 text-xs ${statusTone(company.accountStatus)}`}>{company.accountStatus}</Badge>
+                      <Badge variant="outline" className={`shrink-0 text-xs ${statusTone(company.accountStatus)}`}>{accountStatusLabels[company.accountStatus]}</Badge>
                     </div>
                     <div className="mt-4 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                       <span>{formatDate(company.createdAt, locale)}</span>
                       <span className="font-mono">{company.uuid.slice(0, 8)}</span>
                     </div>
-                    <p className="mt-3 truncate text-sm text-muted-foreground" title={company.name}>Аккаунт: {compactText(company.name)}</p>
+                    <p className="mt-3 truncate text-sm text-muted-foreground" title={company.name}>{t("admin.companies.accountLabel")}: {compactText(company.name)}</p>
                     <div className="mt-4 flex gap-2">
                       <Button asChild variant="secondary" size="sm" className="flex-1">
-                        <Link href={`/admin/companies/${company.uuid}`}>Open profile</Link>
+                        <Link href={`/admin/companies/${company.uuid}`}>{t("admin.companies.openProfile")}</Link>
                       </Button>
-                      <QuickActions company={company} />
+                      <QuickActions company={company} labels={quickActionLabels} />
                     </div>
                   </div>
                 ))}

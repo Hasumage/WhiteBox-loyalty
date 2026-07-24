@@ -100,6 +100,26 @@ export class CompanyController {
     return this.companyService.clients(user.userId, query);
   }
 
+  @Get("clients/registry")
+  @ApiOperation({ summary: "List company customers with segmentation and sorting" })
+  @ApiQuery({ name: "query", required: false, type: String })
+  @ApiQuery({ name: "segment", required: false, type: String })
+  @ApiQuery({ name: "sortBy", required: false, type: String })
+  @ApiQuery({ name: "sortDir", required: false, type: String })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  clientRegistry(
+    @CurrentUser() user: RequestUser,
+    @Query("query") query?: string,
+    @Query("segment") segment?: string,
+    @Query("sortBy") sortBy?: string,
+    @Query("sortDir") sortDir?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.companyService.clientRegistry(user.userId, { query, segment, sortBy, sortDir, page, limit });
+  }
+
   @Get("clients/:uuid")
   client(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
     return this.companyService.client(user.userId, uuid);

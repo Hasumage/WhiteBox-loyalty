@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -28,6 +29,8 @@ import { UpsertCompanyLocationDto } from "../admin/dto/upsert-company-location.d
 import { CreateCompanySubscriptionDto } from "../admin/dto/create-company-subscription.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../subscriptions/subscription-limits";
+import { TelegramNotificationsService } from "../telegram/telegram-notifications.service";
+import { reassignCompanyReferralFromBillingPromo } from "./company-referral-attribution";
 import {
   AwardCompanyPointsDto,
   ApplyCompanyBillingPromoDto,
@@ -58,6 +61,23 @@ const COMPANY_TRIAL_DAYS = 30;
 const COMPANY_BILLING_GRACE_DAYS = 3;
 const COMPANY_MONTHLY_REFERRAL_SHARE_PERCENT = 30;
 const PAYMENT_CHECKOUT_TTL_MS = 15 * 60 * 1000;
+const SYSTEM_COMPANY_REFERRAL_SOURCE = "SYSTEM_SUPER_ADMIN";
+const CLIENT_REGISTRY_ACTIVE_DAYS = 30;
+const CLIENT_REGISTRY_SLEEPING_DAYS = 45;
+const CLIENT_REGISTRY_DEFAULT_LIMIT = 25;
+const CLIENT_REGISTRY_MAX_LIMIT = 100;
+const CLIENT_REGISTRY_ALLOWED_SEGMENTS = new Set(["all", "active", "withBalance", "vip", "sleeping", "withComment"]);
+const CLIENT_REGISTRY_ALLOWED_SORTS = new Set([
+  "name",
+  "email",
+  "balance",
+  "totalSpend",
+  "earned",
+  "spent",
+  "level",
+  "lastActivity",
+  "updatedAt",
+]);
 
 @Injectable()
 export class CompanyService {
@@ -77,6 +97,8 @@ export class CompanyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config?: ConfigService,
+    @Optional()
+    private readonly telegramNotifications?: TelegramNotificationsService,
   ) {}
 
   private subscriptionSlug(value: string) {
@@ -362,12 +384,23 @@ export class CompanyService {
   private billingRevenueSplit(paidAmount: number, hasReferralManager: boolean) {
     const money = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
     const referralPercent = hasReferralManager ? COMPANY_MONTHLY_REFERRAL_SHARE_PERCENT : 0;
-    const referralAmount = money(paidAmount * (referralPercent / 100));
+    const referralAmount = referralPercent > 0 ? Math.round(money(paidAmount * (referralPercent / 100)) / 10) * 10 : 0;
     return {
       referralPercent,
       referralAmount,
       platformAmount: money(paidAmount - referralAmount),
     };
+  }
+
+  private isCompanyReferralCommissionable(referral?: {
+    status?: string | null;
+    source?: string | null;
+    referrer?: { role?: UserRole | string | null } | null;
+  } | null) {
+    if (!referral || referral.status !== "ACTIVE") return false;
+    if (referral.source === SYSTEM_COMPANY_REFERRAL_SOURCE) return false;
+    if (referral.referrer?.role === UserRole.SUPER_ADMIN) return false;
+    return true;
   }
 
   private addDays(date: Date, days: number) {
@@ -766,12 +799,28 @@ export class CompanyService {
       throw new BadRequestException("One or more selected categories do not exist.");
     }
     const nextSlug = dto.slug !== undefined ? await this.validateCompanySlug(dto.slug, member.companyId) : undefined;
+    if (dto.isActive === true && !member.company.isActive) {
+      const current = await this.currentBillingInvoice(member.companyId);
+      const accessStatus = "access" in current ? current.access?.status : undefined;
+      const hasBillingAccess =
+        accessStatus === "ACTIVE" ||
+        accessStatus === "TRIAL" ||
+        accessStatus === "GRACE" ||
+        current.account.status === "ACTIVE" ||
+        (current.account.status === "TRIAL" && (!current.account.trialEndsAt || current.account.trialEndsAt > new Date())) ||
+        current.invoice?.status === "PAID" ||
+        current.invoice?.status === "WAIVED";
+      if (!hasBillingAccess) {
+        throw new BadRequestException("Оплатите подписку NearLoy или примените тестовый период перед активацией компании.");
+      }
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.company.update({
         where: { id: member.companyId },
         data: {
           ...(nextSlug !== undefined ? { slug: nextSlug } : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
           operatesOnline: dto.operatesOnline,
@@ -930,6 +979,187 @@ export class CompanyService {
         customerComment: customer.companyLinks[0]?.customerComment ?? "",
       };
     });
+  }
+
+  async clientRegistry(
+    userId: number,
+    options: {
+      query?: string;
+      segment?: string;
+      sortBy?: string;
+      sortDir?: string;
+      page?: string | number;
+      limit?: string | number;
+    },
+  ) {
+    const member = await this.membership(userId);
+    const q = options.query?.trim();
+    const companyId = member.companyId;
+    const now = new Date();
+    const activeAfter = new Date(now.getTime() - CLIENT_REGISTRY_ACTIVE_DAYS * DAY_MS);
+    const sleepingBefore = new Date(now.getTime() - CLIENT_REGISTRY_SLEEPING_DAYS * DAY_MS);
+    const segment = CLIENT_REGISTRY_ALLOWED_SEGMENTS.has(options.segment ?? "") ? options.segment! : "all";
+    const sortBy = CLIENT_REGISTRY_ALLOWED_SORTS.has(options.sortBy ?? "") ? options.sortBy! : "lastActivity";
+    const sortDir = options.sortDir === "asc" ? "asc" : "desc";
+    const page = Math.max(1, Number(options.page) || 1);
+    const limit = Math.min(CLIENT_REGISTRY_MAX_LIMIT, Math.max(1, Number(options.limit) || CLIENT_REGISTRY_DEFAULT_LIMIT));
+    const topLevelMinimum = member.company.levelRules.reduce(
+      (max, rule) => Math.max(max, Number(rule.minTotalSpend)),
+      0,
+    );
+    const visibleToCompany: Prisma.UserWhereInput = {
+      OR: [
+        { companyLinks: { some: { companyId } } },
+        { companyPurchases: { some: { companyId } } },
+        { subscriptions: { some: { subscription: { companyId } } } },
+        {
+          subscriptionBundles: {
+            some: { bundle: { participants: { some: { companyId } } } },
+          },
+        },
+      ],
+    };
+    const customers = await this.prisma.user.findMany({
+      where: {
+        role: UserRole.CLIENT,
+        AND: [
+          visibleToCompany,
+          ...(q
+            ? [
+                {
+                  OR: [
+                    { name: { contains: q, mode: "insensitive" as const } },
+                    { email: { contains: q, mode: "insensitive" as const } },
+                    { uuid: { contains: q, mode: "insensitive" as const } },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      },
+      take: 2000,
+      orderBy: { name: "asc" },
+      include: {
+        companyLinks: {
+          where: { companyId },
+          take: 1,
+          select: {
+            balance: true,
+            customerComment: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+        companyPurchases: {
+          where: { companyId },
+          select: { amount: true, pointsAwarded: true, createdAt: true },
+        },
+        loyaltyTransactions: {
+          where: { companyId },
+          select: { type: true, amount: true, occurredAt: true },
+        },
+      },
+    });
+
+    const rows = customers.map((customer) => {
+      const link = customer.companyLinks[0];
+      const totalSpend = customer.companyPurchases.reduce((sum, purchase) => sum + Number(purchase.amount), 0);
+      const totalEarnedPoints = customer.loyaltyTransactions
+        .filter((operation) => operation.type === LoyaltyTransactionType.EARN)
+        .reduce((sum, operation) => sum + operation.amount, 0);
+      const totalSpentPoints = customer.loyaltyTransactions
+        .filter((operation) => operation.type === LoyaltyTransactionType.SPEND)
+        .reduce((sum, operation) => sum + operation.amount, 0);
+      const activityDates = [
+        link?.updatedAt,
+        ...customer.companyPurchases.map((purchase) => purchase.createdAt),
+        ...customer.loyaltyTransactions.map((operation) => operation.occurredAt),
+      ].filter(Boolean) as Date[];
+      const lastActivityAt = activityDates.length
+        ? new Date(Math.max(...activityDates.map((date) => date.getTime())))
+        : null;
+      const level = this.resolveLevel(totalSpend, member.company.levelRules);
+      const balance = link?.balance ?? 0;
+      const customerComment = link?.customerComment ?? "";
+      const isActive = Boolean(lastActivityAt && lastActivityAt >= activeAfter);
+      const isSleeping = !lastActivityAt || lastActivityAt < sleepingBefore;
+      const isVip = (topLevelMinimum > 0 && totalSpend >= topLevelMinimum) || balance >= 1000;
+      return {
+        uuid: customer.uuid,
+        name: customer.name,
+        email: customer.email,
+        balance,
+        totalSpend,
+        purchaseCount: customer.companyPurchases.length,
+        totalEarnedPoints,
+        totalSpentPoints,
+        customerComment,
+        level,
+        linkCreatedAt: link?.createdAt ?? null,
+        linkUpdatedAt: link?.updatedAt ?? null,
+        lastActivityAt,
+        segmentFlags: {
+          active: isActive,
+          sleeping: isSleeping,
+          withBalance: balance > 0,
+          vip: isVip,
+          withComment: customerComment.trim().length > 0,
+        },
+      };
+    });
+
+    const filteredRows = rows.filter((row) => {
+      if (segment === "active") return row.segmentFlags.active;
+      if (segment === "withBalance") return row.segmentFlags.withBalance;
+      if (segment === "vip") return row.segmentFlags.vip;
+      if (segment === "sleeping") return row.segmentFlags.sleeping;
+      if (segment === "withComment") return row.segmentFlags.withComment;
+      return true;
+    });
+
+    const sortedRows = [...filteredRows].sort((left, right) => {
+      const direction = sortDir === "asc" ? 1 : -1;
+      if (sortBy === "name") return left.name.localeCompare(right.name, "ru") * direction;
+      if (sortBy === "email") return (left.email ?? "").localeCompare(right.email ?? "", "ru") * direction;
+      if (sortBy === "balance") return (left.balance - right.balance) * direction;
+      if (sortBy === "totalSpend") return (left.totalSpend - right.totalSpend) * direction;
+      if (sortBy === "earned") return (left.totalEarnedPoints - right.totalEarnedPoints) * direction;
+      if (sortBy === "spent") return (left.totalSpentPoints - right.totalSpentPoints) * direction;
+      if (sortBy === "level") return (left.level.minimumSpend - right.level.minimumSpend) * direction;
+      if (sortBy === "updatedAt") {
+        return ((left.linkUpdatedAt?.getTime() ?? 0) - (right.linkUpdatedAt?.getTime() ?? 0)) * direction;
+      }
+      return ((left.lastActivityAt?.getTime() ?? 0) - (right.lastActivityAt?.getTime() ?? 0)) * direction;
+    });
+
+    const total = sortedRows.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const safePage = Math.min(page, totalPages);
+    const pageItems = sortedRows.slice((safePage - 1) * limit, safePage * limit);
+    const totalBalance = rows.reduce((sum, row) => sum + row.balance, 0);
+    const totalSpend = rows.reduce((sum, row) => sum + row.totalSpend, 0);
+
+    return {
+      items: pageItems,
+      total,
+      page: safePage,
+      limit,
+      totalPages,
+      sortBy,
+      sortDir,
+      segment,
+      stats: {
+        all: rows.length,
+        active: rows.filter((row) => row.segmentFlags.active).length,
+        withBalance: rows.filter((row) => row.segmentFlags.withBalance).length,
+        vip: rows.filter((row) => row.segmentFlags.vip).length,
+        sleeping: rows.filter((row) => row.segmentFlags.sleeping).length,
+        withComment: rows.filter((row) => row.segmentFlags.withComment).length,
+        totalBalance,
+        totalSpend,
+        averageSpend: rows.length ? Math.round(totalSpend / rows.length) : 0,
+      },
+    };
   }
 
   async client(userId: number, uuid: string) {
@@ -1159,6 +1389,7 @@ export class CompanyService {
     let points = dto.points ?? 0;
     let level: ReturnType<CompanyService["resolveLevel"]> | null = null;
     let purchaseAmount: number | null = null;
+    let balanceAfterAward: number | null = null;
     if (dto.mode === "MANUAL") {
       if (!dto.points) throw new BadRequestException("Points are required for manual award.");
     } else {
@@ -1189,11 +1420,12 @@ export class CompanyService {
               },
             });
           }
-          await tx.userCompany.upsert({
+          const userCompany = await tx.userCompany.upsert({
             where: { userId_companyId: { userId: customer.id, companyId: member.companyId } },
             update: points > 0 ? { balance: { increment: points } } : {},
             create: { userId: customer.id, companyId: member.companyId, balance: Math.max(0, points) },
           });
+          balanceAfterAward = userCompany?.balance ?? null;
           if (points > 0) {
             await tx.loyaltyTransaction.create({
               data: {
@@ -1217,6 +1449,10 @@ export class CompanyService {
       throw error;
     }
 
+    if (points > 0) {
+      void this.telegramNotifications?.notifyPointsAwarded(customer.id, member.company.name, points, balanceAfterAward);
+    }
+
     return { customer, mode: dto.mode, pointsAwarded: points, purchaseAmount, level };
   }
 
@@ -1229,7 +1465,7 @@ export class CompanyService {
     });
     if (!customer) throw new NotFoundException("Customer not found.");
 
-    return this.prisma.$transaction(
+    const result = await this.prisma.$transaction(
       async (tx) => {
         const debited = await tx.userCompany.updateMany({
           where: { userId: customer.id, companyId: member.companyId, balance: { gte: dto.points } },
@@ -1255,6 +1491,8 @@ export class CompanyService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+    void this.telegramNotifications?.notifyPointsSpent(customer.id, member.company.name, result.pointsSpent, result.balance);
+    return result;
   }
 
   async updateLoyaltySettings(userId: number, dto: UpdateCompanyLoyaltySettingsDto) {
@@ -1487,7 +1725,8 @@ export class CompanyService {
         currentReferral: {
           select: {
             status: true,
-            referrer: { select: { id: true, uuid: true, name: true, email: true } },
+            source: true,
+            referrer: { select: { id: true, uuid: true, name: true, email: true, role: true } },
           },
         },
       },
@@ -1525,6 +1764,7 @@ export class CompanyService {
         promoDiscountAmount: new Prisma.Decimal(calculation.promoDiscountAmount),
         commissionCreditAmount: new Prisma.Decimal(calculation.commissionCreditAmount),
         amountDue: new Prisma.Decimal(calculation.amountDue),
+        appliedPromoCodeId: promoActive ? (promo?.id ?? null) : null,
       },
       update: {
         status: invoiceStatus,
@@ -1532,8 +1772,18 @@ export class CompanyService {
         promoDiscountAmount: new Prisma.Decimal(calculation.promoDiscountAmount),
         commissionCreditAmount: new Prisma.Decimal(calculation.commissionCreditAmount),
         amountDue: new Prisma.Decimal(calculation.amountDue),
+        appliedPromoCodeId: promoActive ? (promo?.id ?? null) : null,
       },
     });
+    if (invoice.status === "WAIVED" && promoActive && promo?.id) {
+      await this.prisma.$transaction((tx) =>
+        reassignCompanyReferralFromBillingPromo({
+          tx,
+          companyId,
+          promoCodeId: promo.id,
+        }),
+      );
+    }
     const graceEndsAt = this.addDays(invoice.periodEndsAt, COMPANY_BILLING_GRACE_DAYS);
     if (invoice.status === "OPEN" && invoice.periodEndsAt <= now && graceEndsAt <= now && account.status !== "PAST_DUE") {
       account = await this.prisma.companyBillingAccount.update({
@@ -1550,7 +1800,7 @@ export class CompanyService {
         invoice.status === "OPEN" && invoice.periodEndsAt <= now
           ? { status: graceEndsAt > now ? "GRACE" : "PAST_DUE", graceEndsAt, daysLeft: Math.max(0, Math.ceil((graceEndsAt.getTime() - now.getTime()) / DAY_MS)) }
           : { status: account.status, graceEndsAt: null, daysLeft: null },
-      referralManager: company.currentReferral?.status === "ACTIVE" ? company.currentReferral.referrer : null,
+      referralManager: this.isCompanyReferralCommissionable(company.currentReferral) ? company.currentReferral?.referrer : null,
     };
   }
 
@@ -1563,10 +1813,11 @@ export class CompanyService {
       where: { companyId: member.companyId },
       select: {
         status: true,
-        referrer: { select: { id: true, uuid: true, name: true, email: true } },
+        source: true,
+        referrer: { select: { id: true, uuid: true, name: true, email: true, role: true } },
       },
     });
-    const hasReferralManager = referral?.status === "ACTIVE" && Boolean(referral.referrer);
+    const hasReferralManager = this.isCompanyReferralCommissionable(referral);
     const history = await this.prisma.companyBillingInvoice.findMany({
       where: { companyId: member.companyId },
       orderBy: [{ createdAt: "desc" }, { periodStartsAt: "desc" }],
@@ -1640,7 +1891,7 @@ export class CompanyService {
             updatedAt: activePayment.updatedAt,
           }
         : null,
-      referralManager: hasReferralManager ? referral.referrer : null,
+      referralManager: hasReferralManager ? (referral?.referrer ?? null) : null,
       monthlyRevenueSplit: this.billingRevenueSplit(
         current.invoice ? Number(current.invoice.status === "PAID" ? current.invoice.paidAmount : current.invoice.amountDue) : 0,
         hasReferralManager,
@@ -1706,6 +1957,11 @@ export class CompanyService {
       await tx.companyBillingInvoice.update({
         where: { id: current.invoice!.id },
         data: { status: "PAID", paidAmount: current.invoice!.amountDue, paidAt: new Date() },
+      });
+      await reassignCompanyReferralFromBillingPromo({
+        tx,
+        companyId: member.companyId,
+        promoCodeId: current.invoice!.appliedPromoCodeId,
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return this.billing(userId);

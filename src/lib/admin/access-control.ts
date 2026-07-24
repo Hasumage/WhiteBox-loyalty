@@ -8,6 +8,7 @@ export const ADMIN_PERMISSION_SCOPES = [
   "AUDIT",
   "DATABASE",
   "TELEGRAM",
+  "PROMOTION",
   "SETTINGS",
 ] as const;
 
@@ -61,6 +62,12 @@ export const ADMIN_PERMISSION_ZONES = [
     title: "PR и рефералы",
     description: "Привлечение компаний, закрепление реферала и видимость реферальной комиссии.",
     scopes: ["PR"],
+  },
+  {
+    id: "promotion",
+    title: "Продвижение",
+    description: "Ручное усиление рекомендаций компаний и точечный вывод партнёров в топ выдачи.",
+    scopes: ["PROMOTION"],
   },
   {
     id: "tech",
@@ -144,6 +151,12 @@ export const ADMIN_PERMISSION_META: Record<
     description: "Подключение админов к боту и маршрутизация уведомлений.",
     risk: "medium",
   },
+  PROMOTION: {
+    title: "Продвижение",
+    shortTitle: "Promotion",
+    description: "Ручная настройка веса компаний в рекомендациях: процент эффективности и режим «рекомендовать всем».",
+    risk: "high",
+  },
   SETTINGS: {
     title: "Настройки доступа",
     shortTitle: "Settings",
@@ -211,13 +224,21 @@ export function clampPermissionToRole(role: string, input: AdminPermissionLike):
   }
 
   if (role === "MANAGER") {
-    if (scope === "FINANCE" || scope === "SETTINGS") return { ...next, canView: false, canEdit: false, canApprove: false };
+    if (scope === "FINANCE" || scope === "PROMOTION" || scope === "SETTINGS") {
+      return { ...next, canView: false, canEdit: false, canApprove: false };
+    }
     if (scope === "DATABASE") return { ...next, canEdit: false, canApprove: false };
     return next;
   }
 
   if (role === "SUPPORT") {
-    if (scope === "FINANCE" || scope === "SETTINGS" || scope === "COMPANY_VERIFICATIONS" || scope === "PR") {
+    if (
+      scope === "FINANCE" ||
+      scope === "PROMOTION" ||
+      scope === "SETTINGS" ||
+      scope === "COMPANY_VERIFICATIONS" ||
+      scope === "PR"
+    ) {
       return { ...next, canView: false, canEdit: false, canApprove: false };
     }
     if (scope === "DATABASE" || scope === "AUDIT" || scope === "TELEGRAM") {

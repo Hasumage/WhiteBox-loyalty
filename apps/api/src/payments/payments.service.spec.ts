@@ -1,5 +1,6 @@
 ﻿import { PaymentPurpose, PaymentProvider, PaymentStatus, SubscriptionStatus } from "@prisma/client";
 import { fetch as undiciFetch } from "undici";
+import { AccountStatus, Prisma, UserRole } from "@prisma/client";
 import { PaymentsService } from "./payments.service";
 
 jest.mock("undici", () => ({
@@ -475,5 +476,70 @@ describe("PaymentsService", () => {
         currentPeriodEndsAt: expectedPeriodEndsAt,
       }),
     }));
+  });
+
+  it("links a company to the PR manager after a paid YooKassa invoice with a PR promo", async () => {
+    const paidAt = new Date("2026-06-26T22:19:44.016Z");
+    const invoice = {
+      id: "invoice-promo",
+      uuid: "invoice-promo-uuid",
+      companyId: 3,
+      status: "OPEN",
+      appliedPromoCodeId: "promo-pr",
+      periodStartsAt: new Date("2026-06-01T00:00:00.000Z"),
+      periodEndsAt: new Date("2026-07-01T00:00:00.000Z"),
+    };
+    const payment = paymentRecord({
+      id: 56,
+      purpose: PaymentPurpose.COMPANY_NEARLOY_SUBSCRIPTION,
+      status: PaymentStatus.SUCCEEDED,
+      companyId: 3,
+      amount: "3992.00",
+      paidAt,
+      metadata: { invoiceUuid: invoice.uuid },
+    });
+    const tx = {
+      companyBillingInvoice: {
+        findFirst: jest.fn().mockResolvedValue(invoice),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      companyBillingAccount: { upsert: jest.fn(), update: jest.fn() },
+      companyBillingPromoCode: {
+        findUnique: jest.fn().mockResolvedValue({
+          code: "PR20",
+          createdBy: { id: 33, role: UserRole.MANAGER, accountStatus: AccountStatus.ACTIVE },
+        }),
+      },
+      companyReferral: {
+        findUnique: jest.fn().mockResolvedValue({
+          companyId: 3,
+          referrerUserId: 1,
+          status: "ACTIVE",
+          source: "SYSTEM_SUPER_ADMIN",
+          referrer: { id: 1, role: UserRole.SUPER_ADMIN },
+        }),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+    const prisma = {
+      payment: { findUnique: jest.fn().mockResolvedValue(payment) },
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+    const service = new PaymentsService(prisma as never, {} as never, {} as never);
+
+    await (service as unknown as { activatePaidCompanyBilling: (paymentId: number) => Promise<unknown> }).activatePaidCompanyBilling(56);
+
+    expect(tx.companyReferral.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { companyId: 3 },
+      data: expect.objectContaining({
+        referrerUserId: 33,
+        referralPercent: new Prisma.Decimal(30),
+        source: "PROMO_CODE",
+        pipelineStatus: "CONNECTED",
+      }),
+    }));
+    expect(tx.companyReferral.create).not.toHaveBeenCalled();
   });
 });

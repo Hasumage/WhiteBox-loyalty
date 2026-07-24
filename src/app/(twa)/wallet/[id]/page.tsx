@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type SyntheticEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
   Award,
+  Building2,
   Check,
   ChevronRight,
+  Compass,
   Copy,
   Gift,
   Heart,
@@ -23,11 +25,12 @@ import {
   TicketPercent,
 } from "lucide-react";
 import {
-  getCachedTwaCompanies,
   getCachedTwaHistory,
+  getCachedTwaWallet,
   getPublicTwaCompany,
-  getTwaCompanies,
+  getPublicTwaCompanySuggestions,
   getTwaHistory,
+  getTwaWallet,
   setTwaCompanyFavorite,
   type TwaCompany,
   type TwaHistory,
@@ -46,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { categoryName } from "@/lib/i18n/categories";
+import { companyLevelName } from "@/lib/i18n/company-levels";
 
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const EMPTY_HISTORY: TwaHistory = {
@@ -62,32 +66,19 @@ const AURORA_ASSETS = {
   frappe: "/company-assets/aurora/reward-frappe.webp",
 };
 
-const REWARD_CARDS = [
-  {
-    title: "Кофе в подарок",
-    cost: 650,
-    image: AURORA_ASSETS.coffee,
-    accent: "from-violet-500/35 via-violet-950/20 to-slate-950",
-    bar: "bg-violet-400",
-    icon: Gift,
-  },
-  {
-    title: "Десерт со скидкой",
-    cost: 400,
-    image: AURORA_ASSETS.dessert,
-    accent: "from-rose-500/30 via-rose-950/20 to-slate-950",
-    bar: "bg-rose-400",
-    icon: Gift,
-  },
-  {
-    title: "Апгрейд напитка",
-    cost: 250,
-    image: AURORA_ASSETS.frappe,
-    accent: "from-amber-500/30 via-amber-950/20 to-slate-950",
-    bar: "bg-amber-400",
-    icon: Gift,
-  },
-];
+const COMPANY_PLACEHOLDER_ASSETS = {
+  hero: "/company-assets/placeholders/company-hero.svg",
+  logo: "/company-assets/placeholders/company-logo.svg",
+  gallery: "/company-assets/placeholders/company-gallery.svg",
+  galleryAlt: "/company-assets/placeholders/company-gallery-2.svg",
+  galleryExtra: "/company-assets/placeholders/company-gallery-3.svg",
+  offer: "/company-assets/placeholders/company-offer.svg",
+};
+
+function replaceBrokenImage(event: SyntheticEvent<HTMLImageElement>, fallback: string) {
+  if (event.currentTarget.src.endsWith(fallback)) return;
+  event.currentTarget.src = fallback;
+}
 
 type PublicMediaAsset = {
   id: string;
@@ -282,6 +273,8 @@ export default function WalletPage() {
   const [history, setHistory] = useState<TwaHistory>(() => getCachedTwaHistory());
   const [loading, setLoading] = useState(true);
   const [isPublicView, setIsPublicView] = useState(false);
+  const [isGuestView, setIsGuestView] = useState(false);
+  const [suggestedCompanies, setSuggestedCompanies] = useState<TwaCompany[]>([]);
   const [publicMedia, setPublicMedia] = useState<PublicCompanyMediaState | null>(null);
   const [levelsOpen, setLevelsOpen] = useState(false);
   const [locationsOpen, setLocationsOpen] = useState(false);
@@ -305,38 +298,45 @@ export default function WalletPage() {
     let ignore = false;
     setLoading(true);
 
-    const loadPublicCompany = async () => {
+    const loadPublicCompany = async (guestView: boolean) => {
       const publicCompany = await getPublicTwaCompany(id);
+      const suggestions = publicCompany ? [] : await getPublicTwaCompanySuggestions(id, 4);
       if (ignore) return;
       setIsPublicView(true);
+      setIsGuestView(guestView);
       setCompanies(publicCompany ? [publicCompany] : []);
+      setSuggestedCompanies(suggestions);
       setHistory(EMPTY_HISTORY);
       setLoading(false);
     };
 
     const token = getAccessToken();
     if (!token) {
-      void loadPublicCompany();
+      void loadPublicCompany(true);
       return () => {
         ignore = true;
       };
     }
 
     setIsPublicView(false);
-    const cachedCompanies = getCachedTwaCompanies();
+    setIsGuestView(false);
+    const cachedCompanies = getCachedTwaWallet().companies;
     if (cachedCompanies.length) {
       setCompanies(cachedCompanies);
       setLoading(false);
     }
 
-    void Promise.all([getTwaCompanies(true), getTwaHistory()] as const).then(async ([apiCompanies, apiHistory]) => {
+    void Promise.all([getTwaWallet(true), getTwaHistory()] as const).then(async ([apiWallet, apiHistory]) => {
       if (ignore) return;
+      const apiCompanies = apiWallet.companies;
       const matchedCompany = apiCompanies.find((item) => String(item.id) === id || item.slug === id);
       if (!matchedCompany) {
-        await loadPublicCompany();
+        await loadPublicCompany(false);
         return;
       }
       setIsPublicView(false);
+      setIsGuestView(false);
+      setSuggestedCompanies([]);
       setCompanies(apiCompanies);
       setHistory(apiHistory);
       setLoading(false);
@@ -397,7 +397,20 @@ export default function WalletPage() {
   );
   const galleryItems = useMemo<GalleryItem[]>(() => {
     const uploaded = publicMedia?.media.gallery.filter((asset) => Boolean(asset.url)).slice(0, 10) ?? [];
-    if (!uploaded.length) return PUBLIC_GALLERY_ITEMS;
+    if (!uploaded.length) {
+      const placeholderImages = [
+        COMPANY_PLACEHOLDER_ASSETS.gallery,
+        COMPANY_PLACEHOLDER_ASSETS.galleryAlt,
+        COMPANY_PLACEHOLDER_ASSETS.galleryExtra,
+      ];
+      return PUBLIC_GALLERY_ITEMS.map((item, index) => ({
+        ...item,
+        title: ["Атмосфера компании", "Команда и сервис", "Продукты и детали"][index % 3],
+        caption: "фото появится после загрузки",
+        image: placeholderImages[index % placeholderImages.length],
+        position: "center",
+      }));
+    }
     return uploaded.map((asset, index) => ({
       title: asset.title?.trim() || `Фото ${index + 1}`,
       caption: asset.description?.trim() || "атмосфера компании",
@@ -412,18 +425,119 @@ export default function WalletPage() {
   }
 
   if (!company) {
+    const notFoundCopy =
+      locale === "en"
+        ? {
+            eyebrow: "Company card",
+            title: "Company does not exist",
+            description: "We could not find this loyalty card. The link may be outdated or the company is not active yet.",
+            slugLabel: "Requested address",
+            suggestionsTitle: "Try these companies",
+            suggestionsText: "Active partners with public loyalty cards are available below.",
+            emptySuggestions: "No active partner suggestions yet.",
+            allPartners: "All partners",
+            home: "Home",
+          }
+        : {
+            eyebrow: "Карточка компании",
+            title: "Компания не существует",
+            description: "Мы не нашли такую карту лояльности. Возможно, ссылка устарела или компания ещё не активировала профиль.",
+            slugLabel: "Запрошенный адрес",
+            suggestionsTitle: "Попробуйте другие компании",
+            suggestionsText: "Вот активные партнёры, карточки которых уже доступны в NearLoy.",
+            emptySuggestions: "Пока нет активных партнёров для рекомендации.",
+            allPartners: "Все партнёры",
+            home: "На главную",
+          };
+
     return (
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="flex min-h-full flex-col items-center justify-center px-6"
+        className="min-h-full px-5 py-10 pb-28"
       >
-        <p className="mb-4 text-muted-foreground">{t("client.wallet.notFound")}</p>
-        {!isPublicView && (
-          <Button asChild variant="secondary">
-            <Link href="/app">{t("client.common.backHome")}</Link>
-          </Button>
-        )}
+        <div className="mx-auto flex max-w-2xl flex-col gap-5">
+          <section className="overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[radial-gradient(circle_at_20%_0%,rgba(36,196,212,0.22),transparent_34%),linear-gradient(145deg,rgba(13,21,33,0.96),rgba(5,8,14,0.98))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/25 bg-cyan-300/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-cyan-100">
+              <Sparkles className="h-3.5 w-3.5" />
+              {notFoundCopy.eyebrow}
+            </div>
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h1 className="text-4xl font-black leading-tight text-white sm:text-5xl">{notFoundCopy.title}</h1>
+                <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">{notFoundCopy.description}</p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 text-sm text-muted-foreground">
+                <p className="mb-1 text-xs uppercase tracking-[0.22em] text-cyan-100/70">{notFoundCopy.slugLabel}</p>
+                <p className="break-all font-mono text-white">/wallet/{id || "—"}</p>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Button asChild className="rounded-2xl">
+                <Link href="/companies">
+                  <Compass className="mr-2 h-4 w-4" />
+                  {notFoundCopy.allPartners}
+                </Link>
+              </Button>
+              <Button asChild variant="secondary" className="rounded-2xl">
+                <Link href={isPublicView ? "/" : "/app"}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  {notFoundCopy.home}
+                </Link>
+              </Button>
+            </div>
+          </section>
+
+          <section className="rounded-[1.75rem] border border-white/10 bg-card/80 p-5">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-white">{notFoundCopy.suggestionsTitle}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{notFoundCopy.suggestionsText}</p>
+              </div>
+              <div className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-3 text-cyan-100">
+                <Building2 className="h-5 w-5" />
+              </div>
+            </div>
+
+            {suggestedCompanies.length ? (
+              <div className="grid gap-3">
+                {suggestedCompanies.map((suggestion) => {
+                  const suggestionCategories = [suggestion.category, ...suggestion.categories].filter(Boolean);
+                  const primaryCategory = suggestionCategories[0] ?? suggestion.category;
+                  return (
+                    <Link
+                      key={suggestion.slug}
+                      href={`/wallet/${suggestion.slug}`}
+                      className="group flex items-center gap-4 rounded-3xl border border-white/10 bg-white/[0.035] p-3 transition hover:border-cyan-200/35 hover:bg-cyan-200/[0.06]"
+                    >
+                      <div
+                        className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-cyan-200/20 bg-cyan-300/10 bg-cover bg-center"
+                        style={suggestion.logoUrl ? { backgroundImage: `url("${suggestion.logoUrl}")` } : undefined}
+                        aria-label={suggestion.logoUrl ? suggestion.name : undefined}
+                      >
+                        {!suggestion.logoUrl && (
+                          <CategoryIcon iconName={primaryCategory?.icon ?? "Building2"} className="h-6 w-6 text-cyan-100" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate text-lg font-black text-white">{suggestion.name}</h3>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {categoryName(primaryCategory, t)}
+                          {suggestion.locations[0]?.city ? ` · ${suggestion.locations[0].city}` : ""}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground transition group-hover:translate-x-1 group-hover:text-cyan-100" />
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.025] p-5 text-sm text-muted-foreground">
+                {notFoundCopy.emptySuggestions}
+              </div>
+            )}
+          </section>
+        </div>
       </motion.div>
     );
   }
@@ -432,8 +546,8 @@ export default function WalletPage() {
   const isOpen = mainLocation ? isLocationOpenNow(mainLocation) : true;
   const statusOpenTime = formatTime(mainLocation?.openTime);
   const statusCloseTime = formatTime(mainLocation?.closeTime);
-  const currentLevel = company.level.current?.levelName ?? t("client.common.member");
-  const nextLevel = company.level.next?.levelName ?? "Премиум";
+  const currentLevel = companyLevelName(company.level.current?.levelName, locale, t("client.common.member"));
+  const nextLevel = companyLevelName(company.level.next?.levelName, locale, locale === "ru" ? "Премиум" : "Premium");
   const pointsToNextLevel = company.level.next?.pointsToNext ?? 0;
   const levelProgress = Math.max(0, Math.min(100, company.level.progressPercent));
   const levels = [...company.level.ladder].sort((left, right) => left.sortOrder - right.sortOrder);
@@ -450,13 +564,13 @@ export default function WalletPage() {
     typeof window === "undefined" ? publicCompanyPath : new URL(publicCompanyPath, window.location.origin).toString();
   const shareText = `${company.name} в NearLoy — бонусы, уровни и награды в одной карточке.`;
   const vkShareUrl = `https://vk.com/share.php?url=${encodeURIComponent(publicCompanyUrl)}&title=${encodeURIComponent(company.name)}&description=${encodeURIComponent(shareText)}`;
-  const heroImage = publicMedia?.media.hero?.url ?? AURORA_ASSETS.hero;
-  const logoImage = publicMedia?.media.logo?.url ?? null;
+  const heroImage = publicMedia?.media.hero?.url ?? COMPANY_PLACEHOLDER_ASSETS.hero;
+  const logoImage = publicMedia?.media.logo?.url ?? COMPANY_PLACEHOLDER_ASSETS.logo;
   const activeOffer = publicMedia?.offers[0] ?? null;
-  const offerTitle = activeOffer?.title ?? "Скидка 10% на всю выпечку";
-  const offerDescription = activeOffer?.description ?? "Активируйте предложение в карточке NearLoy при визите.";
-  const offerCode = activeOffer?.code ?? "WELCOME10";
-  const offerImage = activeOffer?.imageUrl ?? AURORA_ASSETS.dessert;
+  const offerTitle = activeOffer?.title ?? "Акции скоро появятся";
+  const offerDescription = activeOffer?.description ?? "Компания готовит специальные предложения для клиентов NearLoy.";
+  const offerCode = activeOffer?.code ?? null;
+  const offerImage = activeOffer?.imageUrl ?? COMPANY_PLACEHOLDER_ASSETS.offer;
 
   const handleNativeShare = async () => {
     if (typeof navigator === "undefined" || !("share" in navigator)) {
@@ -587,9 +701,7 @@ export default function WalletPage() {
         <img
           src={heroImage}
           alt={company.name}
-          onError={(event) => {
-            event.currentTarget.style.display = "none";
-          }}
+          onError={(event) => replaceBrokenImage(event, COMPANY_PLACEHOLDER_ASSETS.hero)}
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.24)_38%,rgba(3,6,10,0.92)_100%)]" />
@@ -660,9 +772,7 @@ export default function WalletPage() {
                   src={logoImage}
                   alt={company.name}
                   className="h-full w-full object-cover"
-                  onError={(event) => {
-                    event.currentTarget.style.display = "none";
-                  }}
+                  onError={(event) => replaceBrokenImage(event, COMPANY_PLACEHOLDER_ASSETS.logo)}
                 />
               ) : (
                 <div className="text-[46px] font-black leading-none tracking-[-0.08em] text-white">
@@ -719,32 +829,34 @@ export default function WalletPage() {
       <div className="space-y-5 px-4 pt-5">
         {isPublicView ? (
           <>
-            <motion.section
+            {isGuestView && (
+              <motion.section
               initial={{ y: 12, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.05 }}
-              className="overflow-hidden rounded-[24px] border border-cyan-200/16 bg-[radial-gradient(circle_at_12%_0%,rgba(34,211,238,0.18),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.92),rgba(3,7,18,0.9))] p-5 shadow-[0_18px_46px_rgba(0,0,0,0.38)]"
+              className="overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_18%_10%,rgba(34,211,238,0.12),transparent_32%),radial-gradient(circle_at_88%_0%,rgba(168,85,247,0.10),transparent_28%),linear-gradient(145deg,rgba(15,23,42,0.82),rgba(2,6,23,0.92))] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.42)] backdrop-blur-xl"
             >
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/18 bg-cyan-400/10 text-cyan-100">
-                  <Sparkles className="h-5 w-5" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/16 bg-cyan-300/10 text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)]">
+                  <Sparkles className="h-5 w-5" strokeWidth={1.8} />
                 </div>
-                <div>
-                  <p className="text-lg font-black leading-tight tracking-[-0.04em]">
+                <div className="min-w-0">
+                  <p className="max-w-[310px] text-base font-semibold leading-snug tracking-[-0.02em] text-white">
                     Эти и другие потрясающие компании доступны в NearLoy!
                   </p>
-                  <p className="mt-2 text-sm leading-relaxed text-white/62">
+                  <p className="mt-2 max-w-[330px] text-sm leading-relaxed text-white/58">
                     В приложении можно копить баллы, открывать уровни, получать награды и хранить любимые места в одной карте.
                   </p>
-                  <Button asChild className="mt-4 h-11 rounded-2xl bg-white px-5 text-sm font-black text-slate-950 hover:bg-white/90">
+                  <Button asChild className="mt-4 h-10 rounded-2xl bg-white/92 px-4 text-sm font-semibold text-slate-950 shadow-[0_10px_24px_rgba(255,255,255,0.08)] hover:bg-white">
                     <Link href={`/register?next=${encodeURIComponent(publicCompanyPath)}`}>
                       Создать аккаунт
-                      <ChevronRight className="h-4 w-4" />
+                      <ChevronRight className="h-4 w-4" strokeWidth={1.9} />
                     </Link>
                   </Button>
                 </div>
               </div>
-            </motion.section>
+              </motion.section>
+            )}
 
             <Dialog
               open={Boolean(selectedGalleryItem)}
@@ -760,9 +872,7 @@ export default function WalletPage() {
                         src={selectedGalleryItem.image}
                         alt={selectedGalleryItem.title}
                         className="h-full max-h-[78dvh] min-h-[420px] w-full object-contain"
-                        onError={(event) => {
-                          event.currentTarget.style.display = "none";
-                        }}
+                        onError={(event) => replaceBrokenImage(event, COMPANY_PLACEHOLDER_ASSETS.gallery)}
                       />
                       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/82 via-black/24 to-transparent p-5 pt-20">
                         <DialogTitle className="text-2xl font-black tracking-[-0.05em] text-white">
@@ -807,9 +917,7 @@ export default function WalletPage() {
                       src={item.image}
                       alt={item.title}
                       loading="lazy"
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                      }}
+                      onError={(event) => replaceBrokenImage(event, COMPANY_PLACEHOLDER_ASSETS.gallery)}
                       className="absolute inset-0 h-full w-full object-cover"
                       style={{ objectPosition: item.position }}
                     />
@@ -860,9 +968,7 @@ export default function WalletPage() {
                       src={offerImage}
                       alt={offerTitle}
                       loading="lazy"
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                      }}
+                      onError={(event) => replaceBrokenImage(event, COMPANY_PLACEHOLDER_ASSETS.offer)}
                       className="absolute inset-0 h-full w-full object-cover"
                     />
                     <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.04),rgba(0,0,0,0.62))]" />
@@ -900,7 +1006,7 @@ export default function WalletPage() {
                           {index + 1}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-base font-bold text-white">{level.levelName}</p>
+                          <p className="truncate text-base font-bold text-white">{companyLevelName(level.levelName, locale)}</p>
                           <p className="mt-1 text-sm text-white/52">от {level.minTotalSpend} баллов</p>
                         </div>
                       </div>
@@ -928,20 +1034,30 @@ export default function WalletPage() {
           <div className="space-y-3">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-              <p className="text-sm text-white/70">Ваш баланс</p>
-              <div className="mt-2 flex items-end gap-2">
-                <span className="text-[42px] font-black leading-[0.82] tracking-[-0.06em]">{company.points.balance}</span>
-                <span className="pb-0.5 text-sm text-white/78">баллов</span>
+                <p className="text-sm text-white/70">Ваш баланс</p>
+                <div className="mt-2 flex items-end gap-2">
+                  <span className="text-[42px] font-black leading-[0.82] tracking-[-0.06em]">{company.points.balance}</span>
+                  <span className="pb-0.5 text-sm text-white/78">баллов</span>
+                </div>
+                <div className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-violet-300/20 bg-violet-500/12 px-3 py-1.5 text-sm text-violet-200">
+                  <Star className="h-4 w-4 fill-violet-300 text-violet-300" />
+                  {currentLevel}
+                </div>
               </div>
-              <div className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-violet-300/20 bg-violet-500/12 px-3 py-1.5 text-sm text-violet-200">
-                <Star className="h-4 w-4 fill-violet-300 text-violet-300" />
-                {currentLevel}
-              </div>
-            </div>
 
-              <div className="min-w-[116px] rounded-[18px] border border-white/8 bg-slate-950/45 px-3 py-2 text-right">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Дальше</p>
-                <p className="mt-1 truncate text-sm font-bold text-white/86">{company.level.next ? nextLevel : "Максимум"}</p>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <div className="min-w-[116px] rounded-[18px] border border-white/8 bg-slate-950/45 px-3 py-2 text-right">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Дальше</p>
+                  <p className="mt-1 truncate text-sm font-bold text-white/86">{company.level.next ? nextLevel : "Максимум"}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLevelsOpen(true)}
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-amber-200/20 bg-amber-500/10 px-3 text-xs font-semibold text-amber-100 transition hover:bg-amber-500/16"
+                >
+                  <Award className="h-4 w-4" />
+                  Все уровни
+                </button>
               </div>
             </div>
 
@@ -964,6 +1080,10 @@ export default function WalletPage() {
                   style={{ width: `${levelProgress}%` }}
                 />
               </div>
+              <p className="mt-2 text-xs text-white/62">
+                <span className="font-bold text-amber-200">{company.level.totalSpentPoints}</span>
+                {company.level.next ? ` / ${company.level.next.minTotalSpend} баллов` : " баллов на текущем уровне"}
+              </p>
             </div>
           </div>
         </motion.section>
@@ -1020,95 +1140,6 @@ export default function WalletPage() {
           </motion.section>
         )}
 
-        <motion.section initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xl font-black tracking-[-0.04em]">Награды</h2>
-            <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-violet-300">
-              Все награды
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="flex snap-x gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {REWARD_CARDS.map((reward) => {
-              const progress = Math.min(100, (company.points.balance / reward.cost) * 100);
-              const Icon = reward.icon;
-              return (
-                <article
-                  key={reward.title}
-                  className={cn(
-                    "relative min-w-[168px] snap-start overflow-hidden rounded-[20px] border border-white/10 bg-gradient-to-br p-3 shadow-[0_18px_46px_rgba(0,0,0,0.35)]",
-                    reward.accent,
-                  )}
-                >
-                  <div className="relative h-20 overflow-hidden rounded-2xl">
-                    <img
-                      src={reward.image}
-                      alt={reward.title}
-                      loading="lazy"
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                      }}
-                      className="h-full w-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                    <div className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-black/45 text-white backdrop-blur">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <h3 className="mt-3 text-sm font-bold leading-tight">{reward.title}</h3>
-                  <p className="mt-1 text-sm text-white/75">
-                    <span className="font-bold text-violet-200">{reward.cost}</span> баллов
-                  </p>
-                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                    <div className={cn("h-full rounded-full", reward.bar)} style={{ width: `${progress}%` }} />
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </motion.section>
-
-        <motion.section
-          initial={{ y: 12, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.12 }}
-          className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(3,7,18,0.88))] p-4"
-        >
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setLevelsOpen(true)}
-              className="absolute right-0 top-1/2 z-10 flex h-[76px] w-[92px] -translate-y-1/2 flex-col items-center justify-center rounded-[22px] border border-amber-200/20 bg-amber-500/10 text-amber-100 transition hover:bg-amber-500/16"
-            >
-              <Award className="mb-1 h-8 w-8" />
-              <span className="text-xs font-semibold leading-none">Все уровни</span>
-            </button>
-
-            <div className="mb-4 pr-[108px]">
-              <h2 className="text-xl font-black tracking-[-0.04em]">Ваш уровень</h2>
-            </div>
-            <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-4 pr-[108px]">
-              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[24px] border border-amber-200/25 bg-[radial-gradient(circle_at_30%_20%,rgba(251,191,36,0.5),transparent_34%),linear-gradient(135deg,rgba(154,76,21,0.9),rgba(45,19,9,0.96))] shadow-[0_18px_42px_rgba(0,0,0,0.35)]">
-                <Star className="h-8 w-8 fill-white text-white" />
-              </div>
-              <div>
-                <p className="text-base font-bold">
-                  {currentLevel}
-                  <span className="mx-2 text-white/45">→</span>
-                  <span className="font-medium text-white/65">{nextLevel}</span>
-                </p>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-orange-500" style={{ width: `${levelProgress}%` }} />
-                </div>
-                <p className="mt-2 text-sm text-white/74">
-                  <span className="font-bold text-amber-200">{company.level.totalSpentPoints}</span>
-                  {company.level.next ? ` / ${company.level.next.minTotalSpend} баллов` : " баллов"}
-                </p>
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
         <Dialog open={levelsOpen} onOpenChange={setLevelsOpen}>
           <DialogContent className="max-h-[82vh] overflow-hidden border-white/10 bg-[#070b12] p-0 text-white">
             <DialogHeader className="border-b border-white/8 px-5 py-4 text-left">
@@ -1133,7 +1164,7 @@ export default function WalletPage() {
                     )}
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-base font-bold text-white">{level.levelName}</p>
+                      <p className="truncate text-base font-bold text-white">{companyLevelName(level.levelName, locale)}</p>
                       <p className="mt-1 text-sm text-white/55">от {level.minTotalSpend} баллов</p>
                     </div>
                     <div className="shrink-0 text-right">
@@ -1165,7 +1196,12 @@ export default function WalletPage() {
                 <div className="flex items-center gap-3">
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-amber-200/30 bg-[linear-gradient(135deg,rgba(115,64,25,0.95),rgba(34,18,9,0.98))] text-3xl font-black text-white">
                     {logoImage ? (
-                      <img src={logoImage} alt={company.name} className="h-full w-full object-cover" />
+                      <img
+                        src={logoImage}
+                        alt={company.name}
+                        className="h-full w-full object-cover"
+                        onError={(event) => replaceBrokenImage(event, COMPANY_PLACEHOLDER_ASSETS.logo)}
+                      />
                     ) : (
                       company.name.slice(0, 1).toUpperCase()
                     )}

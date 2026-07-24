@@ -222,6 +222,56 @@ export type CompanyClient = {
   level: { name: string; minimumSpend: number; cashbackPercent: number };
 };
 
+export type CompanyClientRegistrySegment = "all" | "active" | "withBalance" | "vip" | "sleeping" | "withComment";
+export type CompanyClientRegistrySortBy =
+  | "name"
+  | "email"
+  | "balance"
+  | "totalSpend"
+  | "earned"
+  | "spent"
+  | "level"
+  | "lastActivity"
+  | "updatedAt";
+
+export type CompanyClientRegistryRow = CompanyClient & {
+  purchaseCount: number;
+  totalEarnedPoints: number;
+  totalSpentPoints: number;
+  linkCreatedAt: string | null;
+  linkUpdatedAt: string | null;
+  lastActivityAt: string | null;
+  segmentFlags: {
+    active: boolean;
+    sleeping: boolean;
+    withBalance: boolean;
+    vip: boolean;
+    withComment: boolean;
+  };
+};
+
+export type CompanyClientRegistryResponse = {
+  items: CompanyClientRegistryRow[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  sortBy: CompanyClientRegistrySortBy;
+  sortDir: "asc" | "desc";
+  segment: CompanyClientRegistrySegment;
+  stats: {
+    all: number;
+    active: number;
+    withBalance: number;
+    vip: number;
+    sleeping: number;
+    withComment: number;
+    totalBalance: number;
+    totalSpend: number;
+    averageSpend: number;
+  };
+};
+
 export type CompanyClientDetail = CompanyClient & {
   recentPurchases: Array<{ uuid: string; amount: number; pointsAwarded: number; createdAt: string }>;
   recentPointOperations: Array<{
@@ -443,6 +493,7 @@ export function updateCompanyProfile(body: {
   description?: string;
   operatesOnline: boolean;
   categoryIds: number[];
+  isActive?: boolean;
 }) {
   return request<CompanyProfile>("/company/profile", {
     method: "PATCH",
@@ -586,6 +637,25 @@ export function companyAiAssist(body: {
 
 export function companyClients(query = "") {
   return request<CompanyClient[]>(`/company/clients?query=${encodeURIComponent(query)}`);
+}
+
+export function companyClientRegistry(params: {
+  query?: string;
+  segment?: CompanyClientRegistrySegment;
+  sortBy?: CompanyClientRegistrySortBy;
+  sortDir?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+} = {}) {
+  const searchParams = new URLSearchParams();
+  if (params.query) searchParams.set("query", params.query);
+  if (params.segment) searchParams.set("segment", params.segment);
+  if (params.sortBy) searchParams.set("sortBy", params.sortBy);
+  if (params.sortDir) searchParams.set("sortDir", params.sortDir);
+  if (params.page) searchParams.set("page", String(params.page));
+  if (params.limit) searchParams.set("limit", String(params.limit));
+  const suffix = searchParams.toString();
+  return request<CompanyClientRegistryResponse>(`/company/clients/registry${suffix ? `?${suffix}` : ""}`);
 }
 
 export function companyClient(uuid: string) {
@@ -835,6 +905,7 @@ export function companyFinance() {
 export type CompanyBillingData = {
   account: { status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED"; trialEndsAt: string | null; currentPeriodStartsAt: string; currentPeriodEndsAt: string };
   invoice: null | { uuid: string; status: "OPEN" | "PAID" | "WAIVED" | "CANCELED"; periodStartsAt: string; periodEndsAt: string; baseFee: string | number; promoDiscountAmount: string | number; commissionCreditAmount: string | number; amountDue: string | number };
+  access?: { status: "TRIAL" | "ACTIVE" | "GRACE" | "PAST_DUE" | "SUSPENDED"; graceEndsAt: string | null; daysLeft: number | null };
   availableBalance: number;
   activePayment: null | CompanyBillingCheckout;
   savedPaymentMethod: null | {

@@ -196,6 +196,10 @@ All `/api/registered/*` routes require `CLIENT`.
 - Telegram services: Bot API proxy support, direct-message admin linking and webhook command handling.
 - Admin task services: translate audit fires, verification reviews and finance approvals into deduplicated, permission-scoped resolution cards.
 - Company media services: store public assets/offers and expose read-only media payloads by slug.
+- Public marketing services/pages: keep business landing, giveaway, careers and shared marketing footer as public read-only surfaces with no private API exposure.
+- Careers SEO services/pages: emit canonical metadata, OpenGraph/Twitter previews and JSON-LD `JobPosting` payloads from localized role definitions.
+- Giveaway pages: count progress toward 50 active companies, show the 100 000 RUB business-development prize and keep legal participation rules on a dedicated public page.
+- Root SEO config: `NEXT_PUBLIC_SITE_URL` controls absolute public URLs, with `https://nearloy.ru` as the production fallback.
 - Finance payout services: build company/PR payout checklists, verify available balance, store provider payout metadata, support YooKassa test payouts and allow manual closure for launch.
 - i18n services: locale cookie, user preference persistence and structured translation dictionaries.
 

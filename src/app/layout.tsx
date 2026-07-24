@@ -2,7 +2,10 @@
 import Script from "next/script";
 import "./globals.css";
 
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://nearloy.ru").replace(/\/$/, "");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "NearLoy — бонусы, подписки и сервис для клиентов",
   description: "NearLoy помогает клиентам хранить бонусы, подписки, статусы и историю операций в одном удобном интерфейсе.",
   manifest: "/site.webmanifest",
