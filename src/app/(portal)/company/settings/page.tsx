@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Building2, Check, Copy, ExternalLink, Globe2, Images, Link2, MapPinned, Save, Settings2, Share2, Tags } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Building2, Check, Copy, ExternalLink, Globe2, Images, Link2, Loader2, MapPinned, Power, RotateCcw, Save, Settings2, Share2, Sparkles, Tags } from "lucide-react";
 import { CategoryMultiSelect } from "@/components/ui/category-multi-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { companyCategories, companyProfile, updateCompanyProfile, type CompanyProfile } from "@/lib/api/company-client";
+import { companyBilling, companyCategories, companyProfile, updateCompanyProfile, type CompanyBillingData, type CompanyProfile } from "@/lib/api/company-client";
+import { cn } from "@/lib/utils";
 
 type CategoryOption = { id: number; slug: string; name: string; icon: string };
 
@@ -22,28 +23,62 @@ function normalizeCompanySlugInput(value: string) {
     .slice(0, 60);
 }
 
+function hasSubscriptionAccess(billing: CompanyBillingData | null) {
+  if (!billing) return false;
+  const now = Date.now();
+  const trialActive = billing.account.status === "TRIAL" && (!billing.account.trialEndsAt || new Date(billing.account.trialEndsAt).getTime() > now);
+  return (
+    billing.access?.status === "ACTIVE" ||
+    billing.access?.status === "TRIAL" ||
+    billing.access?.status === "GRACE" ||
+    billing.account.status === "ACTIVE" ||
+    trialActive ||
+    billing.invoice?.status === "PAID" ||
+    billing.invoice?.status === "WAIVED"
+  );
+}
+
+function billingEndDate(billing: CompanyBillingData | null) {
+  const value = billing?.account.trialEndsAt ?? billing?.invoice?.periodEndsAt ?? billing?.account.currentPeriodEndsAt ?? null;
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "long", year: "numeric" }).format(new Date(value));
+}
+
+function areCategoryIdsEqual(left: number[], right: number[]) {
+  if (left.length !== right.length) return false;
+  const leftSorted = [...left].sort((a, b) => a - b);
+  const rightSorted = [...right].sort((a, b) => a - b);
+  return leftSorted.every((id, index) => id === rightSorted[index]);
+}
+
 export default function CompanySettingsPage() {
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
+  const [billing, setBilling] = useState<CompanyBillingData | null>(null);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [categoryIds, setCategoryIds] = useState<number[]>([]);
   const [operatesOnline, setOperatesOnline] = useState(false);
+  const [companyActive, setCompanyActive] = useState(false);
+  const [activationSaving, setActivationSaving] = useState(false);
+  const [activationDone, setActivationDone] = useState(false);
   const [copied, setCopied] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   async function load() {
     try {
-      const [current, options] = await Promise.all([companyProfile(), companyCategories()]);
+      const [current, options, currentBilling] = await Promise.all([companyProfile(), companyCategories(), companyBilling().catch(() => null)]);
       setProfile(current);
+      setBilling(currentBilling);
       setCategories(options);
       setName(current.company.name);
       setSlug(current.company.slug);
       setDescription(current.company.description ?? "");
       setCategoryIds(current.company.categories.map((category) => category.id));
       setOperatesOnline(current.company.operatesOnline);
+      setCompanyActive(current.company.isActive);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось загрузить настройки компании.");
     }
@@ -57,6 +92,30 @@ export default function CompanySettingsPage() {
   const normalizedSlug = normalizeCompanySlugInput(slug);
   const publicPath = `/wallet/${normalizedSlug || profile?.company.slug || ""}`;
   const publicUrl = typeof window === "undefined" ? publicPath : new URL(publicPath, window.location.origin).toString();
+  const savedCategoryIds = useMemo(() => profile?.company.categories.map((category) => category.id) ?? [], [profile]);
+  const hasDirty = useMemo(() => {
+    if (!profile || !canManage) return false;
+    return (
+      name !== profile.company.name ||
+      normalizedSlug !== profile.company.slug ||
+      description !== (profile.company.description ?? "") ||
+      operatesOnline !== profile.company.operatesOnline ||
+      companyActive !== profile.company.isActive ||
+      !areCategoryIdsEqual(categoryIds, savedCategoryIds)
+    );
+  }, [canManage, categoryIds, companyActive, description, name, normalizedSlug, operatesOnline, profile, savedCategoryIds]);
+
+  function discardChanges() {
+    if (!profile) return;
+    setName(profile.company.name);
+    setSlug(profile.company.slug);
+    setDescription(profile.company.description ?? "");
+    setCategoryIds(profile.company.categories.map((category) => category.id));
+    setOperatesOnline(profile.company.operatesOnline);
+    setCompanyActive(profile.company.isActive);
+    setError("");
+    setMessage("");
+  }
 
   async function save() {
     if (!name.trim() || !categoryIds.length) {
@@ -69,8 +128,9 @@ export default function CompanySettingsPage() {
     }
     try {
       setError("");
-      const updated = await updateCompanyProfile({ name, slug: normalizedSlug, description, categoryIds, operatesOnline });
+      const updated = await updateCompanyProfile({ name, slug: normalizedSlug, description, categoryIds, operatesOnline, isActive: companyActive });
       setProfile(updated);
+      setCompanyActive(updated.company.isActive);
       setSlug(updated.company.slug);
       setMessage("Профиль компании сохранён.");
     } catch (reason) {
@@ -94,6 +154,37 @@ export default function CompanySettingsPage() {
       return;
     }
     await copyPublicLink();
+  }
+
+  const canActivateCompany = hasSubscriptionAccess(billing);
+
+  async function toggleCompanyActivation(nextActive: boolean) {
+    if (!profile || !canManage || activationSaving) return;
+    if (nextActive && !canActivateCompany) {
+      setError("Сначала оплатите подписку NearLoy или примените тестовый период.");
+      return;
+    }
+    try {
+      setActivationSaving(true);
+      setError("");
+      const updated = await updateCompanyProfile({
+        name,
+        slug: normalizedSlug,
+        description,
+        categoryIds,
+        operatesOnline,
+        isActive: nextActive,
+      });
+      setProfile(updated);
+      setCompanyActive(updated.company.isActive);
+      setActivationDone(nextActive);
+      setMessage(nextActive ? "Компания активирована и готова к показу клиентам." : "Компания скрыта из публичной выдачи.");
+      window.setTimeout(() => setActivationDone(false), 2400);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось изменить активность компании.");
+    } finally {
+      setActivationSaving(false);
+    }
   }
 
   return (
@@ -230,9 +321,89 @@ export default function CompanySettingsPage() {
               </div>
             </div>
           )}
-          {canManage && <Button onClick={() => void save()} className="rounded-xl"><Save /> Сохранить профиль</Button>}
+          <div className="rounded-3xl border border-cyan-200/20 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_36%),rgba(255,255,255,0.035)] p-4 sm:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/25 bg-cyan-200/10 text-cyan-50">
+                  <Power className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold">Публикация компании</p>
+                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                    Включите, когда карточка, адреса и подписка готовы. Активная компания может отображаться в выдаче и на карте.
+                  </p>
+                  {canActivateCompany ? (
+                    <p className="mt-2 text-sm text-emerald-100">Подписка активна до {billingEndDate(billing)}.</p>
+                  ) : (
+                    <p className="mt-2 text-sm text-amber-100">Для публикации нужна активная подписка или тестовый период.</p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={companyActive}
+                disabled={!canManage || activationSaving || (!companyActive && !canActivateCompany)}
+                onClick={() => void toggleCompanyActivation(!companyActive)}
+                className={cn(
+                  "group flex min-w-[220px] items-center justify-between rounded-2xl border px-4 py-3 text-left transition",
+                  companyActive
+                    ? "border-emerald-200/35 bg-emerald-200/12 text-emerald-50"
+                    : "border-white/10 bg-black/28 text-white/72",
+                  (!canManage || activationSaving || (!companyActive && !canActivateCompany)) && "cursor-not-allowed opacity-55",
+                )}
+              >
+                <span>
+                  <span className="block text-sm font-semibold">{companyActive ? "Компания активна" : "Компания скрыта"}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{companyActive ? "Клиенты видят карточку" : "Не показывается публично"}</span>
+                </span>
+                <span
+                  className={cn(
+                    "relative h-8 w-14 rounded-full border transition",
+                    companyActive ? "border-emerald-200/40 bg-emerald-300/25" : "border-white/12 bg-white/8",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-black transition",
+                      companyActive ? "left-7" : "left-1",
+                    )}
+                  >
+                    {activationSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : companyActive ? <Check className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  </span>
+                </span>
+              </button>
+            </div>
+            {activationDone && (
+              <div className="mt-4 rounded-2xl border border-emerald-200/25 bg-emerald-300/10 p-3 text-sm text-emerald-50">
+                Ваша компания успешно активирована. Спасибо — теперь клиенты смогут найти её в NearLoy.
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
+      {hasDirty && (
+        <div className="sticky bottom-3 z-30">
+          <Card className="border-primary/30 bg-card/95 shadow-2xl backdrop-blur">
+            <CardContent className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm">
+                <p className="font-semibold">Есть несохранённые изменения</p>
+                <p className="text-xs text-muted-foreground">Профиль компании</p>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button type="button" variant="secondary" className="rounded-xl" onClick={discardChanges}>
+                  <RotateCcw className="h-4 w-4" />
+                  Сбросить
+                </Button>
+                <Button type="button" className="rounded-xl" onClick={() => void save()}>
+                  <Save className="h-4 w-4" />
+                  Сохранить всё
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

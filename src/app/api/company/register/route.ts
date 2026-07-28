@@ -30,6 +30,10 @@ function validatePassportPhoto(value: unknown, required: boolean) {
   }
 }
 
+function requestedVerificationMode(value: unknown) {
+  return typeof value === "string" && value.trim().toUpperCase() === "DEFERRED" ? "DEFERRED" : "FULL";
+}
+
 async function readCompanyRegisterPayload(request: NextRequest): Promise<{
   raw: Record<string, unknown>;
   passportUpload?: StoredPassportUpload;
@@ -37,8 +41,9 @@ async function readCompanyRegisterPayload(request: NextRequest): Promise<{
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
+    const identityVerificationMode = requestedVerificationMode(form.get("identityVerificationMode"));
     const passportPhoto = form.get("passportPhoto");
-    validatePassportPhoto(passportPhoto, true);
+    validatePassportPhoto(passportPhoto, identityVerificationMode === "FULL");
     let passportUpload: StoredPassportUpload | undefined;
     if (isUploadLike(passportPhoto) && passportPhoto.size > 0) {
       const passportFile = passportPhoto as File;
@@ -57,7 +62,9 @@ async function readCompanyRegisterPayload(request: NextRequest): Promise<{
     ) as Record<string, unknown>;
     payload.consentAccepted = payload.consentAccepted === "true" || payload.consentAccepted === "on";
     payload.termsAccepted = payload.termsAccepted === "true" || payload.termsAccepted === "on";
-    payload.identityVerificationMode = "FULL";
+    payload.identityVerificationMode = identityVerificationMode;
+    payload.verificationDeferralReason =
+      identityVerificationMode === "DEFERRED" ? "Компания решила пройти проверку после регистрации." : undefined;
     payload.passportPhotoProvided = Boolean(passportUpload);
     return { raw: payload, passportUpload };
   }
@@ -65,7 +72,9 @@ async function readCompanyRegisterPayload(request: NextRequest): Promise<{
   const raw = (await request.json()) as Record<string, unknown>;
   raw.consentAccepted = raw.consentAccepted === true;
   raw.termsAccepted = raw.termsAccepted === true;
-  raw.identityVerificationMode = "FULL";
+  raw.identityVerificationMode = requestedVerificationMode(raw.identityVerificationMode);
+  raw.verificationDeferralReason =
+    raw.identityVerificationMode === "DEFERRED" ? "Компания решила пройти проверку после регистрации." : undefined;
   // Full verification requires a real encrypted upload, not a JSON assertion.
   raw.passportPhotoProvided = false;
   return { raw };

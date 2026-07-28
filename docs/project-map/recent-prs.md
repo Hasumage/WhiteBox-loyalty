@@ -13,7 +13,14 @@ This document summarizes the recent product PRs and the current pending update t
 - YooKassa payouts are available as a test-gateway path, while manual closure stays available for the self-employed launch model.
 - Company pages gained manual NearLoy subscription extension by admins with month/day duration support and optional Telegram notifications for company owners.
 - Authentication recovery now retries refresh-token login from protected pages and shows a friendly overlay instead of dumping users into a raw unauthorized state.
-- Landing header was rearranged around login-first CTAs and a compact mobile menu.
+- Public marketing was expanded: `/business` now promotes the business-growth giveaway, `/business/giveaway` tracks progress toward 50 active companies with a liquid-vessel visual, and `/business/giveaway/rules` holds the dedicated participation rules.
+- Giveaway content now explains the 100 000 RUB business-development prize without exposing billing mechanics in public copy, and uses vertical lightweight use-case cards with themed images.
+- Careers were added under `/careers`, `/careers/[slug]` and `/careers/b2b-manager` with RU/EN copy, canonical metadata, OpenGraph/Twitter previews and JSON-LD `JobPosting` data.
+- The detailed B2B acquisition manager vacancy is a standalone public page with the launch-stage conditions, long-term revenue model and a Telegram contact CTA for the project lead.
+- Marketing pages share `MarketingFooter`; it keeps only the lightweight careers link plus user/company terms, while giveaway rules stay inside the giveaway flow.
+- Landing header was rearranged around login-first CTAs, a desktop layout that stays visible on wide screens, and a full-screen mobile menu with navigation, language switcher and auth/partner actions inside the overlay.
+- Root SEO metadata now uses `NEXT_PUBLIC_SITE_URL` with a `https://nearloy.ru` fallback so canonical, OpenGraph and JSON-LD URLs stay production-safe.
+- A branded 404 surface was added with the NearLoy mascot artwork and standard recovery actions.
 - Daily Telegram reports gained a scheduler script and Railway/local wiring so the 23:00 Moscow report can run outside manual endpoint calls.
 - Production email/runtime docs now describe Resend, SMTP fallback, AI gateway configuration and Railway-specific environment expectations.
 
@@ -72,3 +79,4 @@ The project docs should now describe NearLoy as:
 - A company-media aware product with public galleries/offers and runtime storage limits.
 - An operations platform with task Kanban, system health and permission-scoped alerts.
 - An email-delivery product that requires production-safe provider configuration.
+- A public marketing surface with business landing, giveaway, careers, legal terms and reusable header/footer components.

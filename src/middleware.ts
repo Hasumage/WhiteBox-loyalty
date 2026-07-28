@@ -34,9 +34,29 @@ function responseWithLocale(request: NextRequest, response = NextResponse.next()
 }
 
 function redirectToLogin(request: NextRequest) {
-  const login = new URL("/login", request.url);
+  const isCapacitorApp = request.nextUrl.searchParams.get("app") === "capacitor";
+  const login = new URL(isCapacitorApp ? "/mobile-login" : "/login", request.url);
+  if (isCapacitorApp) {
+    login.searchParams.set("app", "capacitor");
+  }
   login.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
   return responseWithLocale(request, NextResponse.redirect(login));
+}
+
+function isCapacitorClientRoute(path: string) {
+  return (
+    path === "/app" ||
+    path === "/map" ||
+    path.startsWith("/map/") ||
+    path === "/history" ||
+    path === "/scan" ||
+    path === "/company" ||
+    path.startsWith("/company/") ||
+    path.startsWith("/settings") ||
+    path.startsWith("/categories") ||
+    path.startsWith("/companies") ||
+    path.startsWith("/marketplace")
+  );
 }
 
 export async function middleware(request: NextRequest) {
@@ -49,6 +69,10 @@ export async function middleware(request: NextRequest) {
     path === "/login" ||
     path === "/register" ||
     path === "/forgot-password" ||
+    path === "/mobile-entry" ||
+    path === "/mobile-login" ||
+    path === "/mobile-register" ||
+    path === "/mobile-forgot-password" ||
     path === "/company/register"
   ) {
     return responseWithLocale(request);
@@ -59,6 +83,10 @@ export async function middleware(request: NextRequest) {
   }
 
   if (path.startsWith("/wallet/")) {
+    return responseWithLocale(request);
+  }
+
+  if (request.nextUrl.searchParams.get("app") === "capacitor" && isCapacitorClientRoute(path)) {
     return responseWithLocale(request);
   }
 
@@ -118,6 +146,10 @@ export const config = {
     "/login",
     "/register",
     "/forgot-password",
+    "/mobile-entry",
+    "/mobile-login",
+    "/mobile-register",
+    "/mobile-forgot-password",
     "/app",
     "/company/register",
     "/map",

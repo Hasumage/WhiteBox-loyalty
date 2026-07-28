@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowLeft, Bus, Car, ChevronRight, Crosshair, Filter, Footprints, LocateFixed, MapPin, Maximize2, Route, Search, X } from "lucide-react";
 import { getActiveTwaSubscriptions, getCachedActiveTwaSubscriptions, getCachedTwaMapCompanies, getTwaMapCompanies, type TwaCompany, type TwaUserSubscription } from "@/lib/api/twa-client";
+import { CLIENT_BOOTSTRAP_TIMEOUT_MS, promiseWithTimeout } from "@/lib/api/fetch-timeout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,8 +22,10 @@ import { interpolate } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/format";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
+import { getGeolocationPosition } from "@/lib/capacitor/native-permissions";
 
 const YANDEX_MAPS_SCRIPT_ID = "yandex-maps-js-api-v3";
+const YANDEX_MAPS_LOAD_TIMEOUT_MS = 12_000;
 const YANDEX_MAP_CENTER: [number, number] = [37.6176, 55.7558];
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const CITY_CLUSTER_MAX_ZOOM = 8.8;
@@ -198,6 +201,23 @@ type UserMapLocation = {
   accuracy: number | null;
 };
 
+type MapMediaAsset = {
+  url: string | null;
+};
+
+type MapCompanyMedia = {
+  media: {
+    logo: MapMediaAsset | null;
+    hero: MapMediaAsset | null;
+    gallery: MapMediaAsset[];
+  };
+};
+
+type SelectedMediaItem = {
+  url: string;
+  kind: "logo" | "image";
+};
+
 type RouteMode = "auto" | "pedestrian" | "transit";
 
 const ROUTE_MODES: Array<{ key: RouteMode; labelKey: TranslationKey; yandex: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -219,9 +239,28 @@ declare global {
   }
 }
 
+let yandexMapsLoadPromise: Promise<YMaps3Api> | null = null;
+let yandexReactifiedMapsLoadPromise: Promise<YandexReactifiedMaps> | null = null;
+
 function uniqueCompanyCategories(company: TwaCompany) {
   const bySlug = new Map([company.category, ...company.categories].filter(Boolean).map((category) => [category.slug, category]));
   return [...bySlug.values()];
+}
+
+function buildSelectedMediaItems(company: TwaCompany | null, media: MapCompanyMedia | null) {
+  if (!company) return [];
+
+  const candidates: SelectedMediaItem[] = [];
+  const logoUrl = media?.media.logo?.url ?? company.logoUrl;
+  if (logoUrl) candidates.push({ url: logoUrl, kind: "logo" });
+  if (media?.media.hero?.url) candidates.push({ url: media.media.hero.url, kind: "image" });
+  for (const asset of media?.media.gallery ?? []) {
+    if (asset.url) candidates.push({ url: asset.url, kind: "image" });
+  }
+
+  return candidates
+    .filter((candidate, index) => candidates.findIndex((item) => item.url === candidate.url) === index)
+    .slice(0, 5);
 }
 
 function timeToMinutes(value: string) {
@@ -479,35 +518,79 @@ function CityClusterBadge({ item, compact = false }: { item: Extract<MarkerItem,
   );
 }
 
-function loadYandexMaps(apiKey: string): Promise<YMaps3Api> {
-  if (typeof window === "undefined") return Promise.reject(new Error("Browser is required."));
-  if (window.ymaps3) return window.ymaps3.ready.then(() => window.ymaps3 as YMaps3Api);
+function withYandexMapsTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), YANDEX_MAPS_LOAD_TIMEOUT_MS);
+  });
 
-  const existingScript = document.getElementById(YANDEX_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
+function loadYandexMapsOnce(apiKey: string): Promise<YMaps3Api> {
+  if (typeof window === "undefined") return Promise.reject(new Error("Browser is required."));
+  if (window.ymaps3) {
+    return withYandexMapsTimeout(window.ymaps3.ready.then(() => window.ymaps3 as YMaps3Api), "Yandex Maps initialization timed out.");
+  }
+
+  let existingScript = document.getElementById(YANDEX_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+  if (existingScript?.dataset.loaded === "true" && !window.ymaps3) {
+    existingScript.remove();
+    existingScript = null;
+  }
+
   if (existingScript) {
+    const scriptElement = existingScript;
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        scriptElement.removeEventListener("load", handleLoad);
+        scriptElement.removeEventListener("error", handleError);
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+      const settleResolve = (api: YMaps3Api) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(api);
+      };
+      const settleReject = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (!window.ymaps3 && scriptElement.isConnected) scriptElement.remove();
+        reject(error);
+      };
       const resolveWhenReady = () => {
         if (!window.ymaps3) {
-          reject(new Error("Yandex Maps script loaded, but ymaps3 is not available. Check API key restrictions."));
+          settleReject(new Error("Yandex Maps script loaded, but ymaps3 is not available. Check API key restrictions."));
           return;
         }
-        void window.ymaps3.ready.then(() => resolve(window.ymaps3 as YMaps3Api)).catch(reject);
+        void withYandexMapsTimeout(window.ymaps3.ready.then(() => window.ymaps3 as YMaps3Api), "Yandex Maps initialization timed out.")
+          .then(settleResolve)
+          .catch(settleReject);
       };
+      const handleLoad = () => {
+        scriptElement.dataset.loaded = "true";
+        resolveWhenReady();
+      };
+      const handleError = () => settleReject(new Error("Yandex Maps script failed to load."));
+      const timeoutId = setTimeout(() => settleReject(new Error("Yandex Maps script loading timed out.")), YANDEX_MAPS_LOAD_TIMEOUT_MS);
 
-      if (existingScript.dataset.loaded === "true") {
+      if (scriptElement.dataset.loaded === "true") {
         resolveWhenReady();
         return;
       }
 
-      existingScript.addEventListener("load", () => {
-        existingScript.dataset.loaded = "true";
-        resolveWhenReady();
-      });
-      existingScript.addEventListener("error", () => reject(new Error("Yandex Maps script failed to load.")));
+      scriptElement.addEventListener("load", handleLoad);
+      scriptElement.addEventListener("error", handleError);
     });
   }
 
   return new Promise((resolve, reject) => {
+    let settled = false;
     let lastClientError = "";
     const handleWindowError = (event: ErrorEvent) => {
       lastClientError = [event.message, event.filename, event.lineno ? `line ${event.lineno}` : ""].filter(Boolean).join(" | ");
@@ -519,6 +602,20 @@ function loadYandexMaps(apiKey: string): Promise<YMaps3Api> {
     const cleanupDiagnostics = () => {
       window.removeEventListener("error", handleWindowError);
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+    const settleResolve = (api: YMaps3Api) => {
+      if (settled) return;
+      settled = true;
+      cleanupDiagnostics();
+      resolve(api);
+    };
+    const settleReject = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanupDiagnostics();
+      if (!window.ymaps3 && script.isConnected) script.remove();
+      reject(error);
     };
 
     window.addEventListener("error", handleWindowError);
@@ -531,30 +628,50 @@ function loadYandexMaps(apiKey: string): Promise<YMaps3Api> {
     script.onload = () => {
       script.dataset.loaded = "true";
       if (!window.ymaps3) {
-        cleanupDiagnostics();
-        reject(new Error(`Yandex Maps script loaded, but ymaps3 is not available.${lastClientError ? ` Browser detail: ${lastClientError}` : ""}`));
+        settleReject(new Error(`Yandex Maps script loaded, but ymaps3 is not available.${lastClientError ? ` Browser detail: ${lastClientError}` : ""}`));
         return;
       }
-      void window.ymaps3.ready
-        .then(() => resolve(window.ymaps3 as YMaps3Api))
-        .catch((error: unknown) => {
-          reject(error);
-        })
-        .finally(cleanupDiagnostics);
+      void withYandexMapsTimeout(window.ymaps3.ready.then(() => window.ymaps3 as YMaps3Api), "Yandex Maps initialization timed out.")
+        .then(settleResolve)
+        .catch((error: unknown) => settleReject(error instanceof Error ? error : new Error(stringifyUnknownError(error))));
     };
     script.onerror = (event) => {
-      cleanupDiagnostics();
-      reject(new Error(`Yandex Maps script failed to load. ${describeScriptError(script.src, event)}`));
+      settleReject(new Error(`Yandex Maps script failed to load. ${describeScriptError(script.src, event)}`));
     };
+    const timeoutId = setTimeout(() => settleReject(new Error("Yandex Maps script loading timed out.")), YANDEX_MAPS_LOAD_TIMEOUT_MS);
     document.head.appendChild(script);
   });
 }
 
-async function loadYandexReactifiedMaps(apiKey: string): Promise<YandexReactifiedMaps> {
+function loadYandexMaps(apiKey: string): Promise<YMaps3Api> {
+  if (!yandexMapsLoadPromise) {
+    yandexMapsLoadPromise = loadYandexMapsOnce(apiKey).catch((error: unknown) => {
+      yandexMapsLoadPromise = null;
+      yandexReactifiedMapsLoadPromise = null;
+      throw error;
+    });
+  }
+  return yandexMapsLoadPromise;
+}
+
+async function loadYandexReactifiedMapsOnce(apiKey: string): Promise<YandexReactifiedMaps> {
   const ymaps3 = await loadYandexMaps(apiKey);
-  const { reactify } = await ymaps3.import<YandexReactifyPackage>("@yandex/ymaps3-reactify");
+  const { reactify } = await withYandexMapsTimeout(
+    ymaps3.import<YandexReactifyPackage>("@yandex/ymaps3-reactify"),
+    "Yandex Maps React components loading timed out.",
+  );
   const boundReactify = reactify.bindTo(React, ReactDOM);
   return { ...boundReactify.module(ymaps3), reactify: boundReactify };
+}
+
+function loadYandexReactifiedMaps(apiKey: string): Promise<YandexReactifiedMaps> {
+  if (!yandexReactifiedMapsLoadPromise) {
+    yandexReactifiedMapsLoadPromise = loadYandexReactifiedMapsOnce(apiKey).catch((error: unknown) => {
+      yandexReactifiedMapsLoadPromise = null;
+      throw error;
+    });
+  }
+  return yandexReactifiedMapsLoadPromise;
 }
 
 function stringifyUnknownError(error: unknown) {
@@ -737,6 +854,8 @@ function YandexPartnerMap({
       ? { state: "loading", message: t("client.map.yandexLoading") }
       : { state: "missing-key", message: t("client.map.yandexMissing") },
   );
+  const translateRef = useRef(t);
+  translateRef.current = t;
   const markerItems = useMemo(() => buildMarkerItems(points, selectedId, mapLocation.zoom), [points, selectedId, mapLocation.zoom]);
 
   function clearPassiveMapSync() {
@@ -803,14 +922,13 @@ function YandexPartnerMap({
       .then((reactifiedMaps) => {
         if (disposed) return;
         setMaps(reactifiedMaps);
-        setStatus({ state: "ready", message: interpolate(t("client.map.yandexReady"), { count: points.length }) });
       })
       .catch((error: unknown) => {
         if (!disposed) {
           setMaps(null);
           setStatus({
             state: "fallback",
-            message: t("client.map.yandexFailed"),
+            message: translateRef.current("client.map.yandexFailed"),
             details: stringifyUnknownError(error),
           });
         }
@@ -821,7 +939,15 @@ function YandexPartnerMap({
       stopMapAnimation();
       clearPassiveMapSync();
     };
-  }, [apiKey, points.length]);
+  }, [apiKey]);
+
+  useEffect(() => {
+    if (!maps) return;
+    setStatus({
+      state: "ready",
+      message: interpolate(t("client.map.yandexReady"), { count: points.length }),
+    });
+  }, [maps, points.length, t]);
 
   useEffect(() => {
     stopMapAnimation();
@@ -837,7 +963,7 @@ function YandexPartnerMap({
     animateMapLocation(
       {
         center: [userLocation.longitude, userLocation.latitude],
-        zoom: 13,
+        zoom: 14,
       },
       620,
     );
@@ -997,6 +1123,9 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
   const searchParams = useSearchParams();
   const requestedCompany = searchParams.get("company");
   const requestedLocation = searchParams.get("location");
+  const appMode = searchParams.get("app");
+  const smallMapHref = appMode ? `/map?app=${encodeURIComponent(appMode)}` : "/map";
+  const fullMapHref = appMode ? `/map/full?app=${encodeURIComponent(appMode)}` : "/map/full";
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [pointMode, setPointMode] = useState<"all" | "main" | "visited" | "open" | "subscriptions">("all");
@@ -1010,6 +1139,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
   const [nearMeOnly, setNearMeOnly] = useState(false);
   const [nearMeFocusKey, setNearMeFocusKey] = useState(0);
   const [clusterPreviewPoints, setClusterPreviewPoints] = useState<PartnerMapPoint[]>([]);
+  const [selectedCompanyMedia, setSelectedCompanyMedia] = useState<{ slug: string; payload: MapCompanyMedia } | null>(null);
   const [fullSheetLevel, setFullSheetLevel] = useState<FullMapSheetLevel>("peek");
   const fullSheetDragControls = useDragControls();
   const fullSheetDraggingRef = useRef(false);
@@ -1036,34 +1166,36 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
       ? Promise.all([getTwaMapCompanies(true), getActiveTwaSubscriptions()] as const)
       : Promise.all([getTwaMapCompanies(true), Promise.resolve([] as TwaUserSubscription[])] as const);
 
-    void requests.then(([data, subscriptions]) => {
-      if (ignore) return;
-      setCompanies(data);
-      setActiveSubscriptions(subscriptions);
-    });
+    void promiseWithTimeout(requests, CLIENT_BOOTSTRAP_TIMEOUT_MS)
+      .then(([data, subscriptions]) => {
+        if (ignore) return;
+        setCompanies(data);
+        setActiveSubscriptions(subscriptions);
+      })
+      .catch(() => {
+        if (ignore) return;
+        setCompanies(cachedCompanies);
+        setActiveSubscriptions(SUBSCRIPTIONS_ENABLED ? cachedSubscriptions : []);
+      });
     return () => {
       ignore = true;
     };
   }, []);
 
-  function requestGeolocation() {
-    if (!("geolocation" in navigator)) {
-      setGeoStatus("unavailable");
-      return;
-    }
+  async function requestGeolocation() {
     setGeoStatus("requesting");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
-        });
-        setGeoStatus("ready");
-      },
-      () => setGeoStatus("denied"),
-      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 },
-    );
+    try {
+      const position = await getGeolocationPosition({ enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 });
+      setUserLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
+      });
+      setNearMeFocusKey((value) => value + 1);
+      setGeoStatus("ready");
+    } catch (error) {
+      setGeoStatus(error instanceof Error && error.message === "geolocation-unavailable" ? "unavailable" : "denied");
+    }
   }
 
   const categories = useMemo(() => {
@@ -1157,6 +1289,28 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
     ? locationPoints.find((point) => point.id === effectiveSelectedPointId) ?? null
     : null;
   const selectedPartner = selectedPoint?.company ?? null;
+  useEffect(() => {
+    if (!full || !selectedPartner?.slug) return;
+
+    let ignore = false;
+    const slug = selectedPartner.slug;
+    void fetch(`/api/public/company-media/${encodeURIComponent(slug)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? (response.json() as Promise<MapCompanyMedia>) : null))
+      .then((payload) => {
+        if (!ignore && payload) setSelectedCompanyMedia({ slug, payload });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      ignore = true;
+    };
+  }, [full, selectedPartner?.slug]);
+  const selectedMediaItems = buildSelectedMediaItems(
+    selectedPartner,
+    selectedCompanyMedia?.slug === selectedPartner?.slug ? (selectedCompanyMedia?.payload ?? null) : null,
+  );
+  const selectedLogoUrl = selectedMediaItems.find((item) => item.kind === "logo")?.url ?? null;
+  const selectedGalleryMediaItems = selectedMediaItems.filter((item) => item.kind === "image");
   const selectedCategoryData = selectedCategory ? categories.find((category) => category.slug === selectedCategory) : null;
   const selectedDistance = selectedPoint ? distanceKm(userLocation, selectedPoint.location) : null;
   const nearestSameCompany = useMemo(() => {
@@ -1188,9 +1342,9 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
           className="h-11 w-11 rounded-full border border-white/15 bg-slate-950/88 text-white shadow-[0_16px_38px_rgba(0,0,0,0.42)] backdrop-blur-xl hover:bg-slate-900"
           aria-label={t("client.map.expand")}
         >
-          <a href="/map/full">
+          <Link href={fullMapHref}>
             <Maximize2 className="h-5 w-5" />
-          </a>
+          </Link>
         </Button>
       )}
     </div>
@@ -1204,16 +1358,34 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
       className="rounded-[1.25rem] border border-white/15 bg-slate-950/94 p-2.5 text-white shadow-[0_18px_44px_rgba(0,0,0,0.52)] backdrop-blur-xl"
     >
       <div className="flex items-start gap-2.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/25">
-          <CategoryIcon iconName={categoryIconName(selectedPoint)} className="h-4 w-4" />
+        <span
+          className={cn(
+            "flex shrink-0 items-center justify-center overflow-hidden bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/25",
+            full ? "h-14 w-14 rounded-2xl bg-white/[0.06]" : "h-9 w-9 rounded-xl",
+          )}
+        >
+          {full && selectedLogoUrl ? (
+            <img
+              src={selectedLogoUrl}
+              alt={selectedPartner.name}
+              className="h-full w-full object-contain p-1"
+              loading="lazy"
+              draggable={false}
+            />
+          ) : (
+            <CategoryIcon iconName={categoryIconName(selectedPoint)} className={full ? "h-6 w-6" : "h-4 w-4"} />
+          )}
         </span>
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold leading-tight">{selectedPartner.name}</p>
-              <p className="mt-0.5 truncate text-[11px] text-white/55">
-                {selectedPoint.location.title ?? selectedPoint.location.city ?? t("client.map.partnerLocation")}
-              </p>
+              <p className="mt-1 line-clamp-1 text-[11px] leading-relaxed text-white/68">{selectedPoint.location.address}</p>
+              {selectedPartner.description && (
+                <p className="mt-1 line-clamp-1 text-[11px] leading-relaxed text-white/45">
+                  {selectedPartner.description}
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -1227,12 +1399,26 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          <p className="line-clamp-1 text-[11px] leading-relaxed text-white/68">{selectedPoint.location.address}</p>
-          {selectedPartner.description && (
-            <p className="line-clamp-1 text-[11px] leading-relaxed text-white/45">{selectedPartner.description}</p>
-          )}
         </div>
       </div>
+      {full && selectedGalleryMediaItems.length > 0 && (
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {selectedGalleryMediaItems.map((item, index) => (
+            <div
+              key={`${item.kind}-${item.url}`}
+              className="relative h-20 w-32 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]"
+            >
+              <img
+                src={item.url}
+                alt={`${selectedPartner.name} — фото ${index + 1}`}
+                className="h-full w-full object-cover"
+                loading="lazy"
+                draggable={false}
+              />
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mt-2.5 flex items-center gap-2">
         <Badge
           variant="outline"
@@ -1276,7 +1462,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
           <div className="mx-auto max-w-[560px]">
             <div className="flex items-start gap-3">
               <Button asChild size="icon" className="mt-0.5 h-12 w-12 shrink-0 rounded-full bg-black/62 text-white shadow-[0_18px_42px_rgba(0,0,0,0.45)] backdrop-blur-xl hover:bg-black/76">
-                <Link href="/map" aria-label={t("client.map.back")}>
+                <Link href={smallMapHref} aria-label={t("client.map.back")}>
                   <ArrowLeft className="h-5 w-5" />
                 </Link>
               </Button>
@@ -1561,7 +1747,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
         <div className="flex items-center gap-2">
           {full ? (
             <Button asChild size="icon" variant="secondary" className="h-11 w-11 rounded-full">
-              <Link href="/map" aria-label={t("client.map.back")}>
+              <Link href={smallMapHref} aria-label={t("client.map.back")}>
                 <ArrowLeft className="h-5 w-5" />
               </Link>
             </Button>

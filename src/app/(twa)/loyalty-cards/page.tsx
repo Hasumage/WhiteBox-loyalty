@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { categoryName } from "@/lib/i18n/categories";
+import { companyLevelName } from "@/lib/i18n/company-levels";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 const item = {
@@ -31,7 +32,7 @@ function companyCategories(company: TwaCompany) {
 }
 
 export default function LoyaltyCardsPage() {
-  const { t } = useI18n("ru");
+  const { locale, t } = useI18n("ru");
   const [dashboard, setDashboard] = useState<TwaDashboard | null>(null);
   const [favoriteSlugs, setFavoriteSlugs] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -222,7 +223,7 @@ export default function LoyaltyCardsPage() {
                     </div>
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{company.level.current?.levelName ?? t("client.common.member")}</span>
+                        <span>{companyLevelName(company.level.current?.levelName, locale, t("client.common.member"))}</span>
                         <span>{company.level.next ? `${company.level.next.pointsToNext} ${t("client.common.ptsLeft")}` : t("client.common.topLevel")}</span>
                       </div>
                       <Progress value={company.level.progressPercent} className="h-1.5" />

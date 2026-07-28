@@ -16,12 +16,40 @@ const PIPELINE_STATUSES = new Set<CompanyReferralPipelineStatus>([
   "LOST",
 ]);
 
+type PipelineLockReason = "ACTIVE_SUBSCRIPTION" | "EXPIRED_SUBSCRIPTION";
+
 function canSeeAllPrCompanies(role: string) {
   return role === "SUPER_ADMIN" || role === "ADMIN";
 }
 
 function text(value: unknown, max: number) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+function hasActiveNearloySubscription(company: {
+  isActive: boolean;
+  billingAccount: { status: string; currentPeriodEndsAt: Date } | null;
+}) {
+  return Boolean(
+    company.isActive &&
+      company.billingAccount &&
+      company.billingAccount.status === "ACTIVE" &&
+      company.billingAccount.currentPeriodEndsAt.getTime() > Date.now(),
+  );
+}
+
+function hadPaidNearloySubscription(company: { billingInvoices: Array<{ status: string }> }) {
+  return company.billingInvoices.some((invoice) => invoice.status === "PAID" || invoice.status === "WAIVED");
+}
+
+function getPipelineLockReason(company: {
+  isActive: boolean;
+  billingAccount: { status: string; currentPeriodEndsAt: Date } | null;
+  billingInvoices: Array<{ status: string }>;
+}): PipelineLockReason | null {
+  if (hasActiveNearloySubscription(company)) return "ACTIVE_SUBSCRIPTION";
+  if (hadPaidNearloySubscription(company)) return "EXPIRED_SUBSCRIPTION";
+  return null;
 }
 
 function serializeReferral(referral: Prisma.CompanyReferralGetPayload<{
@@ -40,6 +68,11 @@ function serializeReferral(referral: Prisma.CompanyReferralGetPayload<{
             currentPeriodEndsAt: true;
           };
         };
+        billingInvoices: {
+          select: {
+            status: true;
+          };
+        };
       };
     };
     referrer: {
@@ -51,10 +84,12 @@ function serializeReferral(referral: Prisma.CompanyReferralGetPayload<{
     };
   };
 }>) {
+  const pipelineLockReason = getPipelineLockReason(referral.company);
   return {
     uuid: referral.uuid,
     status: referral.status,
-    pipelineStatus: referral.pipelineStatus,
+    pipelineStatus: pipelineLockReason === "ACTIVE_SUBSCRIPTION" ? "REVENUE_ACTIVE" : referral.pipelineStatus,
+    pipelineLockReason,
     source: referral.source,
     notes: referral.notes,
     referralPercent: Number(referral.referralPercent),
@@ -70,6 +105,7 @@ function serializeReferral(referral: Prisma.CompanyReferralGetPayload<{
       verificationStatus: referral.company.verificationStatus,
       billingStatus: referral.company.billingAccount?.status ?? null,
       billingEndsAt: referral.company.billingAccount?.currentPeriodEndsAt.toISOString() ?? null,
+      hasPaidNearloySubscription: hadPaidNearloySubscription(referral.company),
     },
     referrer: referral.referrer,
   };
@@ -88,6 +124,13 @@ const referralInclude = {
         select: {
           status: true,
           currentPeriodEndsAt: true,
+        },
+      },
+      billingInvoices: {
+        where: { status: { in: ["PAID", "WAIVED"] } },
+        take: 1,
+        select: {
+          status: true,
         },
       },
     },
@@ -138,7 +181,28 @@ export async function PATCH(request: NextRequest) {
 
   const current = await prisma.companyReferral.findUnique({
     where: { uuid: referralUuid },
-    select: { companyId: true, referrerUserId: true },
+    select: {
+      companyId: true,
+      referrerUserId: true,
+      company: {
+        select: {
+          isActive: true,
+          billingAccount: {
+            select: {
+              status: true,
+              currentPeriodEndsAt: true,
+            },
+          },
+          billingInvoices: {
+            where: { status: { in: ["PAID", "WAIVED"] } },
+            take: 1,
+            select: {
+              status: true,
+            },
+          },
+        },
+      },
+    },
   });
   if (!current) return NextResponse.json({ message: "Referral not found" }, { status: 404 });
   if (!canSeeAllPrCompanies(access.actor.role) && current.referrerUserId !== session.userId) {
@@ -147,7 +211,12 @@ export async function PATCH(request: NextRequest) {
 
   const referralData: Prisma.CompanyReferralUpdateInput = {};
   if (body.status && REFERRAL_STATUSES.has(body.status)) referralData.status = body.status;
-  if (body.pipelineStatus && PIPELINE_STATUSES.has(body.pipelineStatus)) referralData.pipelineStatus = body.pipelineStatus;
+  const pipelineLockReason = getPipelineLockReason(current.company);
+  if (pipelineLockReason === "ACTIVE_SUBSCRIPTION") {
+    referralData.pipelineStatus = "REVENUE_ACTIVE";
+  } else if (!pipelineLockReason && body.pipelineStatus && PIPELINE_STATUSES.has(body.pipelineStatus)) {
+    referralData.pipelineStatus = body.pipelineStatus;
+  }
   if (typeof body.source === "string") referralData.source = text(body.source, 80) || "PR";
   if (body.notes !== undefined) referralData.notes = text(body.notes, 4000) || null;
 

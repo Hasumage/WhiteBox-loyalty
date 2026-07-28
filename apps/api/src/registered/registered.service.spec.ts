@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { SubscriptionStatus } from "@prisma/client";
+import { calculateCompanyRecommendationScore, recommendationBoostMultiplier } from "./company-recommendation-score";
 import { RegisteredService } from "./registered.service";
 
 describe("RegisteredService", () => {
@@ -177,7 +178,7 @@ describe("RegisteredService", () => {
                 billingAccount: {
                   is: expect.objectContaining({
                     currentPeriodEndsAt: { gt: expect.any(Date) },
-                    status: "ACTIVE",
+                    status: { in: ["ACTIVE", "TRIAL"] },
                   }),
                 },
               }),
@@ -346,7 +347,7 @@ describe("RegisteredService", () => {
           billingAccount: {
             is: expect.objectContaining({
               currentPeriodEndsAt: { gt: expect.any(Date) },
-              status: "ACTIVE",
+              status: { in: ["ACTIVE", "TRIAL"] },
             }),
           },
         }),
@@ -358,6 +359,89 @@ describe("RegisteredService", () => {
     expect(result[0].level.current?.levelName).toBe("Bronze");
     expect(result[0].level.next?.pointsToNext).toBe(500);
     expect(result[0].level.progressPercent).toBe(50);
+  });
+
+  it("ranks company recommendations with manual boost and forced priority", async () => {
+    const category = { id: 1, slug: "coffee", name: "Coffee", icon: "Coffee" };
+    const company = (id: number, slug: string, boostPercent: number, recommendForEveryone = false) => ({
+      id,
+      slug,
+      name: slug,
+      description: null,
+      isActive: true,
+      operatesOnline: false,
+      recommendationBoostPercent: boostPercent,
+      recommendForEveryone,
+      category,
+      categories: [],
+      locations: [],
+      mediaAssets: [],
+      userLinks: [],
+      levelRules: [],
+    });
+    prisma.company.findMany.mockResolvedValue([
+      company(1, "plain", 0),
+      company(2, "boosted", 100),
+      company(3, "everyone", 0, true),
+    ]);
+    prisma.loyaltyTransaction.groupBy.mockResolvedValue([]);
+
+    const result = await service.recommendations(11, 3);
+
+    expect(result.map((row) => row.company.slug)).toEqual(["everyone", "boosted", "plain"]);
+    expect(result[0].reason).toBe("manual_priority");
+    expect(result[1].reason).toBe("manual_boost");
+    expect(result[1].effectiveMultiplier).toBe(2);
+  });
+
+  it("calculates recommendation boost multipliers safely", () => {
+    expect(recommendationBoostMultiplier(20)).toBe(1.2);
+    expect(recommendationBoostMultiplier(50)).toBe(1.5);
+    expect(recommendationBoostMultiplier(100)).toBe(2);
+    expect(recommendationBoostMultiplier(-50)).toBe(1);
+    expect(calculateCompanyRecommendationScore({ baseScore: 100, boostPercent: 100 })).toBe(200);
+    expect(
+      calculateCompanyRecommendationScore({
+        baseScore: 100,
+        boostPercent: 0,
+        recommendForEveryone: true,
+      }),
+    ).toBeGreaterThan(1_000_000);
+  });
+
+  it("wallet keeps user cards from history even when company is hidden from public discovery", async () => {
+    prisma.company.findMany.mockResolvedValue([
+      {
+        id: 6,
+        slug: "aurora",
+        name: "Aurora Coffee",
+        description: null,
+        isActive: true,
+        operatesOnline: false,
+        category: { id: 1, slug: "coffee", name: "Coffee", icon: "Coffee" },
+        categories: [],
+        locations: [],
+        mediaAssets: [],
+        userLinks: [],
+        levelRules: [],
+      },
+    ]);
+    prisma.loyaltyTransaction.groupBy.mockResolvedValue([
+      { companyId: 6, type: "EARN", _sum: { amount: 120 } },
+    ]);
+
+    const result = await service.wallet(11);
+
+    expect(prisma.company.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { isActive: true },
+      }),
+    );
+    expect(result.companies).toHaveLength(1);
+    expect(result.companies[0]).toMatchObject({
+      slug: "aurora",
+      points: expect.objectContaining({ totalEarnedPoints: 120 }),
+    });
   });
 
   it("setCompanyFavorite toggles favorite without a separate favorites table", async () => {
@@ -373,7 +457,7 @@ describe("RegisteredService", () => {
           billingAccount: {
             is: expect.objectContaining({
               currentPeriodEndsAt: { gt: expect.any(Date) },
-              status: "ACTIVE",
+              status: { in: ["ACTIVE", "TRIAL"] },
             }),
           },
         }),

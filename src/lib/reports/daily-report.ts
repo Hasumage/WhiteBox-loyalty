@@ -1,5 +1,6 @@
 ﻿import { prisma } from "@/lib/prisma";
 import { adminTelegramRecipients } from "@/lib/telegram/admin-chat";
+import { notifyCompaniesBillingExpiringSoon } from "@/lib/telegram/notification-module";
 import { sendTelegramMessageQueued } from "@/lib/telegram/telegram-queue";
 
 const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
@@ -415,9 +416,12 @@ export async function sendDailyReport(now = new Date()): Promise<DailyReportDeli
 
   const sent = results.filter((result) => result.ok).length;
   const errors = results.filter((result) => !result.ok).map((result) => result.message ?? "Telegram delivery failed.");
+  await notifyCompaniesBillingExpiringSoon(now).catch((error) => {
+    errors.push(error instanceof Error ? error.message : "Company billing reminders failed.");
+  });
 
   return {
-    ok: sent === recipients.length,
+    ok: sent === recipients.length && errors.length === 0,
     text,
     recipients: recipients.length,
     sent,

@@ -68,6 +68,8 @@ const fallbackProfile: TwaProfile = {
     profileVisibility: "PRIVATE",
     marketingOptIn: false,
     showActivityStats: true,
+    browserNotificationsEnabled: false,
+    geoNotificationsEnabled: false,
   },
   stats: {
     totalBalance: 0,

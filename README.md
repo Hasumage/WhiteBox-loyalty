@@ -45,6 +45,17 @@ npm run api:dev
 - Swagger: [http://localhost:3001/api/docs](http://localhost:3001/api/docs)
 - Health: `GET /api/health`
 
+## Public marketing routes
+
+- `/landing` - client-facing marketing landing and lead form.
+- `/business` - company-facing landing with partner CTA and 100 000 RUB giveaway entry.
+- `/business/giveaway` - giveaway page with active-company progress vessel and business-development use cases.
+- `/business/giveaway/rules` - dedicated giveaway rules page for Russian companies.
+- `/careers` - localized careers hub with SEO metadata and role cards.
+- `/careers/[slug]` - generic vacancy detail pages.
+- `/careers/b2b-manager` - detailed B2B acquisition manager vacancy with Telegram contact CTA.
+- `/help/terms/users` and `/help/terms/companies` - public user/company usage rules linked from shared marketing footer.
+
 ## API Overview
 
 Auth routes (`/api/auth/*`):
@@ -143,6 +154,7 @@ Payments:
 - `DELETE /api/company/billing/payment-method` - remove saved YooKassa method metadata
 
 Set `NEXT_PUBLIC_API_URL=http://localhost:3001/api` for the Next.js auth and admin API clients.
+Set `NEXT_PUBLIC_SITE_URL=https://nearloy.ru` for canonical URLs, OpenGraph previews and JSON-LD on public marketing pages.
 Set `NEXT_PUBLIC_YANDEX_MAPS_API_KEY=<key>` to enable the Yandex Maps JS API integration on `/map`.
 Set `YANDEX_GEOCODER_API_KEY=<key>` to let admin company locations resolve addresses into saved coordinates.
 Set `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `YOOKASSA_RETURN_URL` and `YOOKASSA_COMPANY_RETURN_URL` to enable YooKassa checkout payments.
@@ -193,6 +205,10 @@ Set `DAILY_REPORT_SCHEDULER_ENABLED=true`, `DAILY_REPORT_TIME_MSK=23:00` and `DA
 - `/company/payments` - subscription forecast and payout requests
 - `/company/billing` - NearLoy subscription payment and saved YooKassa method
 - `/company/settings/media` - logo, hero, gallery and public offers
+- `/business` - company-facing public landing and giveaway entry
+- `/business/giveaway` - 100 000 RUB active-company giveaway page
+- `/careers` - public localized careers hub
+- `/careers/b2b-manager` - detailed B2B acquisition manager vacancy
 - `/email-change/confirm?token=...` - public confirmation page for user email change
 - `/loyalty-cards` - client list of companies where the user has earned points
 - `/wallet/[slug]` - authenticated client card or public read-only company showcase

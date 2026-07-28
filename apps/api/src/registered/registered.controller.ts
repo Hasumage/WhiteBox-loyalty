@@ -121,6 +121,13 @@ export class RegisteredController {
     });
   }
 
+  @Get("recommendations")
+  @ApiOperation({ summary: "Ranked partner company recommendations for current user" })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  recommendations(@CurrentUser() user: RequestUser, @Query("limit") limit?: string) {
+    return this.registeredService.recommendations(user.userId, limit);
+  }
+
   @Put("companies/:id/favorite")
   @ApiBody({ type: UpdateCompanyFavoriteDto })
   @ApiOperation({ summary: "Mark or unmark a company as favorite for current user" })

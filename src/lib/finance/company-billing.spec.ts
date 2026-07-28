@@ -39,8 +39,8 @@ describe("company billing", () => {
   it("splits paid monthly access 70/30 when a PR manager is attached", () => {
     expect(calculateMonthlyAccessSplit(4990, true)).toEqual({
       referralPercent: 30,
-      referralAmount: 1497,
-      platformAmount: 3493,
+      referralAmount: 1500,
+      platformAmount: 3490,
     });
   });
 

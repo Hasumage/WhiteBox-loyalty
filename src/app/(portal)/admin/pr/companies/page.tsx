@@ -12,11 +12,14 @@ import { cn } from "@/lib/utils";
 
 type ReferralStatus = "ACTIVE" | "PAUSED" | "ENDED";
 type PipelineStatus = "LEAD" | "NEGOTIATION" | "TRIAL" | "CONNECTED" | "REVENUE_ACTIVE" | "LOST";
+type PipelineDisplayStatus = PipelineStatus | "SUBSCRIPTION_EXPIRED";
+type PipelineLockReason = "ACTIVE_SUBSCRIPTION" | "EXPIRED_SUBSCRIPTION" | null;
 
 type PrCompany = {
   uuid: string;
   status: ReferralStatus;
   pipelineStatus: PipelineStatus;
+  pipelineLockReason: PipelineLockReason;
   source: string;
   notes: string | null;
   referralPercent: number;
@@ -28,6 +31,7 @@ type PrCompany = {
     verificationStatus: string;
     billingStatus: string | null;
     billingEndsAt: string | null;
+    hasPaidNearloySubscription: boolean;
   };
   referrer: {
     name: string;
@@ -44,19 +48,22 @@ type EditableCompany = {
 };
 
 const statusLabels: Record<ReferralStatus, string> = {
-  ACTIVE: "Активна",
-  PAUSED: "Пауза",
-  ENDED: "Завершена",
+  ACTIVE: "PR активен",
+  PAUSED: "На паузе",
+  ENDED: "Завершено",
 };
 
-const pipelineLabels: Record<PipelineStatus, string> = {
-  LEAD: "Лид",
+const pipelineLabels: Record<PipelineDisplayStatus, string> = {
+  LEAD: "Новый лид",
   NEGOTIATION: "Переговоры",
   TRIAL: "Тест",
-  CONNECTED: "Подключена",
-  REVENUE_ACTIVE: "Даёт оборот",
-  LOST: "Потеряна",
+  CONNECTED: "Договорились",
+  REVENUE_ACTIVE: "Приносит прибыль",
+  LOST: "Отказ",
+  SUBSCRIPTION_EXPIRED: "Не оплачивают подписку",
 };
+
+const manualPipelineStatuses: PipelineStatus[] = ["LEAD", "NEGOTIATION", "TRIAL", "CONNECTED", "LOST"];
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -71,6 +78,18 @@ function editFromCompany(company: PrCompany): EditableCompany {
     source: company.source,
     notes: company.notes ?? "",
   };
+}
+
+function getDisplayPipelineStatus(company: PrCompany): PipelineDisplayStatus {
+  if (company.pipelineLockReason === "ACTIVE_SUBSCRIPTION") return "REVENUE_ACTIVE";
+  if (company.pipelineLockReason === "EXPIRED_SUBSCRIPTION") return "SUBSCRIPTION_EXPIRED";
+  return company.pipelineStatus;
+}
+
+function getPipelineLockText(reason: PipelineLockReason) {
+  if (reason === "ACTIVE_SUBSCRIPTION") return "Компания оплачивает NearLoy — этап фиксируется автоматически.";
+  if (reason === "EXPIRED_SUBSCRIPTION") return "Компания уже платила за NearLoy — этап фиксируется автоматически.";
+  return "";
 }
 
 export default function AdminPrCompaniesPage() {
@@ -108,7 +127,7 @@ export default function AdminPrCompaniesPage() {
     const needle = query.trim().toLowerCase();
     if (!needle) return items;
     return items.filter((item) =>
-      [item.company.name, item.company.slug, item.source, item.referrer.email, pipelineLabels[item.pipelineStatus]]
+      [item.company.name, item.company.slug, item.source, item.referrer.email, pipelineLabels[getDisplayPipelineStatus(item)]]
         .some((value) => value.toLowerCase().includes(needle)),
     );
   }, [items, query]);
@@ -184,6 +203,8 @@ export default function AdminPrCompaniesPage() {
         ) : (
           filteredItems.map((item) => {
             const edit = edits[item.uuid] ?? editFromCompany(item);
+            const displayPipelineStatus = getDisplayPipelineStatus(item);
+            const pipelineLockText = getPipelineLockText(item.pipelineLockReason);
             return (
               <Card key={item.uuid} className="overflow-hidden border-white/10 bg-white/[0.035]">
                 <CardContent className="grid gap-4 p-4 xl:grid-cols-[minmax(240px,1.1fr)_minmax(360px,1.7fr)_auto] xl:items-start">
@@ -223,18 +244,33 @@ export default function AdminPrCompaniesPage() {
                           <option key={value} value={value}>{label}</option>
                         ))}
                       </select>
-                      <select
-                        value={edit.pipelineStatus}
-                        onChange={(event) =>
-                          setEdits((current) => ({ ...current, [item.uuid]: { ...edit, pipelineStatus: event.target.value as PipelineStatus } }))
-                        }
-                        className="h-11 rounded-xl border border-white/10 bg-black px-3 text-sm"
-                      >
-                        {Object.entries(pipelineLabels).map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
-                        ))}
-                      </select>
+                      {item.pipelineLockReason ? (
+                        <div
+                          className="flex h-11 items-center justify-between gap-2 rounded-xl border border-cyan-200/15 bg-cyan-300/10 px-3 text-sm text-cyan-50"
+                          title={pipelineLockText}
+                        >
+                          <span className="truncate">{pipelineLabels[displayPipelineStatus]}</span>
+                          <Badge variant="outline" className="shrink-0 border-cyan-200/20 text-[10px] text-cyan-100">
+                            авто
+                          </Badge>
+                        </div>
+                      ) : (
+                        <select
+                          value={edit.pipelineStatus}
+                          onChange={(event) =>
+                            setEdits((current) => ({ ...current, [item.uuid]: { ...edit, pipelineStatus: event.target.value as PipelineStatus } }))
+                          }
+                          className="h-11 rounded-xl border border-white/10 bg-black px-3 text-sm"
+                        >
+                          {manualPipelineStatuses.map((value) => (
+                            <option key={value} value={value}>{pipelineLabels[value]}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
+                    {pipelineLockText && (
+                      <p className="text-xs text-cyan-100/70">{pipelineLockText}</p>
+                    )}
                     <div className="grid gap-3 md:grid-cols-[220px_1fr]">
                       <Input
                         value={edit.source}

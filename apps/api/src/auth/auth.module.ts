@@ -5,6 +5,7 @@ import { PassportModule } from "@nestjs/passport";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { EmailModule } from "../email/email.module";
+import { TelegramNotificationsModule } from "../telegram/telegram-notifications.module";
 import { JwtAuthMiddleware } from "./middleware/jwt-auth.middleware";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { LocalStrategy } from "./strategies/local.strategy";
@@ -13,6 +14,7 @@ import { LocalStrategy } from "./strategies/local.strategy";
   imports: [
     PassportModule.register({}),
     EmailModule,
+    TelegramNotificationsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

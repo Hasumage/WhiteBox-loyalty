@@ -1,3 +1,5 @@
+import { fetchWithTimeout, SESSION_RESTORE_TIMEOUT_MS } from "./fetch-timeout";
+
 const STORAGE_ACCESS = "wb_access_token";
 const STORAGE_REFRESH = "wb_refresh_token";
 const STORAGE_USER = "wb_user";
@@ -5,7 +7,18 @@ const STORAGE_USER = "wb_user";
 const ACCESS_COOKIE = "wb_access_token";
 const EMAIL_GUARD_STORAGE = "wb_email_guard_id";
 const CLIENT_HOME = "/app";
-const PUBLIC_AUTH_ROUTES = new Set(["/", "/landing", "/login", "/register", "/forgot-password", "/company/register"]);
+const PUBLIC_AUTH_ROUTES = new Set([
+  "/",
+  "/landing",
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/mobile-entry",
+  "/mobile-login",
+  "/mobile-register",
+  "/mobile-forgot-password",
+  "/company/register",
+]);
 
 function setAccessCookie(accessToken: string) {
   if (typeof document === "undefined") return;
@@ -66,8 +79,10 @@ export function authenticatedDestination(user: Pick<StoredUser, "role">, request
 }
 
 function apiBase(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
-  return base.replace(/\/$/, "");
+  const configured = process.env.NEXT_PUBLIC_API_URL;
+  if (configured) return configured.replace(/\/$/, "");
+  if (typeof window !== "undefined") return "/backend-api";
+  return "http://localhost:3001/api";
 }
 
 function createEmailGuardId() {
@@ -109,6 +124,12 @@ export function clearStoredSession() {
   clearAccessCookie();
 }
 
+export function clearStoredSessionIfAccessToken(expectedAccessToken: string | null) {
+  if (getAccessToken() !== expectedAccessToken) return false;
+  clearStoredSession();
+  return true;
+}
+
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(STORAGE_ACCESS);
@@ -123,19 +144,33 @@ export async function refreshStoredSession(): Promise<AuthTokensResponse | null>
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
 
-  const res = await fetch(`${apiBase()}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok || !data?.accessToken) {
-    clearStoredSession();
+  try {
+    const res = await fetchWithTimeout(
+      `${apiBase()}/auth/refresh`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      },
+      SESSION_RESTORE_TIMEOUT_MS,
+    );
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.accessToken) {
+      if ([400, 401, 403].includes(res.status) && getRefreshToken() === refreshToken) {
+        clearStoredSession();
+      }
+      return null;
+    }
+
+    if (getRefreshToken() !== refreshToken) {
+      return null;
+    }
+
+    setStoredSession(data as AuthTokensResponse);
+    return data as AuthTokensResponse;
+  } catch {
     return null;
   }
-
-  setStoredSession(data as AuthTokensResponse);
-  return data as AuthTokensResponse;
 }
 
 export async function register(body: {
@@ -144,7 +179,7 @@ export async function register(body: {
   password: string;
 }): Promise<AuthTokensResponse | { message: string | string[] }> {
   try {
-    const res = await fetch(`${apiBase()}/auth/register`, {
+    const res = await fetchWithTimeout(`${apiBase()}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -170,7 +205,7 @@ export async function requestRegistrationCode(body: {
   termsAccepted: boolean;
 }): Promise<{ success: true; email: string; expiresAt: string } | { message: string | string[] }> {
   try {
-    const res = await fetch(`${apiBase()}/auth/register/request-code`, {
+    const res = await fetchWithTimeout(`${apiBase()}/auth/register/request-code`, {
       method: "POST",
       headers: emailRequestHeaders(),
       body: JSON.stringify(body),
@@ -193,7 +228,7 @@ export async function requestPasswordResetCode(body: {
   locale?: "ru" | "en";
 }): Promise<{ success: true; email: string; expiresAt: string } | { message: string | string[] }> {
   try {
-    const res = await fetch(`${apiBase()}/auth/password-reset/request-code`, {
+    const res = await fetchWithTimeout(`${apiBase()}/auth/password-reset/request-code`, {
       method: "POST",
       headers: emailRequestHeaders(),
       body: JSON.stringify(body),
@@ -218,7 +253,7 @@ export async function confirmPasswordReset(body: {
   confirmPassword: string;
 }): Promise<{ success: true } | { message: string | string[] }> {
   try {
-    const res = await fetch(`${apiBase()}/auth/password-reset/confirm`, {
+    const res = await fetchWithTimeout(`${apiBase()}/auth/password-reset/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -240,7 +275,7 @@ export async function verifyRegistrationCode(body: {
   code: string;
 }): Promise<AuthTokensResponse | { message: string | string[] }> {
   try {
-    const res = await fetch(`${apiBase()}/auth/register/verify`, {
+    const res = await fetchWithTimeout(`${apiBase()}/auth/register/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -262,7 +297,7 @@ export async function login(body: {
   password: string;
 }): Promise<AuthTokensResponse | { message: string }> {
   try {
-    const res = await fetch(`${apiBase()}/auth/login`, {
+    const res = await fetchWithTimeout(`${apiBase()}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -285,7 +320,7 @@ export async function loginWithTelegramMiniApp(
   initData: string,
 ): Promise<AuthTokensResponse | { message: string }> {
   try {
-    const res = await fetch(`${apiBase()}/auth/telegram-mini-app`, {
+    const res = await fetchWithTimeout(`${apiBase()}/auth/telegram-mini-app`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ initData }),
@@ -317,7 +352,7 @@ export async function changePassword(body: {
   currentPassword: string;
   newPassword: string;
 }): Promise<{ success: true } | { error: string }> {
-  const res = await fetch(`${apiBase()}/auth/change-password`, {
+  const res = await fetchWithTimeout(`${apiBase()}/auth/change-password`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(body),
@@ -335,7 +370,7 @@ export async function changePassword(body: {
 export async function freezeAccount(): Promise<
   { success: true; deletionScheduledAt: string } | { error: string }
 > {
-  const res = await fetch(`${apiBase()}/auth/account/freeze`, {
+  const res = await fetchWithTimeout(`${apiBase()}/auth/account/freeze`, {
     method: "POST",
     headers: authHeaders(),
   });
@@ -353,7 +388,7 @@ export async function freezeAccount(): Promise<
 }
 
 export async function reactivateAccount(): Promise<AuthTokensResponse | { message: string }> {
-  const res = await fetch(`${apiBase()}/auth/account/reactivate`, {
+  const res = await fetchWithTimeout(`${apiBase()}/auth/account/reactivate`, {
     method: "POST",
     headers: authHeaders(),
   });
@@ -369,7 +404,7 @@ export async function reactivateAccount(): Promise<AuthTokensResponse | { messag
 }
 
 export async function confirmEmailChangeToken(token: string) {
-  const res = await fetch(`${apiBase()}/auth/email-change/confirm`, {
+  const res = await fetchWithTimeout(`${apiBase()}/auth/email-change/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),

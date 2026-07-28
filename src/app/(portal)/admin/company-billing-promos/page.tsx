@@ -16,6 +16,7 @@ type Promo = {
   redemptionCount: number;
   expiresAt: string | null;
   isActive: boolean;
+  createdBy?: { name: string | null; email: string | null } | null;
 };
 
 async function api(path = "", init?: RequestInit) {
@@ -99,6 +100,9 @@ export default function CompanyBillingPromosPage() {
               <div>
                 <p className="font-mono text-sm text-cyan-100">{promo.code}</p>
                 <h2 className="mt-1 text-xl font-semibold">{promo.title}</h2>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Создал: {promo.createdBy?.name || promo.createdBy?.email || "не указан"}
+                </p>
               </div>
               <span className="rounded-full border border-cyan-200/20 bg-cyan-300/10 px-3 py-1 text-lg font-semibold text-cyan-50">-{promo.discountPercent}%</span>
             </div>

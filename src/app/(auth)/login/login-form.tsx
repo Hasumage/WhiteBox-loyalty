@@ -1,9 +1,9 @@
 "use client";
 
 import { ArrowUpRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,8 @@ import {
   setStoredSession,
   type AuthTokensResponse,
 } from "@/lib/api/auth-client";
+import { SESSION_RESTORE_TIMEOUT_MS } from "@/lib/api/fetch-timeout";
+import { useIsCapacitorApp } from "@/lib/capacitor/use-is-capacitor-app";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
 type TelegramWindow = Window & {
@@ -48,20 +50,26 @@ const loginCopy = {
   },
 } as const;
 
-export function LoginForm() {
+type LoginFormProps = {
+  deleted?: boolean;
+  frozen?: boolean;
+  requestedNext?: string | null;
+};
+
+export function LoginForm({ deleted = false, frozen = false, requestedNext = null }: LoginFormProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { locale, setLocale, t } = useI18n("ru");
+  const isCapacitorApp = useIsCapacitorApp();
   const text = loginCopy[locale] ?? loginCopy.ru;
+  const restoreAttemptedRef = useRef(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [restoringSession, setRestoringSession] = useState(true);
+  const [restoringSession, setRestoringSession] = useState(false);
   const [frozenOpen, setFrozenOpen] = useState(false);
   const [pendingNext, setPendingNext] = useState("/");
   const [frozenMeta, setFrozenMeta] = useState<{ name: string; at: string | null } | null>(null);
-  const requestedNext = searchParams.get("next");
 
   function enterSession(data: AuthTokensResponse) {
     const destination = authenticatedDestination(data.user, requestedNext);
@@ -79,11 +87,18 @@ export function LoginForm() {
     }
 
     router.replace(destination);
-    router.refresh();
   }
 
   useEffect(() => {
+    if (isCapacitorApp === null || restoreAttemptedRef.current) return;
+
+    restoreAttemptedRef.current = true;
     let cancelled = false;
+    const restoreGuardId = window.setTimeout(() => {
+      if (!cancelled) setRestoringSession(false);
+    }, SESSION_RESTORE_TIMEOUT_MS + 2_000);
+
+    setRestoringSession(true);
 
     void (async () => {
       const webApp = (window as TelegramWindow).Telegram?.WebApp;
@@ -92,7 +107,7 @@ export function LoginForm() {
       const initData = webApp?.initData?.trim();
       let telegramError: string | null = null;
 
-      if (initData) {
+      if (initData && !isCapacitorApp) {
         const result = await loginWithTelegramMiniApp(initData);
         if (cancelled) return;
         if ("accessToken" in result && result.accessToken) {
@@ -116,14 +131,17 @@ export function LoginForm() {
       if (cancelled) return;
       setError(err instanceof Error ? err.message : t("client.auth.loginFailed"));
       setRestoringSession(false);
+    }).finally(() => {
+      window.clearTimeout(restoreGuardId);
     });
 
     return () => {
       cancelled = true;
+      window.clearTimeout(restoreGuardId);
     };
     // Session restoration navigates away; rerun only if the destination changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedNext, router]);
+  }, [isCapacitorApp, requestedNext, router]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -168,12 +186,14 @@ export function LoginForm() {
               <span className="block truncate text-xs text-muted-foreground">{t("client.auth.brandSubtitle")}</span>
             </span>
           </Link>
-          <Link
-            href="/"
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
-          >
-            {t("client.auth.landing")} <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
+          {isCapacitorApp === false && (
+            <Link
+              href="/"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
+            >
+              {t("client.auth.landing")} <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
         </div>
         <div className="flex items-center justify-between gap-3">
           <CardTitle>{t("client.auth.loginTitle")}</CardTitle>
@@ -183,7 +203,7 @@ export function LoginForm() {
       </CardHeader>
       <form onSubmit={onSubmit}>
         <CardContent className="space-y-4">
-          {searchParams.get("deleted") === "1" && (
+          {deleted && (
             <p
               className="rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-sm text-primary"
               role="status"
@@ -191,7 +211,7 @@ export function LoginForm() {
               {t("client.auth.deletedNotice")}
             </p>
           )}
-          {searchParams.get("frozen") === "1" && (
+          {frozen && (
             <p
               className="rounded-lg border border-sky-500/35 bg-sky-950/50 px-3 py-2 text-sm text-sky-200"
               role="status"
@@ -222,7 +242,7 @@ export function LoginForm() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={restoringSession}
+              disabled={loading}
               required
               className="glass border-white/10"
             />
@@ -237,7 +257,7 @@ export function LoginForm() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              disabled={restoringSession}
+              disabled={loading}
               required
               minLength={8}
               className="glass border-white/10"
@@ -253,8 +273,8 @@ export function LoginForm() {
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-3 pt-6">
-          <Button type="submit" className="w-full" disabled={loading || restoringSession}>
-            {loading || restoringSession ? t("client.auth.signingIn") : t("client.auth.signIn")}
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? t("client.auth.signingIn") : t("client.auth.signIn")}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             {t("client.auth.noAccount")}{" "}

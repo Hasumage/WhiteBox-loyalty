@@ -1,0 +1,31 @@
+<svg width="960" height="420" viewBox="0 0 960 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="420" fill="#030608"/>
+  <rect width="960" height="420" fill="url(#heroBg)"/>
+  <path d="M0 290c88-62 178-72 270-30 96 43 169 43 276-28 111-73 272-92 414-25v213H0V290Z" fill="url(#wave)" opacity=".72"/>
+  <g opacity=".82">
+    <rect x="96" y="76" width="278" height="196" rx="34" fill="#EFFFFF" fill-opacity=".055" stroke="#B9F7FF" stroke-opacity=".18"/>
+    <rect x="128" y="112" width="132" height="18" rx="9" fill="#EFFFFF" fill-opacity=".38"/>
+    <rect x="128" y="150" width="202" height="14" rx="7" fill="#EFFFFF" fill-opacity=".16"/>
+    <rect x="128" y="180" width="170" height="14" rx="7" fill="#EFFFFF" fill-opacity=".12"/>
+    <circle cx="315" cy="128" r="30" fill="#5EEAD4" fill-opacity=".16"/>
+  </g>
+  <g transform="translate(538 68)">
+    <rect x="0" y="0" width="282" height="226" rx="46" fill="#05090D" fill-opacity=".64" stroke="#AEEFF4" stroke-opacity=".26"/>
+    <path d="M141 42l31 78 80 32-80 32-31 78-31-78-80-32 80-32 31-78Z" fill="#ECFEFF"/>
+    <path d="M141 91l13 34 36 14-36 15-13 34-13-34-36-15 36-14 13-34Z" fill="#05090D"/>
+  </g>
+  <circle cx="780" cy="86" r="116" fill="#22D3EE" fill-opacity=".09"/>
+  <circle cx="208" cy="346" r="138" fill="#8B5CF6" fill-opacity=".16"/>
+  <defs>
+    <linearGradient id="heroBg" x1="43" y1="42" x2="918" y2="398" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#103B43"/>
+      <stop offset=".42" stop-color="#071018"/>
+      <stop offset="1" stop-color="#15091F"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="79" y1="203" x2="916" y2="405" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C3AED" stop-opacity=".28"/>
+      <stop offset=".5" stop-color="#0891B2" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#F59E0B" stop-opacity=".2"/>
+    </linearGradient>
+  </defs>
+</svg>

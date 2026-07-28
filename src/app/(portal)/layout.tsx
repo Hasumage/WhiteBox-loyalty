@@ -21,6 +21,7 @@ import {
   Inbox,
   LayoutDashboard,
   LogOut,
+  MapPinned,
   Menu,
   Megaphone,
   MoreHorizontal,
@@ -43,7 +44,7 @@ import { AuthRecoveryOverlay } from "@/components/auth/AuthRecoveryOverlay";
 import type { AdminPermissionScope } from "@/lib/admin/access-control";
 import { clearStoredSession, getStoredUser } from "@/lib/api/auth-client";
 import { fetchWithAuthRecovery } from "@/lib/api/authenticated-fetch";
-import { companyBilling, companyProfile, type CompanyBillingData, type CompanyMemberRole } from "@/lib/api/company-client";
+import { companyBilling, companyLocations, companyProfile, type CompanyBillingData, type CompanyMemberRole } from "@/lib/api/company-client";
 import { getCompanyBillingWarning } from "@/lib/company-billing-warning";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { useI18n } from "@/lib/i18n/use-i18n";
@@ -73,6 +74,11 @@ type AdminMenuSection = {
   items: AdminMenuItem[];
 };
 type NavItem = { href: string; label: string; icon: PortalIcon };
+type CompanyMenuSection = {
+  title: string;
+  defaultOpen?: boolean;
+  items: NavItem[];
+};
 
 const adminMenu: AdminMenuSection[] = [
   {
@@ -104,13 +110,24 @@ const adminMenu: AdminMenuSection[] = [
     groupKey: "admin.nav.subscriptions",
     items: [
       { href: "/admin/subscriptions", labelKey: "admin.nav.statistics", icon: LayoutDashboard, scope: "COMPANIES" },
+      { href: "/admin/growth", labelKey: "admin.nav.growth", icon: Gift, scope: "PR" },
+      { href: "/admin/test-screens", labelKey: "admin.nav.testScreens", icon: FlaskConical, scope: "SETTINGS" },
+    ],
+  },
+  {
+    groupKey: "admin.nav.prWorkspace",
+    items: [
       { href: "/admin/pr", labelKey: "admin.nav.prDesk", icon: Megaphone, scope: "PR", prWorkspace: true },
       { href: "/admin/pr/funnel", labelKey: "admin.nav.prFunnel", icon: ClipboardList, scope: "PR", prWorkspace: true },
       { href: "/admin/pr/companies", labelKey: "admin.nav.prCompanies", icon: Building2, scope: "PR", prWorkspace: true },
       { href: "/admin/pr/payouts", labelKey: "admin.nav.prPayouts", icon: CreditCard, scope: "PR", prWorkspace: true },
-      { href: "/admin/growth", labelKey: "admin.nav.growth", icon: Gift, scope: "PR" },
       { href: "/admin/company-billing-promos", labelKey: "admin.nav.companyBillingPromos", icon: Gift, scope: "PR", prWorkspace: true },
-      { href: "/admin/test-screens", labelKey: "admin.nav.testScreens", icon: FlaskConical, scope: "SETTINGS" },
+    ],
+  },
+  {
+    groupKey: "admin.nav.account",
+    items: [
+      { href: "/admin/pr/settings", labelKey: "admin.nav.prSettings", icon: Settings2, scope: "PR", prWorkspace: true },
     ],
   },
   {
@@ -157,6 +174,45 @@ const companyMenuBase: NavItem[] = [
   { href: "/company/getting-started", label: "Первый запуск", icon: Rocket },
 ];
 
+const companyQuickActionsBase: NavItem[] = [
+  { href: "/company/settings", label: "Профиль", icon: Settings2 },
+  { href: "/company/settings/locations", label: "Адреса", icon: MapPinned },
+  { href: "/company/settings/media", label: "Фото", icon: Images },
+];
+
+const companyMenuSectionsBase: CompanyMenuSection[] = [
+  {
+    title: "Рабочий стол",
+    defaultOpen: true,
+    items: companyMenuBase.slice(0, 3),
+  },
+  {
+    title: "Клиенты и команда",
+    items: [
+      { href: "/company/loyalty", label: "Уровни и баллы", icon: Trophy },
+      { href: "/company/team", label: "Команда", icon: Users },
+      { href: "/company/club", label: "Клуб партнёров", icon: Handshake },
+    ],
+  },
+  {
+    title: "Финансы",
+    items: [
+      { href: "/company/payments", label: "Финансы", icon: CreditCard },
+      { href: "/company/billing", label: "Подписка NearLoy", icon: Gift },
+      { href: "/company/subscriptions", label: "Клиентские подписки", icon: Gift },
+    ],
+  },
+  {
+    title: "Профиль компании",
+    items: [
+      { href: "/company/settings", label: "Настройки", icon: Settings2 },
+      { href: "/company/settings/media", label: "Фото и акции", icon: Images },
+      { href: "/company/compliance", label: "Верификация", icon: FileCheck },
+      { href: "/company/getting-started", label: "Первый запуск", icon: Rocket },
+    ],
+  },
+];
+
 const companyMenuAvailable: NavItem[] = companyMenuBase.filter(
   // #SubNearloyCode: скрываем создание/управление клиентскими и парными подписками в кабинете компании.
   (item) => SUBSCRIPTIONS_ENABLED || (item.href !== "/company/subscriptions" && item.href !== "/company/club"),
@@ -168,8 +224,7 @@ const companyCashierMenuHrefSet = new Set(companyCashierMenuHrefs);
 
 const COMPANY_WORKSPACE_LABEL = "Кабинет компании";
 const COMPANY_PARTNER_LABEL = "Кабинет партнёра";
-const COMPANY_DESK_GROUP_LABEL = "Рабочий стол";
-const COMPANY_MANAGEMENT_GROUP_LABEL = "Управление";
+const COMPANY_QUICK_ACTIONS_LABEL = "Быстрые действия";
 
 type MenuNotifications = {
   items: Record<string, number>;
@@ -232,6 +287,20 @@ function isCompanyCashierPathAllowed(pathname: string) {
   return companyCashierMenuHrefs.some((href) => pathname === href || pathname.startsWith(`${href}/`));
 }
 
+const companyOnboardingAllowedHrefs = [
+  "/company/getting-started",
+  "/company/settings",
+  "/company/settings/locations",
+  "/company/settings/media",
+  "/company/billing",
+  "/company/compliance",
+  "/company/team",
+];
+
+function isCompanyOnboardingPathAllowed(pathname: string) {
+  return companyOnboardingAllowedHrefs.some((href) => pathname === href || pathname.startsWith(`${href}/`));
+}
+
 function fallbackAdminWorkspace(role?: string): AdminWorkspace {
   if (role === "SUPPORT") return "SUPPORT";
   if (role === "MANAGER") return "PR";
@@ -290,6 +359,7 @@ export default function PortalLayout({
   const [adminNavigation, setAdminNavigation] = useState<AdminNavigationProfile | null>(null);
   const [companyBillingData, setCompanyBillingData] = useState<CompanyBillingData | null>(null);
   const [companyMemberRole, setCompanyMemberRole] = useState<CompanyMemberRole | null>(null);
+  const [companyOnboardingRequired, setCompanyOnboardingRequired] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLocalCompanyItems, setShowLocalCompanyItems] = useState(false);
   const adminWorkspace = adminNavigation?.workspace ?? fallbackAdminWorkspace(currentRole);
@@ -301,6 +371,19 @@ export default function PortalLayout({
   const visibleCompanyMenu = companyMenuByRole.filter(
     (item) => showLocalCompanyItems || !companyMenuLocalOnlyHrefs.has(item.href),
   );
+  const visibleCompanySections = useMemo(() => {
+    const visibleHrefs = new Set(visibleCompanyMenu.map((item) => item.href));
+    return companyMenuSectionsBase
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => visibleHrefs.has(item.href)),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [visibleCompanyMenu]);
+  const visibleCompanyQuickActions =
+    !isAdmin && companyMemberRole !== null && companyMemberRole !== "CASHIER"
+      ? companyQuickActionsBase.filter((item) => showLocalCompanyItems || !companyMenuLocalOnlyHrefs.has(item.href))
+      : [];
   const adminSections = useMemo(
     () =>
       adminMenu
@@ -315,7 +398,7 @@ export default function PortalLayout({
     ? adminSections
         .flatMap((g) => g.items)
         .map((item) => ({ ...item, label: t(item.labelKey) }))
-    : visibleCompanyMenu;
+    : [...visibleCompanyMenu, ...visibleCompanyQuickActions];
   const adminAllowedHrefs = useMemo(() => adminSections.flatMap((section) => section.items.map((item) => item.href)), [adminSections]);
   const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : COMPANY_WORKSPACE_LABEL);
   const billingWarning = getCompanyBillingWarning(companyBillingData);
@@ -383,17 +466,35 @@ export default function PortalLayout({
   useEffect(() => {
     if (isAdmin || !pathname.startsWith("/company")) {
       setCompanyMemberRole(null);
+      setCompanyOnboardingRequired(false);
       return;
     }
 
     let active = true;
-    companyProfile()
-      .then((profile) => {
-        if (active) setCompanyMemberRole(profile.member.role);
-      })
-      .catch(() => {
-        if (active) setCompanyMemberRole(null);
-      });
+
+    async function loadCompanyAccess() {
+      try {
+        const profile = await companyProfile();
+        if (!active) return;
+        setCompanyMemberRole(profile.member.role);
+        if (profile.member.role === "CASHIER") {
+          setCompanyOnboardingRequired(false);
+          return;
+        }
+        const locations = await companyLocations().catch(() => []);
+        if (!active) return;
+        const profileReady = Boolean(profile.company.name.trim() && profile.company.description?.trim() && profile.company.categories.length);
+        const locationReady = Boolean(profile.company.operatesOnline || locations.some((location) => location.isActive));
+        setCompanyOnboardingRequired(!profileReady || !locationReady);
+      } catch {
+        if (active) {
+          setCompanyMemberRole(null);
+          setCompanyOnboardingRequired(false);
+        }
+      }
+    }
+
+    void loadCompanyAccess();
 
     return () => {
       active = false;
@@ -406,6 +507,13 @@ export default function PortalLayout({
       router.replace("/company/clients");
     }
   }, [companyMemberRole, isAdmin, pathname, router]);
+
+  useEffect(() => {
+    if (isAdmin || !pathname.startsWith("/company") || !companyOnboardingRequired || companyMemberRole === "CASHIER") return;
+    if (!isCompanyOnboardingPathAllowed(pathname)) {
+      router.replace("/company/getting-started");
+    }
+  }, [companyMemberRole, companyOnboardingRequired, isAdmin, pathname, router]);
 
   useEffect(() => {
     if (isAdmin || !pathname.startsWith("/company")) {
@@ -429,6 +537,8 @@ export default function PortalLayout({
 
   function isItemActive(href: string) {
     if (href === "/admin") return pathname === "/admin";
+    if (href === "/company") return pathname === "/company";
+    if (href === "/company/settings") return pathname === "/company/settings";
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 
@@ -441,8 +551,6 @@ export default function PortalLayout({
   const mobilePrimaryItems = isAdmin
     ? menu.slice(0, 4)
     : visibleCompanyMenu.slice(0, 4);
-  const companyDeskMenu = menu.slice(0, 3);
-  const companyManagementMenu = menu.slice(3);
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
@@ -494,47 +602,61 @@ export default function PortalLayout({
               })}
             </div>
           ) : (
-            <div className="space-y-5">
-              <div>
-                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{COMPANY_DESK_GROUP_LABEL}</p>
-                {companyDeskMenu.map(({ href, label, icon: Icon }) => {
-                  const active = isItemActive(href);
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      className={cn(
-                        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors lg:flex",
-                        active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/20",
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {label}
-                    </Link>
-                  );
-                })}
-              </div>
-              {companyManagementMenu.length > 0 && (
-                <div>
-                  <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{COMPANY_MANAGEMENT_GROUP_LABEL}</p>
-                  {companyManagementMenu.map(({ href, label, icon: Icon }) => {
-                    const active = isItemActive(href);
-                    return (
-                      <Link
-                        key={href}
-                        href={href}
-                        className={cn(
-                          "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors lg:flex",
-                          active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/20",
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {label}
-                      </Link>
-                    );
-                  })}
+            <div className="space-y-4">
+              {visibleCompanyQuickActions.length > 0 && (
+                <div className="rounded-3xl border border-cyan-200/15 bg-cyan-200/[0.035] p-3">
+                  <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-cyan-100/80">{COMPANY_QUICK_ACTIONS_LABEL}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {visibleCompanyQuickActions.map(({ href, label, icon: Icon }) => {
+                      const active = isItemActive(href);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          className={cn(
+                            "flex flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-2 text-center text-[11px] font-semibold transition",
+                            active
+                              ? "border-cyan-200/35 bg-cyan-200/12 text-cyan-50"
+                              : "border-white/10 bg-black/18 text-muted-foreground hover:border-white/18 hover:bg-white/[0.06] hover:text-foreground",
+                          )}
+                        >
+                          <Icon className="h-4 w-4" />
+                          <span className="max-w-full truncate">{label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
+              {visibleCompanySections.map((section) => {
+                const sectionActive = section.items.some((item) => isItemActive(item.href));
+                return (
+                  <details key={section.title} open={Boolean(section.defaultOpen || sectionActive)} className="group rounded-2xl border border-white/0 open:border-white/10 open:bg-white/[0.03]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+                      <span className="truncate">{section.title}</span>
+                      <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="space-y-1 px-2 pb-2">
+                      {section.items.map(({ href, label, icon: Icon }) => {
+                        const active = isItemActive(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            className={cn(
+                              "flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors",
+                              active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/20",
+                            )}
+                          >
+                            <Icon className="h-4 w-4" />
+                            <span className="truncate">{label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </details>
+                );
+              })}
             </div>
           )}
           <div className="mt-auto space-y-3">
@@ -668,24 +790,55 @@ export default function PortalLayout({
                 ))}
               </div>
             ) : (
-              <div className="grid gap-2 pb-4">
-                {visibleCompanyMenu.map(({ href, label, icon: Icon }) => {
-                  const active = isItemActive(href);
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={cn(
-                        "flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition",
-                        active ? "bg-white text-black" : "bg-white/[0.04] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground",
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {label}
-                    </Link>
-                  );
-                })}
+              <div className="space-y-3 pb-4">
+                {visibleCompanyQuickActions.length > 0 && (
+                  <section className="rounded-3xl border border-cyan-200/15 bg-cyan-200/[0.035] p-3">
+                    <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-cyan-100/80">{COMPANY_QUICK_ACTIONS_LABEL}</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {visibleCompanyQuickActions.map(({ href, label, icon: Icon }) => {
+                        const active = isItemActive(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={cn(
+                              "flex flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-3 text-center text-xs font-semibold transition",
+                              active ? "border-cyan-200/35 bg-cyan-200/12 text-cyan-50" : "border-white/10 bg-black/18 text-muted-foreground",
+                            )}
+                          >
+                            <Icon className="h-4 w-4" />
+                            <span className="max-w-full truncate">{label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+                {visibleCompanySections.map((section) => (
+                  <section key={section.title} className="rounded-3xl border border-white/10 bg-white/[0.035] p-3">
+                    <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section.title}</div>
+                    <div className="grid gap-2">
+                      {section.items.map(({ href, label, icon: Icon }) => {
+                        const active = isItemActive(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={cn(
+                              "flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition",
+                              active ? "bg-white text-black" : "bg-black/18 text-muted-foreground hover:bg-white/[0.07] hover:text-foreground",
+                            )}
+                          >
+                            <Icon className="h-4 w-4" />
+                            <span className="truncate">{label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
                 {canManageCompanyBilling && (
                   <CompanyBillingSidebarWarning warning={billingWarning} onClick={() => setMobileMenuOpen(false)} />
                 )}
@@ -706,5 +859,4 @@ export default function PortalLayout({
     </div>
   );
 }
-
 

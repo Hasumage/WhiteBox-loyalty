@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, BadgeCheck, BellRing, Gift, MapPin, QrCode, Sparkles, TicketCheck, WalletCards } from "lucide-react";
 import { LandingLeadForm } from "@/components/landing/LandingLeadForm";
+import { MarketingFooter } from "@/components/landing/MarketingFooter";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
 import { OpenNearLoyDemo } from "@/components/landing/OpenNearLoyDemo";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
@@ -241,6 +242,8 @@ export default function HomePage() {
           <LandingLeadForm source="user_landing" title="Запросить демонстрацию" />
         </div>
       </section>
+
+      <MarketingFooter />
     </main>
   );
 }

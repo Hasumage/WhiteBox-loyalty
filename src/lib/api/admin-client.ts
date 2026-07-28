@@ -511,6 +511,7 @@ export type AdminPermissionScope =
   | "AUDIT"
   | "DATABASE"
   | "TELEGRAM"
+  | "PROMOTION"
   | "SETTINGS";
 
 export type AdminUserPermissionRow = {
@@ -518,6 +519,17 @@ export type AdminUserPermissionRow = {
   canView: boolean;
   canEdit: boolean;
   canApprove: boolean;
+};
+
+export type AdminNavigationResponse = {
+  role: AdminRole;
+  workspace: "ADMIN" | "PR" | "SUPPORT";
+  explicitPermissions: AdminUserPermissionRow[];
+  permissions: Array<
+    AdminUserPermissionRow & {
+      source: "role" | "explicit" | "locked";
+    }
+  >;
 };
 
 export type AdminUserPermissionsResponse = {
@@ -565,13 +577,22 @@ export type AdminFinanceOperation = {
     payoutCorrespondentAccount?: string | null;
     payoutCardLast4?: string | null;
   } | null;
-  requestedBy: { id: number; uuid: string; email: string; name: string } | null;
+  requestedBy: {
+    id: number;
+    uuid: string;
+    email: string;
+    name: string;
+    prPayoutBankName?: string | null;
+    prPayoutBankCode?: string | null;
+    prPayoutPhone?: string | null;
+    prPayoutCardLast4?: string | null;
+  } | null;
   approvedBy: { id: number; uuid: string; email: string; name: string } | null;
   payoutTarget?: "COMPANY" | "PR_AGENT" | "UNLINKED";
   payoutChecklist?: {
     target: "COMPANY" | "PR_AGENT" | "UNLINKED";
     targetLabel: string;
-      settlementMode: "MANUAL_OR_YOOKASSA";
+    settlementMode: "MANUAL_OR_YOOKASSA";
     providerLabel: string;
     nextAction: string;
     canApprove: boolean;
@@ -579,11 +600,14 @@ export type AdminFinanceOperation = {
     requiresManualReference: boolean;
     warnings: string[];
     requisites: {
+      bankCode?: string | null;
       bankName: string | null;
       bik: string | null;
       accountMasked: string | null;
       correspondentAccountMasked: string | null;
       cardLast4: string | null;
+      cardMasked?: string | null;
+      phone?: string | null;
     } | null;
   };
   companySnapshot?: {
@@ -891,6 +915,23 @@ export type AdminCompanyOverview = {
     paidAt: string | null;
     createdAt: string;
   }>;
+};
+
+export type AdminCompanyRecommendation = {
+  company: {
+    owner: { uuid: string; name: string; email: string };
+    profile: { id: number; name: string; slug: string };
+    recommendation: {
+      boostPercent: number;
+      recommendForEveryone: boolean;
+      effectiveMultiplier: number;
+    };
+  };
+};
+
+export type AdminCompanyRecommendationInput = {
+  recommendationBoostPercent?: number;
+  recommendForEveryone?: boolean;
 };
 
 export type AdminCompanyBillingExtensionInput = {
@@ -1335,8 +1376,10 @@ export type AdminUpdateUserInput = {
 };
 
 function apiBase(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
-  return base.replace(/\/$/, "");
+  const configured = process.env.NEXT_PUBLIC_API_URL;
+  if (configured) return configured.replace(/\/$/, "");
+  if (typeof window !== "undefined") return "/backend-api";
+  return "http://localhost:3001/api";
 }
 
 function authHeaders(): HeadersInit {
@@ -1388,6 +1431,30 @@ export async function adminCreateAccount(input: {
     return { ok: false as const, message: data.message ?? "Failed to create account" };
   }
   return { ok: true as const };
+}
+
+export async function adminGetNavigation(): Promise<
+  | { ok: true; data: AdminNavigationResponse }
+  | { ok: false; status: number; message: string }
+> {
+  try {
+    const res = await fetchWithAuthRecovery(`/api/admin/navigation`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+      return { ok: false, status: res.status, message: message ?? "Failed to load admin navigation" };
+    }
+    return { ok: true, data: (await res.json()) as AdminNavigationResponse };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      message: error instanceof Error ? error.message : "Failed to load admin navigation",
+    };
+  }
 }
 
 export async function adminGetUser(uuid: string): Promise<
@@ -1697,6 +1764,43 @@ export async function adminGetCompanyOverview(uuid: string) {
       message: error instanceof Error ? error.message : "Failed to fetch company overview",
     };
   }
+}
+
+export async function adminGetCompanyRecommendation(uuid: string) {
+  try {
+    const res = await fetchWithAuthRecovery(`/api/admin/company-users/${uuid}/recommendation`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        ok: false as const,
+        status: res.status,
+        message: data.message ?? "Failed to fetch company recommendation settings",
+      };
+    }
+    return { ok: true as const, data: (await res.json()) as AdminCompanyRecommendation };
+  } catch (error) {
+    return {
+      ok: false as const,
+      status: 0,
+      message: error instanceof Error ? error.message : "Failed to fetch company recommendation settings",
+    };
+  }
+}
+
+export async function adminUpdateCompanyRecommendation(uuid: string, input: AdminCompanyRecommendationInput) {
+  const res = await fetchWithAuthRecovery(`/api/admin/company-users/${uuid}/recommendation`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false as const, status: res.status, message: data.message ?? "Failed to update company recommendation settings" };
+  }
+  return { ok: true as const, data: (await res.json()) as AdminCompanyRecommendation };
 }
 
 export async function adminExtendCompanyBilling(uuid: string, input: AdminCompanyBillingExtensionInput) {

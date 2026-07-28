@@ -5,11 +5,9 @@ import {
   ArrowRight,
   Building2,
   Handshake,
-  Landmark,
   Megaphone,
   Rocket,
   Target,
-  TrendingUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,8 +84,8 @@ export function AdminPrDashboardSection({ dashboard, locale }: { dashboard: PrDa
             </CardTitle>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               {locale === "ru"
-                ? "Компании, закреплённые за PR-менеджером, стадия воронки и выплата из доли NearLoy."
-                : "Companies assigned to PR, funnel stage and payout paid from the NearLoy share."}
+                ? "Компании, закреплённые за PR-менеджером, стадия воронки и выплаты."
+                : "Companies assigned to PR, funnel stage and payouts."}
             </p>
           </div>
           <Badge variant="secondary" className="w-fit">
@@ -102,7 +100,7 @@ export function AdminPrDashboardSection({ dashboard, locale }: { dashboard: PrDa
         </div>
       </CardHeader>
       <CardContent className="space-y-5 p-5">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2">
           <PrMetricCard
             icon={Building2}
             label={locale === "ru" ? "Компании" : "Companies"}
@@ -113,19 +111,7 @@ export function AdminPrDashboardSection({ dashboard, locale }: { dashboard: PrDa
             icon={Handshake}
             label={locale === "ru" ? "PR-выплата" : "PR payout"}
             value={money(dashboard.totals.referralCommission, locale)}
-            hint={locale === "ru" ? "от оборота, из доли NearLoy" : "from turnover, paid from NearLoy share"}
-          />
-          <PrMetricCard
-            icon={Landmark}
-            label={locale === "ru" ? "NearLoy после PR" : "NearLoy after PR"}
-            value={money(dashboard.totals.whiteBoxNetCommission, locale)}
-            hint={locale === "ru" ? "чистая комиссия платформы" : "net platform commission"}
-          />
-          <PrMetricCard
-            icon={TrendingUp}
-            label={locale === "ru" ? "Оборот" : "Turnover"}
-            value={money(dashboard.totals.recognizedGross, locale)}
-            hint={`${money(dashboard.totals.futureGross, locale)} ${locale === "ru" ? "будущий оборот" : "future turnover"}`}
+            hint={locale === "ru" ? "\u0033\u0030\u0025 \u043e\u0442 \u043e\u043f\u043b\u0430\u0447\u0435\u043d\u043d\u043e\u0439 \u043f\u043e\u0434\u043f\u0438\u0441\u043a\u0438 NearLoy" : "30% of paid NearLoy subscription"}
           />
         </div>
 
@@ -152,28 +138,23 @@ export function AdminPrDashboardSection({ dashboard, locale }: { dashboard: PrDa
                   <div>
                     <p className="text-lg font-semibold">{company.companyName}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {company.referrer.name} · {company.referralPercent}% {locale === "ru" ? "от оборота, из доли NearLoy" : "of turnover, paid from NearLoy share"}
+                      {company.referrer.name} {"\u00b7"} {locale === "ru" ? "\u0033\u0030\u0025 \u043e\u0442 \u043e\u043f\u043b\u0430\u0442\u044b NearLoy" : "30% of NearLoy payment"}
                     </p>
                   </div>
                   <Badge variant={company.pipelineStatus === "REVENUE_ACTIVE" ? "default" : "secondary"}>
                     {pipelineLabel(company.pipelineStatus, locale)}
                   </Badge>
                 </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">PR</p>
                     <p className="mt-1 font-semibold">{money(company.referralCommission, locale)}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">NearLoy</p>
-                    <p className="mt-1 font-semibold">{money(company.whiteBoxNetCommission, locale)}</p>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{locale === "ru" ? "\u0421\u0442\u0430\u0434\u0438\u044f" : "Stage"}</p>
+                    <p className="mt-1 font-semibold">{pipelineLabel(company.pipelineStatus, locale)}</p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                      {locale === "ru" ? "Подписки" : "Subs"}
-                    </p>
-                    <p className="mt-1 font-semibold">{company.activeSubscriptions}</p>
-                  </div>
+
                 </div>
               </div>
             ))

@@ -6,7 +6,7 @@ NearLoy is a loyalty and subscription platform with five active surfaces:
 
 - Client app for end users.
 - Public company cards at `/wallet/[slug]`.
-- Public landing and verified company intake.
+- Public marketing, giveaway, careers and verified company intake.
 - Company portal for partner operations, billing, media, staff, cashier and compliance.
 - Admin portal for operations, payments, tasks, system health, analytics, growth, database map, backups, audit, support and verification.
 
@@ -17,6 +17,8 @@ nearloy/
   apps/api/              # NestJS REST API
   prisma/                # Prisma schema, migrations, seed
   src/app/(auth)/        # Login/register/email confirmation
+  src/app/business/      # Public business landing, giveaway and rules
+  src/app/careers/       # Public careers index and vacancy detail pages
   src/app/company/       # Public company registration and verification intake
   src/app/(twa)/         # Client mobile routes (historical folder name)
   src/app/(portal)/      # Admin/company desktop portal routes
@@ -85,6 +87,12 @@ Admin:
 Public:
 
 - `/landing` dark NearLoy marketing landing with Telegram-backed contact form.
+- `/business` company-facing marketing landing with partner CTA and giveaway entry.
+- `/business/giveaway` 100 000 RUB business-development giveaway with active-company progress vessel and use-case cards.
+- `/business/giveaway/rules` giveaway participation rules for Russian companies.
+- `/careers` localized NearLoy careers hub with SEO metadata and role cards.
+- `/careers/[slug]` generic vacancy detail pages.
+- `/careers/b2b-manager` detailed B2B acquisition manager vacancy with Telegram contact CTA.
 - `/company/register` multi-step company account request and verification form.
 - `/wallet/[slug]` public read-only company card for sharing outside the app.
 
@@ -118,6 +126,9 @@ Company portal:
 - `src/app/(portal)/admin/ai/page.tsx` - admin AI chat UI with permission-scoped context and optional image attachment.
 - `src/lib/admin-ai/*` - modular admin AI context, OpenAI integration, permissions and safe action application.
 - `src/lib/finance/payout-operations.ts` and `src/lib/finance/yookassa-payouts.ts` - payout target resolution, checklist/coverage and YooKassa payout integration.
+- `src/app/business/*` - business landing, giveaway progress and rules pages.
+- `src/app/careers/*` - localized careers pages, role definitions and vacancy SEO metadata.
+- `src/components/landing/MarketingHeader.tsx` and `MarketingFooter.tsx` - shared public landing navigation/footer.
 - `src/app/(portal)/admin/payments/page.tsx` - provider payment ledger.
 - `src/app/(portal)/admin/system-health/page.tsx` - critical incident cockpit.
 - `src/app/(portal)/admin/database/page.tsx` - visual DB map synced with Prisma models.

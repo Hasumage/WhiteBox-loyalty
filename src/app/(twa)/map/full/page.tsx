@@ -1,16 +1,15 @@
 "use client";
 
 import { Suspense } from "react";
+import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { MapPageContent } from "../page";
 
 export default function FullMapPage() {
   return (
     <Suspense
       fallback={
-        <div className="fixed inset-0 z-[70] flex h-[100dvh] items-center justify-center overflow-hidden bg-black">
-          <div className="rounded-3xl border border-white/10 bg-slate-950/80 px-5 py-4 text-sm text-white/70 shadow-[0_24px_60px_rgba(0,0,0,0.48)]">
-            Loading map...
-          </div>
+        <div className="fixed inset-0 z-[70] h-[100dvh] overflow-hidden bg-black">
+          <TwaLoadingScreen title="Открываем карту" subtitle="Подгружаем партнёров и карту рядом." />
         </div>
       }
     >

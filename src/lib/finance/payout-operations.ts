@@ -1,5 +1,6 @@
 import type { FinanceOperationStatus } from "@prisma/client";
 import { COMPANY_REFERRAL_PAYOUT_TITLE } from "@/lib/company-referrals/company-referrals";
+import { maskCard, maskPhone, prPayoutBankName } from "@/lib/pr-payout/requisites";
 
 export type PayoutTarget = "COMPANY" | "PR_AGENT" | "UNLINKED";
 
@@ -14,11 +15,14 @@ export type PayoutChecklist = {
   requiresManualReference: boolean;
   warnings: string[];
   requisites: {
+    bankCode?: string | null;
     bankName: string | null;
     bik: string | null;
     accountMasked: string | null;
     correspondentAccountMasked: string | null;
     cardLast4: string | null;
+    cardMasked?: string | null;
+    phone?: string | null;
   } | null;
 };
 
@@ -36,7 +40,14 @@ type PayoutItem = {
     payoutCorrespondentAccount?: string | null;
     payoutCardLast4?: string | null;
   } | null;
-  requestedBy?: { name: string; email: string } | null;
+  requestedBy?: {
+    name: string;
+    email: string;
+    prPayoutBankName?: string | null;
+    prPayoutBankCode?: string | null;
+    prPayoutPhone?: string | null;
+    prPayoutCardLast4?: string | null;
+  } | null;
 };
 
 type Coverage = { requestCovered: boolean | null } | null | undefined;
@@ -73,6 +84,10 @@ function hasCompanyRequisites(item: PayoutItem) {
   );
 }
 
+function hasPrRequisites(item: PayoutItem) {
+  return Boolean(item.requestedBy?.prPayoutBankName && (item.requestedBy.prPayoutPhone || item.requestedBy.prPayoutCardLast4));
+}
+
 export function buildPayoutChecklist(
   item: PayoutItem,
   companyCoverage?: Coverage,
@@ -83,10 +98,10 @@ export function buildPayoutChecklist(
   const covered = target === "COMPANY" ? companyCoverage?.requestCovered : target === "PR_AGENT" ? referralCoverage?.requestCovered : false;
 
   if (target === "COMPANY" && !hasCompanyRequisites(item)) {
-    warnings.push("У компании не заполнены реквизиты. Для YooKassa можно ввести тестовую карту вручную, для ручного перевода реквизиты обязательны.");
+    warnings.push("У компании не заполнены реквизиты. Для ручной выплаты реквизиты обязательны.");
   }
-  if (target === "PR_AGENT") {
-    warnings.push("Реквизиты PR-агента сверяются вручную вне системы.");
+  if (target === "PR_AGENT" && !hasPrRequisites(item)) {
+    warnings.push("У PR-менеджера не заполнены реквизиты для выплаты.");
   }
   if (target === "UNLINKED") {
     warnings.push("Заявка не привязана к балансу компании или PR-агента.");
@@ -121,13 +136,27 @@ export function buildPayoutChecklist(
     requisites:
       target === "COMPANY"
         ? {
+            bankCode: null,
             bankName: item.company?.payoutBankName ?? null,
             bik: item.company?.payoutBik ?? null,
             accountMasked: maskTail(item.company?.payoutAccount),
             correspondentAccountMasked: maskTail(item.company?.payoutCorrespondentAccount),
             cardLast4: item.company?.payoutCardLast4 ?? null,
+            cardMasked: maskCard(item.company?.payoutCardLast4),
+            phone: null,
           }
-        : null,
+        : target === "PR_AGENT"
+          ? {
+              bankCode: item.requestedBy?.prPayoutBankCode ?? null,
+              bankName: item.requestedBy?.prPayoutBankName ?? prPayoutBankName(item.requestedBy?.prPayoutBankCode),
+              bik: null,
+              accountMasked: null,
+              correspondentAccountMasked: null,
+              cardLast4: item.requestedBy?.prPayoutCardLast4 ?? null,
+              cardMasked: maskCard(item.requestedBy?.prPayoutCardLast4),
+              phone: maskPhone(item.requestedBy?.prPayoutPhone),
+            }
+          : null,
   };
 }
 

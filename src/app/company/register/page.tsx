@@ -73,6 +73,12 @@ const copy = {
     inn: "ИНН",
     passportHint:
       "Для полной верификации введите паспортные данные и приложите фото. Текстовые паспортные данные хранятся зашифрованно, фото хранится зашифрованным файлом и удаляется после approve/reject.",
+    verifyNow: "Пройти проверку сейчас",
+    verifyNowText: "Заполните паспортные данные сразу — администратор быстрее подтвердит компанию.",
+    verifyLater: "Пропустить проверку",
+    verifyLaterText: "Кабинет будет создан сразу, а проверку можно пройти позже в разделе верификации.",
+    verifyDeferredTitle: "Проверка отложена",
+    verifyDeferredText: "Вы сможете настроить компанию и оплатить подписку. Вывод средств будет доступен после проверки.",
     passportSeries: "Серия паспорта",
     passportNumber: "Номер паспорта",
     passportIssuedBy: "Кем выдан",
@@ -88,6 +94,7 @@ const copy = {
     nextButton: "Далее",
     sending: "Отправляем...",
     submit: "Отправить на проверку",
+    submitDeferred: "Создать кабинет",
     success: "Заявка отправлена. Мы свяжемся после ручной проверки.",
     error: "Не удалось отправить заявку.",
     stepBlocked: "Заполните обязательные поля текущего шага, чтобы идти дальше.",
@@ -133,6 +140,12 @@ const copy = {
     inn: "Tax ID",
     passportHint:
       "For full verification, enter passport data and attach a photo. Text passport data is encrypted; the photo is stored as an encrypted file and removed after approve/reject.",
+    verifyNow: "Verify now",
+    verifyNowText: "Enter passport details now so admins can approve the company faster.",
+    verifyLater: "Skip verification",
+    verifyLaterText: "Create the workspace now and complete verification later from the company cabinet.",
+    verifyDeferredTitle: "Verification deferred",
+    verifyDeferredText: "You can set up the company and pay for access. Payouts become available after verification.",
     passportSeries: "Passport series",
     passportNumber: "Passport number",
     passportIssuedBy: "Issued by",
@@ -148,6 +161,7 @@ const copy = {
     nextButton: "Next",
     sending: "Sending...",
     submit: "Submit verification",
+    submitDeferred: "Create workspace",
     success: "Verification request submitted. We will contact you after manual review.",
     error: "Failed to submit request.",
     stepBlocked: "Fill in the required fields on this step before moving forward.",
@@ -165,6 +179,7 @@ export default function CompanyRegisterPage() {
   const [employmentType, setEmploymentType] = useState("SELF_EMPLOYED");
   const [passportFileName, setPassportFileName] = useState("");
   const [companyReferralCode, setCompanyReferralCode] = useState("");
+  const [verificationDeferred, setVerificationDeferred] = useState(false);
   const t = copy[locale];
   const cards = t.cards as Array<[typeof Building2, string, string]>;
   const steps = t.steps as string[];
@@ -234,7 +249,7 @@ export default function CompanyRegisterPage() {
         return false;
       }
     }
-    if (targetStep === 3) {
+    if (targetStep === 3 && !verificationDeferred) {
       names.push("passportSeries", "passportNumber", "passportIssuedAt", "passportIssuedBy", "passportPhoto");
     }
     const ok = names.every(validateField);
@@ -264,7 +279,7 @@ export default function CompanyRegisterPage() {
     if (!validateStep(3)) return;
     const form = event.currentTarget;
     const payload = new FormData(form);
-    payload.set("identityVerificationMode", "FULL");
+    payload.set("identityVerificationMode", verificationDeferred ? "DEFERRED" : "FULL");
     payload.set("consentAccepted", form.querySelector<HTMLInputElement>("#consentAccepted")?.checked === true ? "true" : "false");
     payload.set("termsAccepted", form.querySelector<HTMLInputElement>("#termsAccepted")?.checked === true ? "true" : "false");
 
@@ -284,6 +299,7 @@ export default function CompanyRegisterPage() {
       form.reset();
       setEmploymentType("SELF_EMPLOYED");
       setPassportFileName("");
+      setVerificationDeferred(false);
       setStep(1);
     } catch (error) {
       setStatus("error");
@@ -387,43 +403,97 @@ export default function CompanyRegisterPage() {
                 <Input name="legalLastName" required maxLength={80} placeholder={String(t.legalLastName)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
                 <Input name="legalFirstName" required maxLength={80} placeholder={String(t.legalFirstName)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
                 <Input name="legalMiddleName" maxLength={80} placeholder={String(t.legalMiddleName)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
-                <Input name="birthDate" required type="date" max={maxBirthDate} placeholder={String(t.birthDate)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white [color-scheme:dark]" />
+                <label className="space-y-2">
+                  <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/52">
+                    {String(t.birthDate)}
+                  </span>
+                  <Input name="birthDate" required type="date" max={maxBirthDate} aria-label={String(t.birthDate)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white [color-scheme:dark]" />
+                </label>
                 <Input name="legalInn" required inputMode="numeric" minLength={10} maxLength={12} pattern="\d{10}|\d{12}" onInput={(event) => normalizeDigits(event, 12)} placeholder={String(t.inn)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
               </div>
             </div>
 
             <div className={cn("grid gap-4", step !== 3 && "hidden")}>
-              <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm leading-6 text-amber-50/82">{String(t.passportHint)}</div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input name="passportSeries" required inputMode="numeric" minLength={4} maxLength={4} pattern="\d{4}" onInput={(event) => normalizeDigits(event, 4)} placeholder={String(t.passportSeries)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
-                <Input name="passportNumber" required inputMode="numeric" minLength={6} maxLength={6} pattern="\d{6}" onInput={(event) => normalizeDigits(event, 6)} placeholder={String(t.passportNumber)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
-                <Input name="passportIssuedAt" required type="date" max={new Date().toISOString().slice(0, 10)} placeholder={String(t.passportIssuedAt)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white [color-scheme:dark]" />
-                <Input name="passportDepartmentCode" inputMode="numeric" minLength={6} maxLength={6} pattern="\d{6}" onInput={(event) => normalizeDigits(event, 6)} placeholder={String(t.passportDepartmentCode)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setVerificationDeferred(false)}
+                  className={cn(
+                    "rounded-3xl border p-4 text-left transition",
+                    !verificationDeferred
+                      ? "border-cyan-200/35 bg-cyan-200/[0.08] text-white"
+                      : "border-white/10 bg-black/18 text-white/58 hover:bg-white/[0.06]",
+                  )}
+                >
+                  <p className="font-semibold">{String(t.verifyNow)}</p>
+                  <p className="mt-1 text-sm leading-6 opacity-70">{String(t.verifyNowText)}</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerificationDeferred(true);
+                    setPassportFileName("");
+                  }}
+                  className={cn(
+                    "rounded-3xl border p-4 text-left transition",
+                    verificationDeferred
+                      ? "border-emerald-200/35 bg-emerald-200/[0.08] text-white"
+                      : "border-white/10 bg-black/18 text-white/58 hover:bg-white/[0.06]",
+                  )}
+                >
+                  <p className="font-semibold">{String(t.verifyLater)}</p>
+                  <p className="mt-1 text-sm leading-6 opacity-70">{String(t.verifyLaterText)}</p>
+                </button>
               </div>
-              <Textarea name="passportIssuedBy" required maxLength={240} placeholder={String(t.passportIssuedBy)} className="min-h-24 rounded-xl border-white/12 bg-black/22 text-white" />
-              <label className="group flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-white/18 bg-black/22 p-8 text-center transition hover:border-white/35 hover:bg-white/[0.06]">
-                    <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/12 bg-white/8 shadow-[0_0_24px_rgba(255,255,255,0.08)]">
-                      <UploadCloud className="h-7 w-7 text-white" />
+              <div
+                aria-hidden={!verificationDeferred}
+                className={cn(
+                  "rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm leading-6 text-emerald-50/82",
+                  !verificationDeferred && "hidden",
+                )}
+              >
+                <p className="font-semibold">{String(t.verifyDeferredTitle)}</p>
+                <p className="mt-1">{String(t.verifyDeferredText)}</p>
+              </div>
+              <div aria-hidden={verificationDeferred} className={cn("grid gap-4", verificationDeferred && "hidden")}>
+                <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm leading-6 text-amber-50/82">{String(t.passportHint)}</div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input name="passportSeries" required={!verificationDeferred} disabled={verificationDeferred} inputMode="numeric" minLength={4} maxLength={4} pattern="\d{4}" onInput={(event) => normalizeDigits(event, 4)} placeholder={String(t.passportSeries)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
+                  <Input name="passportNumber" required={!verificationDeferred} disabled={verificationDeferred} inputMode="numeric" minLength={6} maxLength={6} pattern="\d{6}" onInput={(event) => normalizeDigits(event, 6)} placeholder={String(t.passportNumber)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
+                  <label className="space-y-2">
+                    <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/52">
+                      {String(t.passportIssuedAt)}
                     </span>
-                    <span className="text-lg font-semibold">{String(t.passportPhoto)}</span>
-                    <span className="mt-2 max-w-xl text-sm leading-6 text-white/56">{String(t.passportPhotoHelp)}</span>
-                    <input
-                      name="passportPhoto"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                      required
-                      onChange={(event) => setPassportFileName(event.currentTarget.files?.[0]?.name ?? "")}
-                      className="sr-only"
-                    />
-                    <span className="mt-5 flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30 text-left sm:flex-row">
-                      <span className="inline-flex items-center justify-center border-b border-white/12 bg-white/[0.08] px-5 py-3 font-semibold text-white transition group-hover:bg-white/[0.12] sm:border-b-0 sm:border-r">
-                        {String(t.passportPhotoButton)}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate px-5 py-3 text-white/70">
-                        {passportFileName || String(t.passportPhotoEmpty)}
-                      </span>
-                    </span>
-              </label>
+                    <Input name="passportIssuedAt" required={!verificationDeferred} disabled={verificationDeferred} type="date" max={new Date().toISOString().slice(0, 10)} aria-label={String(t.passportIssuedAt)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white [color-scheme:dark]" />
+                  </label>
+                  <Input name="passportDepartmentCode" disabled={verificationDeferred} inputMode="numeric" minLength={6} maxLength={6} pattern="\d{6}" onInput={(event) => normalizeDigits(event, 6)} placeholder={String(t.passportDepartmentCode)} className="h-12 rounded-xl border-white/12 bg-black/22 text-white" />
+                </div>
+                <Textarea name="passportIssuedBy" required={!verificationDeferred} disabled={verificationDeferred} maxLength={240} placeholder={String(t.passportIssuedBy)} className="min-h-24 rounded-xl border-white/12 bg-black/22 text-white" />
+                <label className="group flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-white/18 bg-black/22 p-8 text-center transition hover:border-white/35 hover:bg-white/[0.06]">
+                        <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/12 bg-white/8 shadow-[0_0_24px_rgba(255,255,255,0.08)]">
+                          <UploadCloud className="h-7 w-7 text-white" />
+                        </span>
+                        <span className="text-lg font-semibold">{String(t.passportPhoto)}</span>
+                        <span className="mt-2 max-w-xl text-sm leading-6 text-white/56">{String(t.passportPhotoHelp)}</span>
+                        <input
+                          name="passportPhoto"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                          required={!verificationDeferred}
+                          disabled={verificationDeferred}
+                          onChange={(event) => setPassportFileName(event.currentTarget.files?.[0]?.name ?? "")}
+                          className="sr-only"
+                        />
+                        <span className="mt-5 flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30 text-left sm:flex-row">
+                          <span className="inline-flex items-center justify-center border-b border-white/12 bg-white/[0.08] px-5 py-3 font-semibold text-white transition group-hover:bg-white/[0.12] sm:border-b-0 sm:border-r">
+                            {String(t.passportPhotoButton)}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate px-5 py-3 text-white/70">
+                            {passportFileName || String(t.passportPhotoEmpty)}
+                          </span>
+                        </span>
+                </label>
+              </div>
               <label className="flex gap-3 rounded-2xl border border-white/10 bg-black/18 p-4 text-sm leading-6 text-white/64">
                 <input id="consentAccepted" name="consentAccepted" required type="checkbox" className="mt-1 h-4 w-4" />
                 <span>{String(t.consent)}</span>
@@ -453,7 +523,7 @@ export default function CompanyRegisterPage() {
                 <Button type="button" className="bg-white text-black hover:bg-white/90" onClick={() => goToStep((Math.min(3, step + 1) as Step))}>{String(t.nextButton)}</Button>
               ) : (
                 <Button type="submit" disabled={status === "sending"} className="bg-white text-black hover:bg-white/90">
-                  {status === "sending" ? String(t.sending) : String(t.submit)}
+                  {status === "sending" ? String(t.sending) : String(verificationDeferred ? t.submitDeferred : t.submit)}
                   <Send className="h-4 w-4" />
                 </Button>
               )}

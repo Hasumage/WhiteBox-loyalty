@@ -1,4 +1,10 @@
-import { clearStoredSession, getAccessToken, refreshStoredSession } from "./auth-client";
+import {
+  clearStoredSessionIfAccessToken,
+  getAccessToken,
+  getRefreshToken,
+  refreshStoredSession,
+} from "./auth-client";
+import { fetchWithTimeout } from "./fetch-timeout";
 
 export const AUTH_RECOVERY_EVENT = "nearloy:auth-recovery";
 
@@ -11,6 +17,7 @@ export type AuthRecoveryEventDetail = {
 type FetchRecoveryOptions = {
   retry?: boolean;
   redirectOnFailure?: boolean;
+  timeoutMs?: number;
 };
 
 let recoveryPromise: Promise<boolean> | null = null;
@@ -48,11 +55,9 @@ async function recoverSession() {
         emitAuthRecovery("restored");
         return true;
       }
-      clearStoredSession();
       emitAuthRecovery("failed");
       return false;
     } catch {
-      clearStoredSession();
       emitAuthRecovery("failed");
       return false;
     } finally {
@@ -73,9 +78,14 @@ async function recoverSession() {
 function redirectToLogin() {
   if (typeof window === "undefined") return;
   const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  const next = encodeURIComponent(currentUrl || "/");
+  const isCapacitorApp =
+    window.location.search.includes("app=capacitor") ||
+    window.localStorage.getItem("nearloy:capacitor-app") === "1";
+  const params = new URLSearchParams({ next: currentUrl || "/" });
+  if (isCapacitorApp) params.set("app", "capacitor");
+  const loginPath = isCapacitorApp ? "/mobile-login" : "/login";
   window.setTimeout(() => {
-    window.location.assign(`/login?next=${next}`);
+    window.location.assign(`${loginPath}?${params.toString()}`);
   }, 700);
 }
 
@@ -84,8 +94,8 @@ export async function fetchWithAuthRecovery(
   init: RequestInit = {},
   options: FetchRecoveryOptions = {},
 ) {
-  const { retry = true, redirectOnFailure = true } = options;
-  const firstResponse = await fetch(input, withFreshAuthorization(init));
+  const { retry = true, redirectOnFailure = true, timeoutMs } = options;
+  const firstResponse = await fetchWithTimeout(input, withFreshAuthorization(init), timeoutMs);
 
   if (!retry || firstResponse.status !== 401) {
     return firstResponse;
@@ -93,15 +103,16 @@ export async function fetchWithAuthRecovery(
 
   const restored = await recoverSession();
   if (!restored) {
-    if (redirectOnFailure) redirectToLogin();
+    if (redirectOnFailure && !getRefreshToken()) redirectToLogin();
     return firstResponse;
   }
 
-  const retryResponse = await fetch(input, withFreshAuthorization(init));
+  const retryAccessToken = getAccessToken();
+  const retryResponse = await fetchWithTimeout(input, withFreshAuthorization(init), timeoutMs);
   if (retryResponse.status === 401) {
-    clearStoredSession();
+    clearStoredSessionIfAccessToken(retryAccessToken);
     emitAuthRecovery("failed");
-    if (redirectOnFailure) redirectToLogin();
+    if (redirectOnFailure && !getRefreshToken()) redirectToLogin();
   }
 
   return retryResponse;
