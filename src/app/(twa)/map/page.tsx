@@ -201,6 +201,23 @@ type UserMapLocation = {
   accuracy: number | null;
 };
 
+type MapMediaAsset = {
+  url: string | null;
+};
+
+type MapCompanyMedia = {
+  media: {
+    logo: MapMediaAsset | null;
+    hero: MapMediaAsset | null;
+    gallery: MapMediaAsset[];
+  };
+};
+
+type SelectedMediaItem = {
+  url: string;
+  kind: "logo" | "image";
+};
+
 type RouteMode = "auto" | "pedestrian" | "transit";
 
 const ROUTE_MODES: Array<{ key: RouteMode; labelKey: TranslationKey; yandex: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -228,6 +245,22 @@ let yandexReactifiedMapsLoadPromise: Promise<YandexReactifiedMaps> | null = null
 function uniqueCompanyCategories(company: TwaCompany) {
   const bySlug = new Map([company.category, ...company.categories].filter(Boolean).map((category) => [category.slug, category]));
   return [...bySlug.values()];
+}
+
+function buildSelectedMediaItems(company: TwaCompany | null, media: MapCompanyMedia | null) {
+  if (!company) return [];
+
+  const candidates: SelectedMediaItem[] = [];
+  const logoUrl = media?.media.logo?.url ?? company.logoUrl;
+  if (logoUrl) candidates.push({ url: logoUrl, kind: "logo" });
+  if (media?.media.hero?.url) candidates.push({ url: media.media.hero.url, kind: "image" });
+  for (const asset of media?.media.gallery ?? []) {
+    if (asset.url) candidates.push({ url: asset.url, kind: "image" });
+  }
+
+  return candidates
+    .filter((candidate, index) => candidates.findIndex((item) => item.url === candidate.url) === index)
+    .slice(0, 5);
 }
 
 function timeToMinutes(value: string) {
@@ -1090,6 +1123,9 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
   const searchParams = useSearchParams();
   const requestedCompany = searchParams.get("company");
   const requestedLocation = searchParams.get("location");
+  const appMode = searchParams.get("app");
+  const smallMapHref = appMode ? `/map?app=${encodeURIComponent(appMode)}` : "/map";
+  const fullMapHref = appMode ? `/map/full?app=${encodeURIComponent(appMode)}` : "/map/full";
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [pointMode, setPointMode] = useState<"all" | "main" | "visited" | "open" | "subscriptions">("all");
@@ -1103,6 +1139,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
   const [nearMeOnly, setNearMeOnly] = useState(false);
   const [nearMeFocusKey, setNearMeFocusKey] = useState(0);
   const [clusterPreviewPoints, setClusterPreviewPoints] = useState<PartnerMapPoint[]>([]);
+  const [selectedCompanyMedia, setSelectedCompanyMedia] = useState<{ slug: string; payload: MapCompanyMedia } | null>(null);
   const [fullSheetLevel, setFullSheetLevel] = useState<FullMapSheetLevel>("peek");
   const fullSheetDragControls = useDragControls();
   const fullSheetDraggingRef = useRef(false);
@@ -1154,6 +1191,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
         longitude: position.coords.longitude,
         accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
       });
+      setNearMeFocusKey((value) => value + 1);
       setGeoStatus("ready");
     } catch (error) {
       setGeoStatus(error instanceof Error && error.message === "geolocation-unavailable" ? "unavailable" : "denied");
@@ -1251,6 +1289,26 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
     ? locationPoints.find((point) => point.id === effectiveSelectedPointId) ?? null
     : null;
   const selectedPartner = selectedPoint?.company ?? null;
+  useEffect(() => {
+    if (!full || !selectedPartner?.slug) return;
+
+    let ignore = false;
+    const slug = selectedPartner.slug;
+    void fetch(`/api/public/company-media/${encodeURIComponent(slug)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? (response.json() as Promise<MapCompanyMedia>) : null))
+      .then((payload) => {
+        if (!ignore && payload) setSelectedCompanyMedia({ slug, payload });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      ignore = true;
+    };
+  }, [full, selectedPartner?.slug]);
+  const selectedMediaItems = buildSelectedMediaItems(
+    selectedPartner,
+    selectedCompanyMedia?.slug === selectedPartner?.slug ? (selectedCompanyMedia?.payload ?? null) : null,
+  );
   const selectedCategoryData = selectedCategory ? categories.find((category) => category.slug === selectedCategory) : null;
   const selectedDistance = selectedPoint ? distanceKm(userLocation, selectedPoint.location) : null;
   const nearestSameCompany = useMemo(() => {
@@ -1282,9 +1340,9 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
           className="h-11 w-11 rounded-full border border-white/15 bg-slate-950/88 text-white shadow-[0_16px_38px_rgba(0,0,0,0.42)] backdrop-blur-xl hover:bg-slate-900"
           aria-label={t("client.map.expand")}
         >
-          <a href="/map/full">
+          <Link href={fullMapHref}>
             <Maximize2 className="h-5 w-5" />
-          </a>
+          </Link>
         </Button>
       )}
     </div>
@@ -1327,6 +1385,27 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
           )}
         </div>
       </div>
+      {full && selectedMediaItems.length > 0 && (
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {selectedMediaItems.map((item, index) => (
+            <div
+              key={`${item.kind}-${item.url}`}
+              className={cn(
+                "relative h-20 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]",
+                item.kind === "logo" ? "w-20" : "w-32",
+              )}
+            >
+              <img
+                src={item.url}
+                alt={item.kind === "logo" ? `${selectedPartner.name} — логотип` : `${selectedPartner.name} — фото ${index + 1}`}
+                className={cn("h-full w-full", item.kind === "logo" ? "object-contain p-2" : "object-cover")}
+                loading="lazy"
+                draggable={false}
+              />
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mt-2.5 flex items-center gap-2">
         <Badge
           variant="outline"
@@ -1370,7 +1449,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
           <div className="mx-auto max-w-[560px]">
             <div className="flex items-start gap-3">
               <Button asChild size="icon" className="mt-0.5 h-12 w-12 shrink-0 rounded-full bg-black/62 text-white shadow-[0_18px_42px_rgba(0,0,0,0.45)] backdrop-blur-xl hover:bg-black/76">
-                <Link href="/map" aria-label={t("client.map.back")}>
+                <Link href={smallMapHref} aria-label={t("client.map.back")}>
                   <ArrowLeft className="h-5 w-5" />
                 </Link>
               </Button>
@@ -1655,7 +1734,7 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
         <div className="flex items-center gap-2">
           {full ? (
             <Button asChild size="icon" variant="secondary" className="h-11 w-11 rounded-full">
-              <Link href="/map" aria-label={t("client.map.back")}>
+              <Link href={smallMapHref} aria-label={t("client.map.back")}>
                 <ArrowLeft className="h-5 w-5" />
               </Link>
             </Button>
