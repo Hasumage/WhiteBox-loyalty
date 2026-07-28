@@ -21,6 +21,7 @@ import {
   setStoredSession,
   verifyRegistrationCode,
 } from "@/lib/api/auth-client";
+import { useIsCapacitorApp } from "@/lib/capacitor/use-is-capacitor-app";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
 const copy = {
@@ -65,6 +66,7 @@ const copy = {
 export default function RegisterPage() {
   const router = useRouter();
   const { locale, setLocale, t } = useI18n("ru");
+  const isCapacitorApp = useIsCapacitorApp();
   const text = copy[locale] ?? copy.ru;
   const [safeNext, setSafeNext] = useState<string | null>(null);
   const [step, setStep] = useState<"details" | "code">("details");
@@ -157,12 +159,14 @@ export default function RegisterPage() {
               <span className="block truncate text-xs text-muted-foreground">{t("client.auth.brandSubtitle")}</span>
             </span>
           </Link>
-          <Link
-            href="/"
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
-          >
-            {t("client.auth.landing")} <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
+          {isCapacitorApp === false && (
+            <Link
+              href="/"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
+            >
+              {t("client.auth.landing")} <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
         </div>
         <div className="flex items-center justify-between gap-3">
           <CardTitle>{step === "code" ? text.verifyTitle : t("client.auth.registerTitle")}</CardTitle>

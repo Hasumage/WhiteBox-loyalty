@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowLeft, Bus, Car, ChevronRight, Crosshair, Filter, Footprints, LocateFixed, MapPin, Maximize2, Route, Search, X } from "lucide-react";
 import { getActiveTwaSubscriptions, getCachedActiveTwaSubscriptions, getCachedTwaMapCompanies, getTwaMapCompanies, type TwaCompany, type TwaUserSubscription } from "@/lib/api/twa-client";
+import { CLIENT_BOOTSTRAP_TIMEOUT_MS, promiseWithTimeout } from "@/lib/api/fetch-timeout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,8 +22,10 @@ import { interpolate } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/format";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
+import { getGeolocationPosition } from "@/lib/capacitor/native-permissions";
 
 const YANDEX_MAPS_SCRIPT_ID = "yandex-maps-js-api-v3";
+const YANDEX_MAPS_LOAD_TIMEOUT_MS = 12_000;
 const YANDEX_MAP_CENTER: [number, number] = [37.6176, 55.7558];
 const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const CITY_CLUSTER_MAX_ZOOM = 8.8;
@@ -218,6 +221,9 @@ declare global {
     ymaps3?: YMaps3Api;
   }
 }
+
+let yandexMapsLoadPromise: Promise<YMaps3Api> | null = null;
+let yandexReactifiedMapsLoadPromise: Promise<YandexReactifiedMaps> | null = null;
 
 function uniqueCompanyCategories(company: TwaCompany) {
   const bySlug = new Map([company.category, ...company.categories].filter(Boolean).map((category) => [category.slug, category]));
@@ -479,35 +485,79 @@ function CityClusterBadge({ item, compact = false }: { item: Extract<MarkerItem,
   );
 }
 
-function loadYandexMaps(apiKey: string): Promise<YMaps3Api> {
-  if (typeof window === "undefined") return Promise.reject(new Error("Browser is required."));
-  if (window.ymaps3) return window.ymaps3.ready.then(() => window.ymaps3 as YMaps3Api);
+function withYandexMapsTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), YANDEX_MAPS_LOAD_TIMEOUT_MS);
+  });
 
-  const existingScript = document.getElementById(YANDEX_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
+function loadYandexMapsOnce(apiKey: string): Promise<YMaps3Api> {
+  if (typeof window === "undefined") return Promise.reject(new Error("Browser is required."));
+  if (window.ymaps3) {
+    return withYandexMapsTimeout(window.ymaps3.ready.then(() => window.ymaps3 as YMaps3Api), "Yandex Maps initialization timed out.");
+  }
+
+  let existingScript = document.getElementById(YANDEX_MAPS_SCRIPT_ID) as HTMLScriptElement | null;
+  if (existingScript?.dataset.loaded === "true" && !window.ymaps3) {
+    existingScript.remove();
+    existingScript = null;
+  }
+
   if (existingScript) {
+    const scriptElement = existingScript;
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        scriptElement.removeEventListener("load", handleLoad);
+        scriptElement.removeEventListener("error", handleError);
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+      const settleResolve = (api: YMaps3Api) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(api);
+      };
+      const settleReject = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (!window.ymaps3 && scriptElement.isConnected) scriptElement.remove();
+        reject(error);
+      };
       const resolveWhenReady = () => {
         if (!window.ymaps3) {
-          reject(new Error("Yandex Maps script loaded, but ymaps3 is not available. Check API key restrictions."));
+          settleReject(new Error("Yandex Maps script loaded, but ymaps3 is not available. Check API key restrictions."));
           return;
         }
-        void window.ymaps3.ready.then(() => resolve(window.ymaps3 as YMaps3Api)).catch(reject);
+        void withYandexMapsTimeout(window.ymaps3.ready.then(() => window.ymaps3 as YMaps3Api), "Yandex Maps initialization timed out.")
+          .then(settleResolve)
+          .catch(settleReject);
       };
+      const handleLoad = () => {
+        scriptElement.dataset.loaded = "true";
+        resolveWhenReady();
+      };
+      const handleError = () => settleReject(new Error("Yandex Maps script failed to load."));
+      const timeoutId = setTimeout(() => settleReject(new Error("Yandex Maps script loading timed out.")), YANDEX_MAPS_LOAD_TIMEOUT_MS);
 
-      if (existingScript.dataset.loaded === "true") {
+      if (scriptElement.dataset.loaded === "true") {
         resolveWhenReady();
         return;
       }
 
-      existingScript.addEventListener("load", () => {
-        existingScript.dataset.loaded = "true";
-        resolveWhenReady();
-      });
-      existingScript.addEventListener("error", () => reject(new Error("Yandex Maps script failed to load.")));
+      scriptElement.addEventListener("load", handleLoad);
+      scriptElement.addEventListener("error", handleError);
     });
   }
 
   return new Promise((resolve, reject) => {
+    let settled = false;
     let lastClientError = "";
     const handleWindowError = (event: ErrorEvent) => {
       lastClientError = [event.message, event.filename, event.lineno ? `line ${event.lineno}` : ""].filter(Boolean).join(" | ");
@@ -519,6 +569,20 @@ function loadYandexMaps(apiKey: string): Promise<YMaps3Api> {
     const cleanupDiagnostics = () => {
       window.removeEventListener("error", handleWindowError);
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+    const settleResolve = (api: YMaps3Api) => {
+      if (settled) return;
+      settled = true;
+      cleanupDiagnostics();
+      resolve(api);
+    };
+    const settleReject = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanupDiagnostics();
+      if (!window.ymaps3 && script.isConnected) script.remove();
+      reject(error);
     };
 
     window.addEventListener("error", handleWindowError);
@@ -531,30 +595,50 @@ function loadYandexMaps(apiKey: string): Promise<YMaps3Api> {
     script.onload = () => {
       script.dataset.loaded = "true";
       if (!window.ymaps3) {
-        cleanupDiagnostics();
-        reject(new Error(`Yandex Maps script loaded, but ymaps3 is not available.${lastClientError ? ` Browser detail: ${lastClientError}` : ""}`));
+        settleReject(new Error(`Yandex Maps script loaded, but ymaps3 is not available.${lastClientError ? ` Browser detail: ${lastClientError}` : ""}`));
         return;
       }
-      void window.ymaps3.ready
-        .then(() => resolve(window.ymaps3 as YMaps3Api))
-        .catch((error: unknown) => {
-          reject(error);
-        })
-        .finally(cleanupDiagnostics);
+      void withYandexMapsTimeout(window.ymaps3.ready.then(() => window.ymaps3 as YMaps3Api), "Yandex Maps initialization timed out.")
+        .then(settleResolve)
+        .catch((error: unknown) => settleReject(error instanceof Error ? error : new Error(stringifyUnknownError(error))));
     };
     script.onerror = (event) => {
-      cleanupDiagnostics();
-      reject(new Error(`Yandex Maps script failed to load. ${describeScriptError(script.src, event)}`));
+      settleReject(new Error(`Yandex Maps script failed to load. ${describeScriptError(script.src, event)}`));
     };
+    const timeoutId = setTimeout(() => settleReject(new Error("Yandex Maps script loading timed out.")), YANDEX_MAPS_LOAD_TIMEOUT_MS);
     document.head.appendChild(script);
   });
 }
 
-async function loadYandexReactifiedMaps(apiKey: string): Promise<YandexReactifiedMaps> {
+function loadYandexMaps(apiKey: string): Promise<YMaps3Api> {
+  if (!yandexMapsLoadPromise) {
+    yandexMapsLoadPromise = loadYandexMapsOnce(apiKey).catch((error: unknown) => {
+      yandexMapsLoadPromise = null;
+      yandexReactifiedMapsLoadPromise = null;
+      throw error;
+    });
+  }
+  return yandexMapsLoadPromise;
+}
+
+async function loadYandexReactifiedMapsOnce(apiKey: string): Promise<YandexReactifiedMaps> {
   const ymaps3 = await loadYandexMaps(apiKey);
-  const { reactify } = await ymaps3.import<YandexReactifyPackage>("@yandex/ymaps3-reactify");
+  const { reactify } = await withYandexMapsTimeout(
+    ymaps3.import<YandexReactifyPackage>("@yandex/ymaps3-reactify"),
+    "Yandex Maps React components loading timed out.",
+  );
   const boundReactify = reactify.bindTo(React, ReactDOM);
   return { ...boundReactify.module(ymaps3), reactify: boundReactify };
+}
+
+function loadYandexReactifiedMaps(apiKey: string): Promise<YandexReactifiedMaps> {
+  if (!yandexReactifiedMapsLoadPromise) {
+    yandexReactifiedMapsLoadPromise = loadYandexReactifiedMapsOnce(apiKey).catch((error: unknown) => {
+      yandexReactifiedMapsLoadPromise = null;
+      throw error;
+    });
+  }
+  return yandexReactifiedMapsLoadPromise;
 }
 
 function stringifyUnknownError(error: unknown) {
@@ -737,6 +821,8 @@ function YandexPartnerMap({
       ? { state: "loading", message: t("client.map.yandexLoading") }
       : { state: "missing-key", message: t("client.map.yandexMissing") },
   );
+  const translateRef = useRef(t);
+  translateRef.current = t;
   const markerItems = useMemo(() => buildMarkerItems(points, selectedId, mapLocation.zoom), [points, selectedId, mapLocation.zoom]);
 
   function clearPassiveMapSync() {
@@ -803,14 +889,13 @@ function YandexPartnerMap({
       .then((reactifiedMaps) => {
         if (disposed) return;
         setMaps(reactifiedMaps);
-        setStatus({ state: "ready", message: interpolate(t("client.map.yandexReady"), { count: points.length }) });
       })
       .catch((error: unknown) => {
         if (!disposed) {
           setMaps(null);
           setStatus({
             state: "fallback",
-            message: t("client.map.yandexFailed"),
+            message: translateRef.current("client.map.yandexFailed"),
             details: stringifyUnknownError(error),
           });
         }
@@ -821,7 +906,15 @@ function YandexPartnerMap({
       stopMapAnimation();
       clearPassiveMapSync();
     };
-  }, [apiKey, points.length]);
+  }, [apiKey]);
+
+  useEffect(() => {
+    if (!maps) return;
+    setStatus({
+      state: "ready",
+      message: interpolate(t("client.map.yandexReady"), { count: points.length }),
+    });
+  }, [maps, points.length, t]);
 
   useEffect(() => {
     stopMapAnimation();
@@ -1036,34 +1129,35 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
       ? Promise.all([getTwaMapCompanies(true), getActiveTwaSubscriptions()] as const)
       : Promise.all([getTwaMapCompanies(true), Promise.resolve([] as TwaUserSubscription[])] as const);
 
-    void requests.then(([data, subscriptions]) => {
-      if (ignore) return;
-      setCompanies(data);
-      setActiveSubscriptions(subscriptions);
-    });
+    void promiseWithTimeout(requests, CLIENT_BOOTSTRAP_TIMEOUT_MS)
+      .then(([data, subscriptions]) => {
+        if (ignore) return;
+        setCompanies(data);
+        setActiveSubscriptions(subscriptions);
+      })
+      .catch(() => {
+        if (ignore) return;
+        setCompanies(cachedCompanies);
+        setActiveSubscriptions(SUBSCRIPTIONS_ENABLED ? cachedSubscriptions : []);
+      });
     return () => {
       ignore = true;
     };
   }, []);
 
-  function requestGeolocation() {
-    if (!("geolocation" in navigator)) {
-      setGeoStatus("unavailable");
-      return;
-    }
+  async function requestGeolocation() {
     setGeoStatus("requesting");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
-        });
-        setGeoStatus("ready");
-      },
-      () => setGeoStatus("denied"),
-      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 },
-    );
+    try {
+      const position = await getGeolocationPosition({ enableHighAccuracy: true, maximumAge: 60_000, timeout: 10_000 });
+      setUserLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
+      });
+      setGeoStatus("ready");
+    } catch (error) {
+      setGeoStatus(error instanceof Error && error.message === "geolocation-unavailable" ? "unavailable" : "denied");
+    }
   }
 
   const categories = useMemo(() => {

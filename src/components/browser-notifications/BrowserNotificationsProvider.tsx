@@ -10,6 +10,7 @@ import {
   notifyPointTransactions,
   seedKnownPointTransactions,
 } from "@/lib/browser-notifications/client-module";
+import { getGeolocationPosition } from "@/lib/capacitor/native-permissions";
 
 const POINTS_SYNC_MS = 60 * 1000;
 const GEO_SYNC_MS = 5 * 60 * 1000;
@@ -44,8 +45,8 @@ export function BrowserNotificationsProvider() {
         (await geolocationAlreadyGranted())
       ) {
         lastGeoSyncAt.current = Date.now();
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
+        getGeolocationPosition({ maximumAge: GEO_SYNC_MS, timeout: 8000, enableHighAccuracy: false })
+          .then(async (position) => {
             if (disposed) return;
             const wallet = await getTwaWallet(true);
             if (disposed) return;
@@ -53,10 +54,8 @@ export function BrowserNotificationsProvider() {
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
             });
-          },
-          () => undefined,
-          { maximumAge: GEO_SYNC_MS, timeout: 8000, enableHighAccuracy: false },
-        );
+          })
+          .catch(() => undefined);
       }
     }
 

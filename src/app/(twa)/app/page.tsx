@@ -8,6 +8,7 @@ import { SubscriptionProgressBar } from "@/components/subscriptions/Subscription
 import type { ApiCategory } from "@/lib/api/categories-client";
 import { getCachedFavoriteCategorySlugs, getFavoriteCategorySlugs } from "@/lib/api/categories-client";
 import { getCachedTwaDashboard, refreshTwaDashboard, type TwaCompany, type TwaDashboard, type TwaUserSubscription } from "@/lib/api/twa-client";
+import { CLIENT_BOOTSTRAP_TIMEOUT_MS, promiseWithTimeout } from "@/lib/api/fetch-timeout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -94,14 +95,22 @@ export default function HomePage() {
     }
 
     void (async () => {
-      const [favorites, dashboardData] = await Promise.all([
-        getFavoriteCategorySlugs(),
-        refreshTwaDashboard(),
-      ]);
-      if (ignore) return;
-      setFavoriteSlugs(favorites);
-      setDashboard(dashboardData);
-      setLoading(false);
+      try {
+        const [favorites, dashboardData] = await promiseWithTimeout(
+          Promise.all([
+            getFavoriteCategorySlugs(),
+            refreshTwaDashboard(),
+          ]),
+          CLIENT_BOOTSTRAP_TIMEOUT_MS,
+        );
+        if (ignore) return;
+        setFavoriteSlugs(favorites);
+        setDashboard(dashboardData);
+      } catch {
+        if (!ignore) setDashboard(getCachedTwaDashboard());
+      } finally {
+        if (!ignore) setLoading(false);
+      }
     })();
     return () => {
       ignore = true;
@@ -113,9 +122,12 @@ export default function HomePage() {
     setRefreshing(true);
     setRefreshCoolingDown(true);
     window.setTimeout(() => setRefreshCoolingDown(false), 8000);
-    const fresh = await refreshTwaDashboard();
-    applyDashboard(fresh);
-    setRefreshing(false);
+    try {
+      const fresh = await refreshTwaDashboard();
+      applyDashboard(fresh);
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   const displayCategories = useMemo(() => {

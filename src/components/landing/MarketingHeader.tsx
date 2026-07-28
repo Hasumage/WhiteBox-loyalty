@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Building2, LogIn, Menu, Sparkles, X } from "lucide-react";
+import { ArrowRight, Building2, Download, LogIn, Menu, Sparkles, X } from "lucide-react";
 import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/lib/i18n/use-i18n";
@@ -26,6 +26,7 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
           business: "Для бизнеса",
           features: "Возможности",
           contacts: "Контакты",
+          downloadApp: "Скачать приложение",
           signIn: "Войти",
           becomePartner: "Стать партнёром",
           apply: "Подать заявку",
@@ -39,6 +40,7 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
           business: "For business",
           features: "Features",
           contacts: "Contacts",
+          downloadApp: "Download app",
           signIn: "Sign in",
           becomePartner: "Become a partner",
           apply: "Apply",
@@ -208,6 +210,15 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
             </div>
 
             <div className="grid gap-2 border-t border-white/10 p-5">
+              <a
+                href="/downloads/nearloy-android.apk"
+                download="NearLoy-Android-v0.1.2.apk"
+                onClick={() => setMenuOpen(false)}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-cyan-100/20 bg-cyan-200/10 px-4 text-sm font-semibold text-cyan-50 transition hover:border-cyan-100/35 hover:bg-cyan-200/15"
+              >
+                <Download className="h-4 w-4" />
+                {labels.downloadApp}
+              </a>
               <Link
                 href="/login"
                 onClick={() => setMenuOpen(false)}

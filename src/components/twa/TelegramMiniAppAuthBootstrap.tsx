@@ -13,12 +13,58 @@ type TelegramWebApp = {
   expand?: () => void;
 };
 
+type CapacitorRuntime = {
+  isNativePlatform?: () => boolean;
+};
+
 declare global {
   interface Window {
+    Capacitor?: CapacitorRuntime;
     Telegram?: {
       WebApp?: TelegramWebApp;
     };
   }
+}
+
+const TELEGRAM_SDK_SRC = "https://telegram.org/js/telegram-web-app.js";
+const TELEGRAM_SDK_TIMEOUT_MS = 5_000;
+
+function isCapacitorRuntime() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("app") === "capacitor" || window.Capacitor?.isNativePlatform?.() === true;
+}
+
+function loadTelegramWebApp() {
+  const loadedWebApp = window.Telegram?.WebApp;
+  if (loadedWebApp) {
+    return Promise.resolve(loadedWebApp);
+  }
+
+  return new Promise<TelegramWebApp | undefined>((resolve) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[data-nearloy-telegram-sdk="true"]',
+    );
+    const script = existingScript ?? document.createElement("script");
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      resolve(window.Telegram?.WebApp);
+    };
+
+    const timeoutId = window.setTimeout(finish, TELEGRAM_SDK_TIMEOUT_MS);
+    script.addEventListener("load", finish, { once: true });
+    script.addEventListener("error", finish, { once: true });
+
+    if (!existingScript) {
+      script.src = TELEGRAM_SDK_SRC;
+      script.async = true;
+      script.dataset.nearloyTelegramSdk = "true";
+      document.head.appendChild(script);
+    }
+  });
 }
 
 function isJwtStale(token: string | null) {
@@ -41,20 +87,24 @@ export function TelegramMiniAppAuthBootstrap() {
   const [authing, setAuthing] = useState(false);
 
   useEffect(() => {
-    const webApp = window.Telegram?.WebApp;
-    webApp?.ready?.();
-    webApp?.expand?.();
-
-    const initData = webApp?.initData;
-    if (!initData) return;
-
-    const existingToken = getAccessToken();
-    if (!isJwtStale(existingToken)) return;
-
     let cancelled = false;
-    setAuthing(true);
 
     void (async () => {
+      if (isCapacitorRuntime()) return;
+
+      const webApp = await loadTelegramWebApp();
+      if (cancelled || !webApp) return;
+
+      webApp.ready?.();
+      webApp.expand?.();
+
+      const initData = webApp.initData;
+      if (!initData) return;
+
+      const existingToken = getAccessToken();
+      if (!isJwtStale(existingToken)) return;
+
+      setAuthing(true);
       const result = await loginWithTelegramMiniApp(initData);
       if (cancelled) return;
 

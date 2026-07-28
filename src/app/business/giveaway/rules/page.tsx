@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, BadgeCheck, FileText, Gift, Scale, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgeCheck, FileText, Gift, ShieldCheck } from "lucide-react";
 import { MarketingFooter } from "@/components/landing/MarketingFooter";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
 
@@ -126,14 +126,7 @@ export default function GiveawayRulesPage() {
       </section>
 
       <section className="relative z-10 mx-auto max-w-5xl px-4 pb-16 sm:px-6 lg:px-8">
-        <div className="rounded-[2rem] border border-amber-200/18 bg-amber-300/10 p-6">
-          <Scale className="h-7 w-7 text-amber-100" />
-          <h2 className="mt-4 text-xl font-semibold">Важное юридическое примечание</h2>
-          <p className="mt-3 text-sm leading-6 text-white/64">
-            Это продуктовая редакция правил, подготовленная для интерфейса. Перед публичным запуском розыгрыша её стоит проверить с юристом, указать точного организатора, ИНН/ОГРН, сроки, порядок обработки персональных данных и налоговый порядок выплаты.
-          </p>
-        </div>
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <Link href="/company/register" className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-sm font-semibold text-[#07101e] transition hover:bg-white/90">
             Зарегистрировать компанию
             <ArrowRight className="h-4 w-4" />

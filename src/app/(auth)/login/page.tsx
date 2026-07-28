@@ -1,16 +1,21 @@
-import { Suspense } from "react";
 import { LoginForm } from "./login-form";
 
-export default function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{
+    deleted?: string;
+    frozen?: string;
+    next?: string;
+  }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+
   return (
-    <Suspense
-      fallback={
-        <div className="glass rounded-xl border border-white/10 p-8 text-center text-sm text-muted-foreground">
-          Loading...
-        </div>
-      }
-    >
-      <LoginForm />
-    </Suspense>
+    <LoginForm
+      deleted={params?.deleted === "1"}
+      frozen={params?.frozen === "1"}
+      requestedNext={params?.next ?? null}
+    />
   );
 }

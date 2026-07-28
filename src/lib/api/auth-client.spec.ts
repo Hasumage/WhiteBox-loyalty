@@ -4,6 +4,7 @@ import {
   getRefreshToken,
   getStoredUser,
   refreshStoredSession,
+  setStoredSession,
 } from "./auth-client";
 
 function mockBrowserStorage() {
@@ -76,6 +77,7 @@ describe("auth client session restoration", () => {
     values.set("wb_refresh_token", "invalid-refresh-token");
     jest.spyOn(global, "fetch").mockResolvedValue({
       ok: false,
+      status: 401,
       json: async () => ({ message: "Unauthorized" }),
     } as Response);
 
@@ -83,5 +85,54 @@ describe("auth client session restoration", () => {
 
     expect(getAccessToken()).toBeNull();
     expect(getRefreshToken()).toBeNull();
+  });
+
+  it("keeps the stored session when refresh fails temporarily", async () => {
+    const values = mockBrowserStorage();
+    values.set("wb_access_token", "saved-access-token");
+    values.set("wb_refresh_token", "saved-refresh-token");
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ message: "Unavailable" }),
+    } as Response);
+
+    await expect(refreshStoredSession()).resolves.toBeNull();
+
+    expect(getAccessToken()).toBe("saved-access-token");
+    expect(getRefreshToken()).toBe("saved-refresh-token");
+  });
+
+  it("does not let a stale rejected refresh erase a newer login", async () => {
+    const values = mockBrowserStorage();
+    values.set("wb_access_token", "old-access-token");
+    values.set("wb_refresh_token", "old-refresh-token");
+
+    let resolveRefresh!: (response: Response) => void;
+    jest.spyOn(global, "fetch").mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+
+    const staleRefresh = refreshStoredSession();
+    setStoredSession({
+      accessToken: "new-access-token",
+      refreshToken: "new-refresh-token",
+      tokenType: "Bearer",
+      expiresIn: "15m",
+      user: { id: "2", email: "new@test.local", name: "New", role: "CLIENT", createdAt: "now" },
+    });
+
+    resolveRefresh({
+      ok: false,
+      status: 401,
+      json: async () => ({ message: "Unauthorized" }),
+    } as Response);
+
+    await expect(staleRefresh).resolves.toBeNull();
+    expect(getAccessToken()).toBe("new-access-token");
+    expect(getRefreshToken()).toBe("new-refresh-token");
+    expect(getStoredUser()?.email).toBe("new@test.local");
   });
 });

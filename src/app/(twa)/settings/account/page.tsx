@@ -26,6 +26,7 @@ import {
   getBrowserNotificationPermission,
   requestBrowserNotificationPermission,
 } from "@/lib/browser-notifications/client-module";
+import { getGeolocationPosition } from "@/lib/capacitor/native-permissions";
 import { maskEmail } from "@/lib/email-mask";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
@@ -128,20 +129,15 @@ export default function SettingsAccountPage() {
   async function toggleGeoNotifications(checked: boolean) {
     setMessage(null);
     if (checked && !(await ensureBrowserNotificationsAllowed())) return;
-    if (checked && (typeof navigator === "undefined" || !("geolocation" in navigator))) {
-      setMessage(t("client.account.geoNotificationsUnsupported"));
-      return;
-    }
     if (checked) {
-      const locationAllowed = await new Promise<boolean>((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-          () => resolve(true),
-          () => resolve(false),
-          { maximumAge: 5 * 60 * 1000, timeout: 8000, enableHighAccuracy: false },
+      try {
+        await getGeolocationPosition({ maximumAge: 5 * 60 * 1000, timeout: 8000, enableHighAccuracy: false });
+      } catch (error) {
+        setMessage(
+          error instanceof Error && error.message === "geolocation-unavailable"
+            ? t("client.account.geoNotificationsUnsupported")
+            : t("client.account.geoNotificationsNeedAccess"),
         );
-      });
-      if (!locationAllowed) {
-        setMessage(t("client.account.geoNotificationsNeedAccess"));
         return;
       }
     }

@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectField } from "@/components/ui/select-field";
 import { cn } from "@/lib/utils";
+import { getGeolocationPosition } from "@/lib/capacitor/native-permissions";
 import {
   companyCreateCompanyLocation,
   companyLocations,
@@ -317,17 +318,16 @@ export default function CompanyLocationMapPage() {
     updatePanelScrollHint();
   }, [locations.length, message, draft.address, draft.workingDays.length, pendingPoint]);
 
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setMessage(t("admin.companyMap.geoUnavailable"));
-      return;
-    }
+  async function useMyLocation() {
     setMessage(t("admin.companyMap.detectingPosition"));
-    navigator.geolocation.getCurrentPosition(
-      (position) => moveMarker({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-      () => setMessage(t("admin.companyMap.geoDenied")),
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+    try {
+      const position = await getGeolocationPosition({ enableHighAccuracy: true, timeout: 10000 });
+      moveMarker({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+    } catch (error) {
+      setMessage(error instanceof Error && error.message === "geolocation-unavailable"
+        ? t("admin.companyMap.geoUnavailable")
+        : t("admin.companyMap.geoDenied"));
+    }
   }
 
   async function saveLocation() {

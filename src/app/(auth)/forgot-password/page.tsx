@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { confirmPasswordReset, requestPasswordResetCode } from "@/lib/api/auth-client";
+import { useIsCapacitorApp } from "@/lib/capacitor/use-is-capacitor-app";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
 const copy = {
@@ -72,6 +73,7 @@ function responseMessage(response: unknown, fallback: string) {
 
 export default function ForgotPasswordPage() {
   const { locale, setLocale, t } = useI18n("ru");
+  const isCapacitorApp = useIsCapacitorApp();
   const text = copy[locale] ?? copy.ru;
   const [step, setStep] = useState<"email" | "code" | "done">("email");
   const [email, setEmail] = useState("");
@@ -140,12 +142,14 @@ export default function ForgotPasswordPage() {
               <span className="block truncate text-xs text-muted-foreground">{t("client.auth.brandSubtitle")}</span>
             </span>
           </Link>
-          <Link
-            href="/"
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
-          >
-            {t("client.auth.landing")} <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
+          {isCapacitorApp === false && (
+            <Link
+              href="/"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-white/20 hover:bg-white/[0.06] hover:text-foreground"
+            >
+              {t("client.auth.landing")} <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
         </div>
         <div className="flex items-center justify-between gap-3">
           <CardTitle>{step === "email" ? text.title : text.verifyTitle}</CardTitle>

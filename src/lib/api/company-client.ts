@@ -427,7 +427,10 @@ export type CompanyClubData = {
 };
 
 function apiBase(): string {
-  return (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api").replace(/\/$/, "");
+  const configured = process.env.NEXT_PUBLIC_API_URL;
+  if (configured) return configured.replace(/\/$/, "");
+  if (typeof window !== "undefined") return "/backend-api";
+  return "http://localhost:3001/api";
 }
 
 function headers(json = false) {

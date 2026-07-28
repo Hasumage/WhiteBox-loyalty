@@ -9,6 +9,7 @@ import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { completeTwaOnboarding, skipTwaOnboarding } from "@/lib/api/twa-client";
+import { getGeolocationPosition } from "@/lib/capacitor/native-permissions";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 
@@ -78,16 +79,13 @@ export default function OnboardingPage() {
     router.replace("/app");
   }
 
-  function requestGeo() {
-    if (!("geolocation" in navigator)) {
-      setGeoStatus("unsupported");
-      return;
+  async function requestGeo() {
+    try {
+      await getGeolocationPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 });
+      setGeoStatus("granted");
+    } catch (error) {
+      setGeoStatus(error instanceof Error && error.message === "geolocation-unavailable" ? "unsupported" : "denied");
     }
-    navigator.geolocation.getCurrentPosition(
-      () => setGeoStatus("granted"),
-      () => setGeoStatus("denied"),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
-    );
   }
 
   return (

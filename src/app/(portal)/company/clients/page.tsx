@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { requestCapacitorCameraPermission } from "@/lib/capacitor/native-permissions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -342,6 +343,10 @@ export default function CompanyClientsPage() {
     setFeedback("");
     setError("");
     try {
+      const nativeCameraPermission = await requestCapacitorCameraPermission();
+      if (nativeCameraPermission === "denied") throw new Error("native-camera-denied");
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error("camera-unavailable");
+
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       streamRef.current = stream;
       setScannerOpen(true);

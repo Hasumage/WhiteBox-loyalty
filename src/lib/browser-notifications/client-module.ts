@@ -1,6 +1,7 @@
 "use client";
 
 import type { TwaCompany, TwaHistory } from "@/lib/api/twa-client";
+import { geolocationPermissionAlreadyGranted } from "@/lib/capacitor/native-permissions";
 
 const POINTS_SEEN_KEY = "nearloy:browser-notifications:seen-points";
 const GEO_COOLDOWN_PREFIX = "nearloy:browser-notifications:geo:";
@@ -37,15 +38,7 @@ export async function requestBrowserNotificationPermission() {
 }
 
 export async function geolocationAlreadyGranted() {
-  if (typeof navigator === "undefined" || !("geolocation" in navigator)) return false;
-  if (!navigator.permissions?.query) return false;
-
-  try {
-    const status = await navigator.permissions.query({ name: "geolocation" as PermissionName });
-    return status.state === "granted";
-  } catch {
-    return false;
-  }
+  return geolocationPermissionAlreadyGranted();
 }
 
 export function seedKnownPointTransactions(history: TwaHistory) {

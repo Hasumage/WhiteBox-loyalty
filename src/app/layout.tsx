@@ -1,5 +1,6 @@
 ﻿import type { Metadata } from "next";
-import Script from "next/script";
+import { Suspense } from "react";
+import { YandexMetrika } from "@/components/analytics/YandexMetrika";
 import "./globals.css";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://nearloy.ru").replace(/\/$/, "");
@@ -28,7 +29,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className="antialiased dark twa bg-[var(--twa-bg)] text-foreground">
-        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+        <Suspense fallback={null}>
+          <YandexMetrika />
+        </Suspense>
         {children}
       </body>
     </html>

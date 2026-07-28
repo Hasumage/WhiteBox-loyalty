@@ -1376,8 +1376,10 @@ export type AdminUpdateUserInput = {
 };
 
 function apiBase(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api";
-  return base.replace(/\/$/, "");
+  const configured = process.env.NEXT_PUBLIC_API_URL;
+  if (configured) return configured.replace(/\/$/, "");
+  if (typeof window !== "undefined") return "/backend-api";
+  return "http://localhost:3001/api";
 }
 
 function authHeaders(): HeadersInit {
