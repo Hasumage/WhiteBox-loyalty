@@ -963,7 +963,7 @@ function YandexPartnerMap({
     animateMapLocation(
       {
         center: [userLocation.longitude, userLocation.latitude],
-        zoom: 13,
+        zoom: 14,
       },
       620,
     );
@@ -1309,6 +1309,8 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
     selectedPartner,
     selectedCompanyMedia?.slug === selectedPartner?.slug ? (selectedCompanyMedia?.payload ?? null) : null,
   );
+  const selectedLogoUrl = selectedMediaItems.find((item) => item.kind === "logo")?.url ?? null;
+  const selectedGalleryMediaItems = selectedMediaItems.filter((item) => item.kind === "image");
   const selectedCategoryData = selectedCategory ? categories.find((category) => category.slug === selectedCategory) : null;
   const selectedDistance = selectedPoint ? distanceKm(userLocation, selectedPoint.location) : null;
   const nearestSameCompany = useMemo(() => {
@@ -1356,16 +1358,34 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
       className="rounded-[1.25rem] border border-white/15 bg-slate-950/94 p-2.5 text-white shadow-[0_18px_44px_rgba(0,0,0,0.52)] backdrop-blur-xl"
     >
       <div className="flex items-start gap-2.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/25">
-          <CategoryIcon iconName={categoryIconName(selectedPoint)} className="h-4 w-4" />
+        <span
+          className={cn(
+            "flex shrink-0 items-center justify-center overflow-hidden bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/25",
+            full ? "h-14 w-14 rounded-2xl bg-white/[0.06]" : "h-9 w-9 rounded-xl",
+          )}
+        >
+          {full && selectedLogoUrl ? (
+            <img
+              src={selectedLogoUrl}
+              alt={selectedPartner.name}
+              className="h-full w-full object-contain p-1"
+              loading="lazy"
+              draggable={false}
+            />
+          ) : (
+            <CategoryIcon iconName={categoryIconName(selectedPoint)} className={full ? "h-6 w-6" : "h-4 w-4"} />
+          )}
         </span>
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold leading-tight">{selectedPartner.name}</p>
-              <p className="mt-0.5 truncate text-[11px] text-white/55">
-                {selectedPoint.location.title ?? selectedPoint.location.city ?? t("client.map.partnerLocation")}
-              </p>
+              <p className="mt-1 line-clamp-1 text-[11px] leading-relaxed text-white/68">{selectedPoint.location.address}</p>
+              {selectedPartner.description && (
+                <p className="mt-1 line-clamp-1 text-[11px] leading-relaxed text-white/45">
+                  {selectedPartner.description}
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -1379,26 +1399,19 @@ export function MapPageContent({ full = false }: { full?: boolean } = {}) {
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          <p className="line-clamp-1 text-[11px] leading-relaxed text-white/68">{selectedPoint.location.address}</p>
-          {selectedPartner.description && (
-            <p className="line-clamp-1 text-[11px] leading-relaxed text-white/45">{selectedPartner.description}</p>
-          )}
         </div>
       </div>
-      {full && selectedMediaItems.length > 0 && (
+      {full && selectedGalleryMediaItems.length > 0 && (
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {selectedMediaItems.map((item, index) => (
+          {selectedGalleryMediaItems.map((item, index) => (
             <div
               key={`${item.kind}-${item.url}`}
-              className={cn(
-                "relative h-20 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]",
-                item.kind === "logo" ? "w-20" : "w-32",
-              )}
+              className="relative h-20 w-32 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]"
             >
               <img
                 src={item.url}
-                alt={item.kind === "logo" ? `${selectedPartner.name} — логотип` : `${selectedPartner.name} — фото ${index + 1}`}
-                className={cn("h-full w-full", item.kind === "logo" ? "object-contain p-2" : "object-cover")}
+                alt={`${selectedPartner.name} — фото ${index + 1}`}
+                className="h-full w-full object-cover"
                 loading="lazy"
                 draggable={false}
               />
