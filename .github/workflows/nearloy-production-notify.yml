@@ -1,0 +1,45 @@
+name: NearLoy production notifications
+
+on:
+  deployment_status:
+
+jobs:
+  telegram:
+    name: Telegram production update
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.ref == 'main' &&
+      (
+        github.event.deployment.environment == 'production' ||
+        github.event.deployment.environment == 'Production'
+      )
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
+      DEPLOYMENT_URL: ${{ github.event.deployment_status.target_url }}
+      COMMIT_SHA: ${{ github.event.deployment.sha }}
+    steps:
+      - name: Send Telegram notification
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "TELEGRAM_BOT_TOKEN is not configured; skipping Telegram notification."
+            exit 0
+          fi
+
+          CHAT_ID="${TELEGRAM_ADMIN_CHAT_ID:-3977200071}"
+          SHORT_SHA="$(echo "$COMMIT_SHA" | cut -c1-7)"
+          MESSAGE="$(cat <<EOF
+✅ NearLoy обновлён на проде.
+
+Коммит: ${SHORT_SHA}
+Деплой успешно завершён.
+
+Ссылка: ${DEPLOYMENT_URL:-https://nearloy.ru}
+EOF
+)"
+
+          curl --fail --show-error --silent \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${MESSAGE}" \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" >/dev/null
