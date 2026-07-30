@@ -26,6 +26,7 @@ Every push to `main` runs the same full verification. If it passes, CI applies p
 - `PRODUCTION_DIRECT_URL` optional, falls back to `PRODUCTION_DATABASE_URL`
 
 Railway should be configured to deploy `nearloy-api` and `nearloy-web` from `main` after GitHub checks are green.
+If the hosting provider publishes GitHub deployment statuses, `.github/workflows/nearloy-production-notify.yml` sends a Telegram message after a successful `production` deployment for `main`.
 
 ## Required GitHub Secrets
 
@@ -33,6 +34,8 @@ Set these in GitHub repository settings:
 
 - `PRODUCTION_DATABASE_URL`: Railway public PostgreSQL URL with SSL if required.
 - `PRODUCTION_DIRECT_URL`: optional direct/public URL for Prisma. Use the same value as `PRODUCTION_DATABASE_URL` if there is no separate direct URL.
+- `TELEGRAM_BOT_TOKEN`: optional production bot token for Telegram notifications after a successful production deployment status.
+- `TELEGRAM_ADMIN_CHAT_ID`: optional admin chat id for production deployment notifications; defaults to the app admin chat if omitted.
 
 Do not commit production database URLs to `.env`, docs, or workflow files.
 
