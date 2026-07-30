@@ -1,5 +1,8 @@
 import "dotenv/config";
-import { ProxyAgent, fetch as undiciFetch } from "undici";
+import { request as httpsRequest } from "node:https";
+import httpsProxyAgentModule from "https-proxy-agent";
+
+const { HttpsProxyAgent } = httpsProxyAgentModule;
 
 const botMode = process.env.TELEGRAM_LOCAL_BOT || "prod";
 const isDevBot = botMode === "dev";
@@ -19,11 +22,14 @@ const body = {
   ...(secretToken ? { secret_token: secretToken } : {}),
 };
 
-const response = await undiciFetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+const response = proxyUrl ? await fetchViaHttpsProxy(`https://api.telegram.org/bot${token}/setWebhook`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
-  ...(proxyUrl ? { dispatcher: new ProxyAgent(proxyUrl) } : {}),
+}, proxyUrl) : await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
 });
 
 const data = await response.json().catch(() => null);
@@ -32,3 +38,39 @@ if (!response.ok || !data?.ok) {
 }
 
 console.log(`Telegram webhook set for ${botMode}: ${webhookUrl}`);
+
+function fetchViaHttpsProxy(url, init, proxyUrl) {
+  return new Promise((resolve, reject) => {
+    const requestBody = init.body;
+    const request = httpsRequest(
+      new URL(url),
+      {
+        method: init.method || "GET",
+        headers: {
+          ...(init.headers || {}),
+          ...(requestBody ? { "Content-Length": Buffer.byteLength(requestBody).toString() } : {}),
+        },
+        agent: new HttpsProxyAgent(proxyUrl),
+        timeout: 15_000,
+      },
+      (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        response.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          resolve({
+            ok: response.statusCode >= 200 && response.statusCode < 300,
+            status: response.statusCode,
+            text: async () => text,
+            json: async () => JSON.parse(text),
+          });
+        });
+      },
+    );
+
+    request.on("timeout", () => request.destroy(new Error("Telegram proxy request timed out.")));
+    request.on("error", reject);
+    if (requestBody) request.write(requestBody);
+    request.end();
+  });
+}

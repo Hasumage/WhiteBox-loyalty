@@ -67,6 +67,13 @@ enum CompanyMediaKind {
   GALLERY
 }
 
+enum CompanySocialLinkKind {
+  WEBSITE
+  VK
+  MAX
+  OTHER
+}
+
 enum SubscriptionEntitlementWindow {
   DAY
   WEEK
@@ -300,6 +307,7 @@ model User {
   /// bcrypt hash; null for Telegram-only or OAuth-only users until password is set
   passwordHash                String?
   birthDate                   DateTime?
+  birthDateChangedAt          DateTime?
   emailVerifiedAt             DateTime?
   termsAcceptedAt             DateTime?
   termsVersion                String?
@@ -525,6 +533,7 @@ model Company {
   kycRecord                     CompanyKycRecord?
   mediaAssets                   CompanyMediaAsset[]
   specialOffers                 CompanySpecialOffer[]
+  socialLinks                   CompanySocialLink[]
   targetEmailMessages           EmailMessage[]                   @relation("EmailTargetCompany")
 
   @@index([categoryId])
@@ -1092,6 +1101,22 @@ model CompanySpecialOffer {
   endsAt          DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, isActive, sortOrder])
+}
+
+model CompanySocialLink {
+  id        String                @id @default(cuid())
+  companyId Int
+  kind      CompanySocialLinkKind @default(OTHER)
+  title     String
+  url       String
+  sortOrder Int                   @default(0)
+  isActive  Boolean               @default(true)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 

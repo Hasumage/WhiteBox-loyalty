@@ -1,4 +1,5 @@
 export async function requestOpenAiResponses(body: Record<string, unknown>) {
+  const timeoutMs = 30_000;
   const gatewayUrl = process.env.OPENAI_GATEWAY_URL?.trim();
   if (gatewayUrl) {
     const gatewaySecret = process.env.OPENAI_GATEWAY_SECRET?.trim();
@@ -10,6 +11,7 @@ export async function requestOpenAiResponses(body: Record<string, unknown>) {
         "x-ai-gateway-secret": gatewaySecret,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   }
 
@@ -24,5 +26,6 @@ export async function requestOpenAiResponses(body: Record<string, unknown>) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }

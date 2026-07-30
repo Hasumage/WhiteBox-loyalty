@@ -70,21 +70,19 @@ export function BottomNav() {
         {navItems
           .filter((item) => !item.isFab)
           .map(({ href, labelKey, icon: Icon }) => {
+            const isMapItem = href === "/map";
             const isActive =
               href === "/app"
                 ? pathname === "/app"
                 : href === "/settings"
                   ? pathname === "/settings" || pathname.startsWith("/settings/")
                   : pathname === href || pathname.startsWith(href + "/");
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "relative flex min-w-[64px] flex-col items-center gap-1 rounded-lg px-3 py-2 transition-colors",
-                  isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
+            const className = cn(
+              "relative flex min-w-[64px] flex-col items-center gap-1 rounded-lg px-3 py-2 transition-colors",
+              isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            );
+            const content = (
+              <>
                 <AnimatePresence mode="wait">
                   {isActive && (
                     <motion.span
@@ -99,6 +97,20 @@ export function BottomNav() {
                   <Icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
                 </span>
                 <span className="relative text-[10px] font-medium">{t(labelKey)}</span>
+              </>
+            );
+
+            if (isMapItem) {
+              return (
+                <a key={href} href="/map" className={className}>
+                  {content}
+                </a>
+              );
+            }
+
+            return (
+              <Link key={href} href={href} className={className}>
+                {content}
               </Link>
             );
           })}

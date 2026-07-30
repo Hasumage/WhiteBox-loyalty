@@ -201,6 +201,8 @@ export async function requestRegistrationCode(body: {
   email: string;
   password: string;
   confirmPassword: string;
+  role?: "CLIENT" | "COMPANY" | "MANAGER";
+  prManagerCareer?: boolean;
   locale?: "ru" | "en";
   termsAccepted: boolean;
 }): Promise<{ success: true; email: string; expiresAt: string } | { message: string | string[] }> {

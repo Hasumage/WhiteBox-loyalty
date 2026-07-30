@@ -212,6 +212,23 @@ export type CompanyMediaState = {
   offers: CompanySpecialOffer[];
 };
 
+export type CompanySocialLinkKind = "WEBSITE" | "VK" | "MAX" | "OTHER";
+
+export type CompanySocialLink = {
+  id: string;
+  kind: CompanySocialLinkKind;
+  title: string;
+  url: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompanySocialLinksState = {
+  maxLinks: number;
+  links: CompanySocialLink[];
+};
+
 export type CompanyClient = {
   uuid: string;
   name: string;
@@ -537,6 +554,32 @@ export function updateCompanySpecialOffer(id: string, form: FormData) {
 
 export function deleteCompanySpecialOffer(id: string) {
   return nextCompanyRequest<{ ok: true }>(`/api/company/media/offers/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export function companySocialLinks() {
+  return nextCompanyRequest<CompanySocialLinksState>("/api/company/social-links");
+}
+
+export function createCompanySocialLink(body: { title?: string; url: string; kind?: CompanySocialLinkKind }) {
+  return nextCompanyRequest<{ link: CompanySocialLink }>("/api/company/social-links", {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function updateCompanySocialLink(id: string, body: { title?: string; url: string; kind?: CompanySocialLinkKind }) {
+  return nextCompanyRequest<{ link: CompanySocialLink }>(`/api/company/social-links/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function deleteCompanySocialLink(id: string) {
+  return nextCompanyRequest<{ ok: true }>(`/api/company/social-links/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
 }

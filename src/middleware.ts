@@ -70,6 +70,7 @@ export async function middleware(request: NextRequest) {
     path === "/register" ||
     path === "/forgot-password" ||
     path === "/mobile-entry" ||
+    path === "/mobile-language" ||
     path === "/mobile-login" ||
     path === "/mobile-register" ||
     path === "/mobile-forgot-password" ||
@@ -147,6 +148,7 @@ export const config = {
     "/register",
     "/forgot-password",
     "/mobile-entry",
+    "/mobile-language",
     "/mobile-login",
     "/mobile-register",
     "/mobile-forgot-password",

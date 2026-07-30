@@ -13,8 +13,10 @@ import {
   Compass,
   Copy,
   Gift,
+  Globe2,
   Heart,
   MapPin,
+  MessageCircle,
   Navigation,
   Route,
   Send,
@@ -43,6 +45,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { cn } from "@/lib/utils";
@@ -108,6 +111,13 @@ type PublicCompanyMediaState = {
     gallery: PublicMediaAsset[];
   };
   offers: PublicSpecialOffer[];
+  socialLinks: Array<{
+    id: string;
+    kind: "WEBSITE" | "VK" | "MAX" | "OTHER";
+    title: string;
+    url: string;
+    sortOrder: number;
+  }>;
 };
 
 type GalleryItem = {
@@ -212,6 +222,13 @@ function isLocationOpenNow(location: TwaCompany["locations"][number], now = new 
 
 function routeHref(location: TwaCompany["locations"][number]) {
   return `https://yandex.ru/maps/?rtext=~${location.latitude},${location.longitude}&rtt=auto`;
+}
+
+function PublicSocialIcon({ kind }: { kind: "WEBSITE" | "VK" | "MAX" | "OTHER" }) {
+  if (kind === "VK") return <span className="text-[11px] font-black tracking-[-0.04em]">VK</span>;
+  if (kind === "MAX") return <MessageCircle className="h-4 w-4" />;
+  if (kind === "WEBSITE") return <Globe2 className="h-4 w-4" />;
+  return null;
 }
 
 function formatTime(value: string | null | undefined) {
@@ -858,6 +875,35 @@ export default function WalletPage() {
               </motion.section>
             )}
 
+            {Boolean(publicMedia?.socialLinks?.length) && (
+              <motion.section
+                initial={{ y: 12, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.07 }}
+                className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.88),rgba(3,7,18,0.86))] p-4"
+              >
+                <h2 className="text-lg font-black tracking-[-0.04em]">Где ещё найти компанию</h2>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {publicMedia?.socialLinks.map((link) => (
+                    <a
+                      key={link.id}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-bold text-white shadow-[0_12px_28px_rgba(0,0,0,0.22)] transition hover:border-cyan-200/30 hover:bg-cyan-300/10"
+                    >
+                      {link.kind !== "OTHER" && (
+                        <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-cyan-200/18 bg-cyan-300/10 text-cyan-100">
+                          <PublicSocialIcon kind={link.kind} />
+                        </span>
+                      )}
+                      <span className="max-w-[150px] truncate">{link.title}</span>
+                    </a>
+                  ))}
+                </div>
+              </motion.section>
+            )}
+
             <Dialog
               open={Boolean(selectedGalleryItem)}
               onOpenChange={(open) => {
@@ -896,11 +942,8 @@ export default function WalletPage() {
               <div className="mb-3 flex items-end justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-black tracking-[-0.04em]">Галерея</h2>
-                  <p className="mt-1 text-sm text-white/52">До 10 фото — достаточно красиво и не тяжело для сервера.</p>
+                  <p className="mt-1 text-sm text-white/52">Посмотрите атмосферу, детали и то, что ждёт гостей внутри.</p>
                 </div>
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-white/62">
-                  {galleryItems.length} фото
-                </span>
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {galleryItems.map((item, index) => (
@@ -928,7 +971,7 @@ export default function WalletPage() {
                       <p className="mt-0.5 line-clamp-1 text-xs text-white/58">{item.caption}</p>
                     </div>
                     <span className="absolute right-3 top-3 rounded-full border border-white/12 bg-black/45 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/72 opacity-0 backdrop-blur transition group-hover:opacity-100">
-                      открыть
+                      Посмотреть
                     </span>
                   </button>
                 ))}
@@ -980,48 +1023,89 @@ export default function WalletPage() {
               </div>
             </motion.section>
 
-            <motion.section
-              initial={{ y: 12, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.1 }}
-              className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(3,7,18,0.88))] p-4"
-            >
-              <div className="mb-4">
-                <p className="inline-flex items-center gap-2 rounded-2xl border border-amber-200/18 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-100">
-                  <Award className="h-4 w-4" />
-                  Уровни компании
-                </p>
-                <h2 className="mt-3 text-xl font-black tracking-[-0.04em]">Что можно открыть у {company.name}</h2>
-                <p className="mt-1 text-sm text-white/56">Пороги и бонусы видны сразу — без регистрации и всплывающих окон.</p>
-              </div>
-              <div className="space-y-2">
-                {levels.length > 0 ? (
-                  levels.map((level, index) => (
-                    <div
-                      key={level.id}
-                      className="flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-slate-950/44 px-4 py-3"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-amber-200/20 bg-amber-500/12 text-amber-100">
-                          {index + 1}
-                        </div>
+            <Dialog>
+              <motion.section
+                initial={{ y: 12, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.1 }}
+                className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(3,7,18,0.88))] p-4"
+              >
+                <div>
+                  <p className="inline-flex items-center gap-2 rounded-2xl border border-amber-200/18 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-100">
+                    <Award className="h-4 w-4" />
+                    Уровни компании
+                  </p>
+                  <h2 className="mt-3 text-xl font-black tracking-[-0.04em]">
+                    Что можно открыть у {company.name}
+                  </h2>
+                  <p className="mt-1 text-sm text-white/56">
+                    Посмотрите статусы компании и преимущества, которые открываются по мере роста вашей активности.
+                  </p>
+                </div>
+
+                <div className="mt-4 flex items-center gap-3 rounded-[20px] border border-white/8 bg-slate-950/44 px-4 py-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-amber-200/20 bg-amber-500/12 text-amber-100">
+                    <Award className="h-4 w-4" />
+                  </span>
+                  <p className="text-sm font-semibold text-white">
+                    {levels.length > 0 ? `Доступно ${levels.length} уровней` : "Уровни пока не настроены"}
+                  </p>
+                </div>
+
+                <DialogTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Посмотреть уровни компании ${company.name}`}
+                    className="relative z-20 mt-4 inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-white px-5 text-sm font-black text-slate-950 shadow-[0_14px_34px_rgba(255,255,255,0.10)] transition hover:-translate-y-0.5 hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/70 active:translate-y-0"
+                  >
+                    Посмотреть уровни компании
+                    <ChevronRight className="h-4 w-4" strokeWidth={2} />
+                  </button>
+                </DialogTrigger>
+              </motion.section>
+
+              <DialogContent className="max-h-[82vh] overflow-hidden border-white/10 bg-[#070b12] p-0 text-white">
+                <DialogHeader className="border-b border-white/8 px-5 py-4 text-left">
+                  <DialogTitle className="flex items-center gap-2 text-xl font-black tracking-[-0.04em]">
+                    <Award className="h-5 w-5 text-amber-200" />
+                    Уровни компании
+                  </DialogTitle>
+                  <DialogDescription className="text-sm text-white/58">
+                    Все доступные уровни, порог баллов и кешбэк в {company.name}.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="nearloy-scrollbar max-h-[60vh] space-y-2 overflow-y-auto px-5 pb-5 pt-1">
+                  {levels.length > 0 ? levels.map((level) => {
+                    const isCurrent = company.level.current?.id === level.id;
+                    const isNext = company.level.next?.id === level.id;
+                    return (
+                      <div
+                        key={level.id}
+                        className={cn(
+                          "flex items-center justify-between gap-3 rounded-[20px] border px-4 py-3",
+                          isCurrent ? "border-amber-200/35 bg-amber-500/12" : "border-white/8 bg-slate-950/40",
+                        )}
+                      >
                         <div className="min-w-0">
                           <p className="truncate text-base font-bold text-white">{companyLevelName(level.levelName, locale)}</p>
-                          <p className="mt-1 text-sm text-white/52">от {level.minTotalSpend} баллов</p>
+                          <p className="mt-1 text-sm text-white/55">от {level.minTotalSpend} баллов</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-base font-black text-amber-100">{level.cashbackPercent}%</p>
+                          <p className="mt-1 text-xs text-white/45">
+                            {isCurrent ? "текущий" : isNext ? "следующий" : "уровень"}
+                          </p>
                         </div>
                       </div>
-                      <div className="shrink-0 rounded-2xl border border-cyan-200/14 bg-cyan-400/8 px-3 py-1.5 text-sm font-black text-cyan-100">
-                        {level.cashbackPercent}%
-                      </div>
+                    );
+                  }) : (
+                    <div className="rounded-[20px] border border-white/8 bg-slate-950/40 px-4 py-5 text-sm text-white/56">
+                      Уровни компании пока не настроены.
                     </div>
-                  ))
-                ) : (
-                  <div className="rounded-[20px] border border-white/8 bg-slate-950/44 px-4 py-5 text-sm text-white/56">
-                    Уровни компании пока не настроены.
-                  </div>
-                )}
-              </div>
-            </motion.section>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
           </>
         ) : (
           <>
@@ -1151,8 +1235,8 @@ export default function WalletPage() {
                 Все доступные уровни, порог баллов и кешбэк в {company.name}.
               </DialogDescription>
             </DialogHeader>
-            <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 pb-5 pt-1">
-              {levels.map((level) => {
+            <div className="nearloy-scrollbar max-h-[60vh] space-y-2 overflow-y-auto px-5 pb-5 pt-1">
+              {levels.length > 0 ? levels.map((level) => {
                 const isCurrent = company.level.current?.id === level.id;
                 const isNext = company.level.next?.id === level.id;
                 return (
@@ -1175,7 +1259,11 @@ export default function WalletPage() {
                     </div>
                   </div>
                 );
-              })}
+              }) : (
+                <div className="rounded-[20px] border border-white/8 bg-slate-950/40 px-4 py-5 text-sm text-white/56">
+                  Уровни компании пока не настроены.
+                </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>
@@ -1280,7 +1368,7 @@ export default function WalletPage() {
                 Выберите удобную точку {company.name}.
               </DialogDescription>
             </DialogHeader>
-            <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 pb-5 pt-1">
+            <div className="nearloy-scrollbar max-h-[60vh] space-y-2 overflow-y-auto px-5 pb-5 pt-1">
               {routeLocations.map((location) => (
                 <a
                   key={location.uuid}

@@ -31,6 +31,16 @@ function serializeOffer(offer: {
   return { ...offer, imageUrl: companyMediaUrl(offer.imageStorageKey) };
 }
 
+function serializeSocialLink(link: {
+  id: string;
+  kind: "WEBSITE" | "VK" | "MAX" | "OTHER";
+  title: string;
+  url: string;
+  sortOrder: number;
+}) {
+  return link;
+}
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const company = await prisma.company.findFirst({
@@ -45,6 +55,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         where: { isActive: true },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
       },
+      socialLinks: {
+        where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        take: 5,
+      },
     },
   });
   if (!company) return NextResponse.json({ message: "Company not found" }, { status: 404 });
@@ -57,5 +72,6 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       gallery: company.mediaAssets.filter((asset) => asset.kind === CompanyMediaKind.GALLERY).slice(0, 10).map(serializeAsset),
     },
     offers: company.specialOffers.map(serializeOffer),
+    socialLinks: company.socialLinks.map(serializeSocialLink),
   });
 }

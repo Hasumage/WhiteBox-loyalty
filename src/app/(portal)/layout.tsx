@@ -20,6 +20,7 @@ import {
   Images,
   Inbox,
   LayoutDashboard,
+  Link2,
   LogOut,
   MapPinned,
   Menu,
@@ -159,62 +160,68 @@ const adminMenu: AdminMenuSection[] = [
 ] satisfies AdminMenuSection[];
 
 const companyMenuBase: NavItem[] = [
-  { href: "/company", label: "Дашборд", icon: LayoutDashboard },
-  { href: "/company/clients", label: "Касса и клиенты", icon: QrCode },
-  { href: "/company/ai", label: "AI помощник", icon: Sparkles },
-  { href: "/company/subscriptions", label: "Подписки", icon: Gift },
-  { href: "/company/club", label: "Клуб партнёров", icon: Handshake },
-  { href: "/company/loyalty", label: "Уровни и баллы", icon: Trophy },
-  { href: "/company/team", label: "Команда", icon: Users },
-  { href: "/company/payments", label: "Финансы", icon: CreditCard },
-  { href: "/company/billing", label: "Подписка", icon: Gift },
-  { href: "/company/compliance", label: "Верификация", icon: FileCheck },
-  { href: "/company/settings", label: "Настройки компании", icon: Settings2 },
-  { href: "/company/settings/media", label: "Фото и акции", icon: Images },
-  { href: "/company/getting-started", label: "Первый запуск", icon: Rocket },
+  { href: "/company", label: "ÐÐ°ÑÐ±Ð¾ÑÐ´", icon: LayoutDashboard },
+  { href: "/company/clients", label: "ÐÐ°ÑÑÐ° Ð¸ ÐºÐ»Ð¸ÐµÐ½ÑÑ", icon: QrCode },
+  { href: "/company/ai", label: "AI Ð¿Ð¾Ð¼Ð¾ÑÐ½Ð¸Ðº", icon: Sparkles },
+  { href: "/company/subscriptions", label: "ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ¸", icon: Gift },
+  { href: "/company/club", label: "ÐÐ»ÑÐ± Ð¿Ð°ÑÑÐ½ÑÑÐ¾Ð²", icon: Handshake },
+  { href: "/company/loyalty", label: "Ð£ÑÐ¾Ð²Ð½Ð¸ Ð¸ Ð±Ð°Ð»Ð»Ñ", icon: Trophy },
+  { href: "/company/team", label: "ÐÐ¾Ð¼Ð°Ð½Ð´Ð°", icon: Users },
+  { href: "/company/payments", label: "Ð¤Ð¸Ð½Ð°Ð½ÑÑ", icon: CreditCard },
+  { href: "/company/billing", label: "ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ°", icon: Gift },
+  { href: "/company/compliance", label: "ÐÐµÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¸Ñ", icon: FileCheck },
+  { href: "/company/settings", label: "ÐÐ°ÑÑÑÐ¾Ð¹ÐºÐ¸ ÐºÐ¾Ð¼Ð¿Ð°Ð½Ð¸Ð¸", icon: Settings2 },
+  { href: "/company/settings/media", label: "Мультимедиа", icon: Images },
+  { href: "/company/settings/offers", label: "Акции", icon: Megaphone },
+  { href: "/company/settings/socials", label: "Ссылки", icon: Link2 },
+  { href: "/company/getting-started", label: "ÐÐµÑÐ²ÑÐ¹ Ð·Ð°Ð¿ÑÑÐº", icon: Rocket },
 ];
 
 const companyQuickActionsBase: NavItem[] = [
-  { href: "/company/settings", label: "Профиль", icon: Settings2 },
-  { href: "/company/settings/locations", label: "Адреса", icon: MapPinned },
-  { href: "/company/settings/media", label: "Фото", icon: Images },
+  { href: "/company/settings", label: "ÐÑÐ¾ÑÐ¸Ð»Ñ", icon: Settings2 },
+  { href: "/company/settings/locations", label: "ÐÐ´ÑÐµÑÐ°", icon: MapPinned },
+  { href: "/company/settings/media", label: "Медиа", icon: Images },
+  { href: "/company/settings/offers", label: "Акции", icon: Megaphone },
+  { href: "/company/settings/socials", label: "Ссылки", icon: Link2 },
 ];
 
 const companyMenuSectionsBase: CompanyMenuSection[] = [
   {
-    title: "Рабочий стол",
+    title: "Ð Ð°Ð±Ð¾ÑÐ¸Ð¹ ÑÑÐ¾Ð»",
     defaultOpen: true,
     items: companyMenuBase.slice(0, 3),
   },
   {
-    title: "Клиенты и команда",
+    title: "ÐÐ»Ð¸ÐµÐ½ÑÑ Ð¸ ÐºÐ¾Ð¼Ð°Ð½Ð´Ð°",
     items: [
-      { href: "/company/loyalty", label: "Уровни и баллы", icon: Trophy },
-      { href: "/company/team", label: "Команда", icon: Users },
-      { href: "/company/club", label: "Клуб партнёров", icon: Handshake },
+      { href: "/company/loyalty", label: "Ð£ÑÐ¾Ð²Ð½Ð¸ Ð¸ Ð±Ð°Ð»Ð»Ñ", icon: Trophy },
+      { href: "/company/team", label: "ÐÐ¾Ð¼Ð°Ð½Ð´Ð°", icon: Users },
+      { href: "/company/club", label: "ÐÐ»ÑÐ± Ð¿Ð°ÑÑÐ½ÑÑÐ¾Ð²", icon: Handshake },
     ],
   },
   {
-    title: "Финансы",
+    title: "Ð¤Ð¸Ð½Ð°Ð½ÑÑ",
     items: [
-      { href: "/company/payments", label: "Финансы", icon: CreditCard },
-      { href: "/company/billing", label: "Подписка NearLoy", icon: Gift },
-      { href: "/company/subscriptions", label: "Клиентские подписки", icon: Gift },
+      { href: "/company/payments", label: "Ð¤Ð¸Ð½Ð°Ð½ÑÑ", icon: CreditCard },
+      { href: "/company/billing", label: "ÐÐ¾Ð´Ð¿Ð¸ÑÐºÐ° NearLoy", icon: Gift },
+      { href: "/company/subscriptions", label: "ÐÐ»Ð¸ÐµÐ½ÑÑÐºÐ¸Ðµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸", icon: Gift },
     ],
   },
   {
-    title: "Профиль компании",
+    title: "ÐÑÐ¾ÑÐ¸Ð»Ñ ÐºÐ¾Ð¼Ð¿Ð°Ð½Ð¸Ð¸",
     items: [
-      { href: "/company/settings", label: "Настройки", icon: Settings2 },
-      { href: "/company/settings/media", label: "Фото и акции", icon: Images },
-      { href: "/company/compliance", label: "Верификация", icon: FileCheck },
-      { href: "/company/getting-started", label: "Первый запуск", icon: Rocket },
+      { href: "/company/settings", label: "ÐÐ°ÑÑÑÐ¾Ð¹ÐºÐ¸", icon: Settings2 },
+      { href: "/company/settings/media", label: "Мультимедиа", icon: Images },
+      { href: "/company/settings/offers", label: "Акции", icon: Megaphone },
+      { href: "/company/settings/socials", label: "Ссылки", icon: Link2 },
+      { href: "/company/compliance", label: "ÐÐµÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¸Ñ", icon: FileCheck },
+      { href: "/company/getting-started", label: "ÐÐµÑÐ²ÑÐ¹ Ð·Ð°Ð¿ÑÑÐº", icon: Rocket },
     ],
   },
 ];
 
 const companyMenuAvailable: NavItem[] = companyMenuBase.filter(
-  // #SubNearloyCode: скрываем создание/управление клиентскими и парными подписками в кабинете компании.
+  // #SubNearloyCode: ÑÐºÑÑÐ²Ð°ÐµÐ¼ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ðµ/ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ð¸Ðµ ÐºÐ»Ð¸ÐµÐ½ÑÑÐºÐ¸Ð¼Ð¸ Ð¸ Ð¿Ð°ÑÐ½ÑÐ¼Ð¸ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ°Ð¼Ð¸ Ð² ÐºÐ°Ð±Ð¸Ð½ÐµÑÐµ ÐºÐ¾Ð¼Ð¿Ð°Ð½Ð¸Ð¸.
   (item) => SUBSCRIPTIONS_ENABLED || (item.href !== "/company/subscriptions" && item.href !== "/company/club"),
 );
 
@@ -222,9 +229,9 @@ const companyMenuLocalOnlyHrefs = new Set(["/company/club", "/company/payments"]
 const companyCashierMenuHrefs = ["/company", "/company/clients"];
 const companyCashierMenuHrefSet = new Set(companyCashierMenuHrefs);
 
-const COMPANY_WORKSPACE_LABEL = "Кабинет компании";
-const COMPANY_PARTNER_LABEL = "Кабинет партнёра";
-const COMPANY_QUICK_ACTIONS_LABEL = "Быстрые действия";
+const COMPANY_WORKSPACE_LABEL = "ÐÐ°Ð±Ð¸Ð½ÐµÑ ÐºÐ¾Ð¼Ð¿Ð°Ð½Ð¸Ð¸";
+const COMPANY_PARTNER_LABEL = "ÐÐ°Ð±Ð¸Ð½ÐµÑ Ð¿Ð°ÑÑÐ½ÑÑÐ°";
+const COMPANY_QUICK_ACTIONS_LABEL = "ÐÑÑÑÑÑÐµ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ñ";
 
 type MenuNotifications = {
   items: Record<string, number>;
@@ -264,7 +271,7 @@ function CompanyBillingSidebarWarning({ warning, onClick }: { warning: ReturnTyp
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-semibold">{warning.shortLabel}</span>
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{"\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u043f\u0440\u043e\u0434\u043b\u0435\u043d\u0438\u044e"}</span>
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{"Перейти к продлению"}</span>
       </span>
       <ArrowRight className="h-4 w-4 shrink-0 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
     </Link>
@@ -292,6 +299,8 @@ const companyOnboardingAllowedHrefs = [
   "/company/settings",
   "/company/settings/locations",
   "/company/settings/media",
+  "/company/settings/offers",
+  "/company/settings/socials",
   "/company/billing",
   "/company/compliance",
   "/company/team",

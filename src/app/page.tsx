@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, BadgeCheck, BellRing, Gift, MapPin, QrCode, Sparkles, TicketCheck, WalletCards } from "lucide-react";
+import { ArrowRight, BadgeCheck, BellRing, Building2, CircleHelp, Gift, MapPin, QrCode, Sparkles, TicketCheck, WalletCards } from "lucide-react";
 import { LandingLeadForm } from "@/components/landing/LandingLeadForm";
 import { MarketingFooter } from "@/components/landing/MarketingFooter";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
@@ -32,6 +32,11 @@ const steps = [
   { icon: MapPin, title: "Найдите партнёра", text: "Карта и категории помогают выбрать компанию рядом или онлайн-сервис." },
   { icon: QrCode, title: "Покажите QR", text: "Кассир быстро найдёт профиль, начислит баллы и увидит ваш прогресс." },
   { icon: BadgeCheck, title: "Следите за выгодой", text: "История, статусы и награды остаются прозрачными и доступны в любой момент." },
+];
+
+const faqLinks = [
+  { href: "/faq/clients", label: "FAQ для клиентов", icon: CircleHelp },
+  { href: "/faq/business", label: "FAQ для бизнеса", icon: Building2 },
 ];
 
 // #SubNearloyCode: карточки клиентских подписок остаются в коде, но блок скрыт до отдельного запуска.
@@ -203,6 +208,35 @@ export default function HomePage() {
             </div>
           </div>
           <ImagePanel src="/landing/user-map-partners.png" title="Партнёры на карте" text="Локации, категории и доступные преимущества помогают быстро выбрать место." />
+        </div>
+      </section>
+
+      <section className="relative z-10 border-y border-white/10 bg-[#050a10]/88 py-10">
+        <div className="mx-auto grid max-w-7xl gap-5 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-8">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">FAQ</p>
+            <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">Есть вопросы? Собрали ответы</h2>
+            <p className="mt-3 text-base leading-7 text-white/58">
+              Коротко объясняем, как работают QR, бонусы, партнёры, мобильное приложение и подключение бизнеса.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {faqLinks.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="group flex min-h-20 items-center justify-between gap-3 rounded-3xl border border-white/10 bg-white/[0.055] px-5 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:border-cyan-100/24 hover:bg-cyan-100/10"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-100/14 bg-cyan-100/10 text-cyan-100">
+                    <item.icon className="h-5 w-5" />
+                  </span>
+                  {item.label}
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0 transition group-hover:translate-x-1" />
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 

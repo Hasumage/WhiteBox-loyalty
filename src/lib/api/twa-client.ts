@@ -230,6 +230,8 @@ export type TwaProfile = {
     name: string;
     email: string;
     birthDate: string | null;
+    birthDateChangedAt: string | null;
+    birthDateNextChangeAt: string | null;
     createdAt: string;
   };
   preferences: {
@@ -633,7 +635,7 @@ export function createTwaLookupCode() {
 }
 
 const profileFallback: TwaProfile = {
-  user: { uuid: "", name: "", email: "", birthDate: null, createdAt: "" },
+  user: { uuid: "", name: "", email: "", birthDate: null, birthDateChangedAt: null, birthDateNextChangeAt: null, createdAt: "" },
   preferences: {
     onboardingCompletedAt: null,
     onboardingSkippedAt: null,

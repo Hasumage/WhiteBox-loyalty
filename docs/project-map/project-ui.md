@@ -24,12 +24,15 @@
 | `/settings/business`, `/settings/partnership`, `/settings/reviews` | Profile subpages/placeholders | CLIENT |
 | `/help/*` | FAQ/contact/privacy | Public |
 | `/landing` | Marketing landing and Telegram-backed lead form | Public |
+| `/faq` | Public FAQ hub linking client and business FAQ pages | Public |
+| `/faq/clients`, `/faq/business` | Separate public FAQ pages with standard questions and security sections | Public |
 | `/business` | Business marketing landing with company CTA and giveaway entry | Public |
 | `/business/giveaway` | 100 000 RUB business giveaway page with active-company progress vessel | Public |
 | `/business/giveaway/rules` | Dedicated giveaway participation rules | Public |
+| `/mobile-app` | Mobile app landing with generated visuals and Android APK download CTA | Public |
 | `/careers` | Localized careers hub with role cards and SEO job metadata | Public |
 | `/careers/[slug]` | Generic vacancy detail page | Public |
-| `/careers/b2b-manager` | Detailed B2B acquisition manager vacancy | Public |
+| `/careers/b2b-manager` | Detailed B2B acquisition manager vacancy with PR account registration | Public |
 | `/company/register` | Company onboarding and verification request | Public |
 | `/company` | Company operational dashboard | COMPANY member |
 | `/company/clients` | Cashier QR, points and subscription redemption workspace | COMPANY member |
@@ -101,12 +104,16 @@
 ## Public marketing UX
 
 - `MarketingHeader` keeps the normal desktop navigation visible on wide screens and switches to a full-screen mobile overlay on phones.
+- `/help/privacy` is the public privacy policy page with account-settings deep-link highlighting via `section=settings-account`.
 - The mobile marketing menu overlays the page instead of pushing layout, and contains navigation links, language switcher, login and partner CTA inside the menu.
+- `/faq` is a public FAQ hub. `/faq/clients` and `/faq/business` keep client and business answers separate, each with a standard-question block and its own security block.
+- The root landing links to the client and business FAQ pages between the partner map and business blocks.
 - `/business` links companies into registration and into the 100 000 RUB giveaway flow.
 - `/business/giveaway` visualizes progress toward 50 active companies with a liquid-vessel meter and vertical scenario cards using lightweight themed images.
 - `/business/giveaway/rules` is the authoritative public rule page for the giveaway. It is reachable from the giveaway flow, not from the global footer.
+- `/mobile-app` presents the Android APK download with generated NearLoy mobile app visuals and feature blocks for QR, map, notifications and loyalty cards.
 - `/careers` is a public SEO surface for NearLoy jobs; role cards link to individual detail pages and the hero intentionally avoids heavy CTA buttons.
-- `/careers/b2b-manager` is the detailed launch-role page for B2B acquisition, including conditions, expectations and a Telegram CTA to the project lead.
+- `/careers/b2b-manager` is the detailed launch-role page for B2B acquisition, including conditions, expectations, public PR account registration and Telegram onboarding.
 - `MarketingFooter` is shared by marketing pages and keeps the footer light: careers plus user/company terms links only.
 - Root metadata uses `NEXT_PUBLIC_SITE_URL` with a production fallback so public SEO URLs remain absolute.
 - Unknown routes render the branded 404 page with mascot artwork and standard recovery actions.

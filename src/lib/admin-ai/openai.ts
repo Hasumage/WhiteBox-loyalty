@@ -111,7 +111,17 @@ export async function askAdminAiOpenAi(params: {
     input,
   });
 
-  if (!response?.ok) return null;
+  if (!response) {
+    throw new Error("AI transport is not configured.");
+  }
+  if (!response.ok) {
+    const errorPayload = (await response.json().catch(() => null)) as {
+      error?: { code?: string };
+      code?: string;
+    } | null;
+    const providerCode = errorPayload?.error?.code ?? errorPayload?.code;
+    throw new Error(`AI request failed (${response.status}${providerCode ? `: ${providerCode}` : ""}).`);
+  }
   const payload = (await response.json().catch(() => null)) as {
     output_text?: string;
     output?: Array<{ content?: Array<{ text?: string }> }>;

@@ -70,6 +70,7 @@ export default function SettingsAccountPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
   const [birthDate, setBirthDate] = useState("");
   const [savedBirthDate, setSavedBirthDate] = useState("");
+  const [birthDateNextChangeAt, setBirthDateNextChangeAt] = useState<string | null>(null);
   const [birthDateSaving, setBirthDateSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [telegramStatus, setTelegramStatus] = useState<UserTelegramConnectionStatus | null>(null);
@@ -86,6 +87,7 @@ export default function SettingsAccountPage() {
       const profileBirthDate = toDateInput(profile.user.birthDate);
       setBirthDate(profileBirthDate);
       setSavedBirthDate(profileBirthDate);
+      setBirthDateNextChangeAt(toDateInput(profile.user.birthDateNextChangeAt) || null);
       if (telegram.ok) setTelegramStatus(telegram.data);
       if (!telegram.ok) setTelegramMessage(telegram.message);
     })();
@@ -157,6 +159,7 @@ export default function SettingsAccountPage() {
     const nextBirthDate = toDateInput(res.data.user.birthDate);
     setBirthDate(nextBirthDate);
     setSavedBirthDate(nextBirthDate);
+    setBirthDateNextChangeAt(toDateInput(res.data.user.birthDateNextChangeAt) || null);
     setMessage(t("client.account.birthDateSaved"));
   }
 
@@ -209,7 +212,8 @@ export default function SettingsAccountPage() {
   }
 
   const masked = user?.email ? maskEmail(user.email) : "-";
-  const canSaveBirthDate = birthDate !== savedBirthDate && !birthDateSaving;
+  const birthDateChangeLocked = Boolean(savedBirthDate && birthDateNextChangeAt && birthDate !== savedBirthDate);
+  const canSaveBirthDate = birthDate !== savedBirthDate && !birthDateSaving && !birthDateChangeLocked;
   const telegramConnected = Boolean(telegramStatus?.connected);
 
   return (
@@ -240,6 +244,11 @@ export default function SettingsAccountPage() {
               <CalendarDays className="h-4 w-4 text-primary" />
               {t("client.account.birthDate")}
             </div>
+            <p className="mb-3 text-xs leading-5 text-muted-foreground">
+              {birthDateNextChangeAt
+                ? t("client.account.birthDateChangeLimit").replace("{date}", birthDateNextChangeAt)
+                : t("client.account.birthDateChangeAvailable")}
+            </p>
             <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
               <Input
                 type="date"
