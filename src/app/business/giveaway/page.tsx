@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, BadgeCheck, Building2, Camera, Gift, GraduationCap, Megaphone, Scale, Sparkles, Store, Trophy, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgeCheck, Building2, Camera, GraduationCap, Megaphone, Scale, Sparkles, Store, Trophy, Wrench } from "lucide-react";
 import { MarketingFooter } from "@/components/landing/MarketingFooter";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Розыгрыш 100 000 ₽ для бизнеса — NearLoy",
-  description: "NearLoy разыграет 100 000 ₽ на развитие бизнеса после достижения цели в 50 активных компаний.",
+  description: "NearLoy разыграет 100 000 ₽ на развитие бизнеса после достижения цели в 50 подходящих компаний.",
 };
 
 const TARGET_COMPANY_COUNT = 50;
@@ -63,25 +63,15 @@ async function getPaidCompanyCount() {
             currentPeriodEndsAt: { gt: now },
           },
         },
-        OR: [
-          {
-            billingInvoices: {
-              some: {
-                status: "PAID",
-                paidAmount: { gt: 0 },
-              },
-            },
+        billingInvoices: {
+          some: {
+            status: "PAID",
+            periodEndsAt: { gt: now },
+            promoDiscountPercent: { lte: 50 },
+            amountDue: { gt: 0 },
+            paidAmount: { gt: 0 },
           },
-          {
-            payments: {
-              some: {
-                purpose: "COMPANY_NEARLOY_SUBSCRIPTION",
-                status: "SUCCEEDED",
-                amount: { gt: 0 },
-              },
-            },
-          },
-        ],
+        },
       },
     });
 
@@ -113,7 +103,7 @@ function ProgressVessel({ paidCompanyCount, progressPercent }: { paidCompanyCoun
             <p className="rounded-full border border-white/18 bg-black/35 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-50">Заполнено</p>
             <p className="mt-5 text-7xl font-semibold tracking-tight">{progressPercent}%</p>
             <p className="mt-4 max-w-52 text-sm leading-6 text-white/68">
-              {paidCompanyCount} из {TARGET_COMPANY_COUNT} активных компаний уже в цели розыгрыша.
+              {paidCompanyCount} из {TARGET_COMPANY_COUNT} оплаченных компаний уже в цели розыгрыша.
             </p>
           </div>
         </div>
@@ -138,15 +128,11 @@ export default async function BusinessGiveawayPage() {
             <ArrowLeft className="h-4 w-4" />
             Назад на лендинг
           </Link>
-          <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-violet-200/25 bg-violet-300/10 px-4 py-2 text-sm font-semibold text-violet-50">
-            <Gift className="h-4 w-4" />
-            Розыгрыш для компаний
-          </div>
-          <h1 className="mt-6 max-w-4xl text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
-            {PRIZE_LABEL} на развитие бизнеса
+          <h1 className="mt-8 max-w-4xl text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
+            <span className="whitespace-nowrap">{PRIZE_LABEL}</span> на развитие бизнеса
           </h1>
           <p className="mt-6 max-w-2xl text-xl leading-9 text-white/64">
-            Когда в NearLoy будет 50 активных российских компаний, мы проведём розыгрыш и выберем компанию, которая получит {PRIZE_LABEL} на развитие.
+            Когда в NearLoy будет 50 подходящих компаний, мы проведём розыгрыш и выберем компанию, которая получит <span className="whitespace-nowrap">{PRIZE_LABEL}</span> на развитие.
           </p>
           {!isLive ? (
             <p className="mt-4 rounded-2xl border border-amber-200/18 bg-amber-300/10 px-4 py-3 text-sm text-amber-50">
@@ -171,7 +157,7 @@ export default async function BusinessGiveawayPage() {
         <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:px-6 lg:grid-cols-4 lg:px-8">
           {[
             { icon: Building2, title: "Зарегистрируйте компанию", text: "Участвуют только реальные российские компании, ИП или самозанятые с корректными данными." },
-            { icon: BadgeCheck, title: "Активируйте компанию", text: "Компания должна быть активной в NearLoy на дату формирования списка участников." },
+            { icon: BadgeCheck, title: "Активируйте компанию", text: "Нужна активная оплаченная подписка NearLoy. Детали — в правилах." },
             { icon: BadgeCheck, title: "Дождитесь отметки 50", text: "Сосуд на странице показывает прогресс до момента, когда можно проводить выбор победителя." },
             { icon: Trophy, title: "Получите шанс на приз", text: "Победитель подтверждает документы и получает денежный приз на развитие бизнеса." },
           ].map((item) => (
@@ -231,7 +217,7 @@ export default async function BusinessGiveawayPage() {
           <Scale className="h-8 w-8 text-violet-100" />
           <h2 className="mt-5 text-2xl font-semibold">Коротко об условиях</h2>
           <p className="mt-3 text-sm leading-6 text-white/62">
-            Один участник — одна компания. Компания должна существовать в РФ, соблюдать правила сервиса, не иметь признаков фиктивной регистрации и быть активной в NearLoy на дату розыгрыша.
+            Один участник — одна компания. Участвуют реальные компании из РФ с активной оплаченной подпиской NearLoy.
           </p>
           <Link href="/business/giveaway/rules" className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/7 px-5 text-sm font-semibold text-white transition hover:bg-white/12">
             Полные правила

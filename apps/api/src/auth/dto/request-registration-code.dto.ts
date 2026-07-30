@@ -38,4 +38,12 @@ export class RequestRegistrationCodeDto {
   })
   @IsBoolean()
   termsAccepted!: boolean;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: "Allows the public B2B career page to create a MANAGER account with PR permissions after email verification.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  prManagerCareer?: boolean;
 }

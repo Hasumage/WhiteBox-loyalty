@@ -4,8 +4,7 @@ import type { ComponentType } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  BadgePercent,
-  Camera,
+    Camera,
   CheckCircle2,
   Crop,
   ImageIcon,
@@ -22,13 +21,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   companyMedia,
-  createCompanySpecialOffer,
   deleteCompanyMediaAsset,
-  deleteCompanySpecialOffer,
   uploadCompanyMediaAsset,
   type CompanyMediaAsset,
   type CompanyMediaState,
-  type CompanySpecialOffer,
 } from "@/lib/api/company-client";
 import { cn } from "@/lib/utils";
 
@@ -250,9 +246,6 @@ export default function CompanyMediaSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [offerTitle, setOfferTitle] = useState("");
-  const [offerDescription, setOfferDescription] = useState("");
-  const [offerCode, setOfferCode] = useState("");
 
   async function load() {
     try {
@@ -299,16 +292,10 @@ export default function CompanyMediaSettingsPage() {
       form.set("height", String(draft.target.height));
       form.set("title", draft.title);
       form.set("description", draft.description);
-      if (draft.target.key === "offer") {
-        form.set("code", draft.code);
-        if (!draft.title.trim()) throw new Error("Укажите название акции.");
-        await createCompanySpecialOffer(form);
-        setMessage("Акция добавлена.");
-      } else {
-        form.set("kind", draft.target.kind!);
-        await uploadCompanyMediaAsset(form);
-        setMessage("Изображение сохранено.");
-      }
+      if (draft.target.key === "offer") throw new Error("Акции редактируются на отдельной странице.");
+      form.set("kind", draft.target.kind!);
+      await uploadCompanyMediaAsset(form);
+      setMessage("Изображение сохранено.");
       setDraft(null);
       await load();
     } catch (reason) {
@@ -322,13 +309,6 @@ export default function CompanyMediaSettingsPage() {
     if (!window.confirm("Удалить изображение?")) return;
     await deleteCompanyMediaAsset(asset.id);
     setMessage("Изображение удалено.");
-    await load();
-  }
-
-  async function removeOffer(offer: CompanySpecialOffer) {
-    if (!window.confirm("Удалить акцию?")) return;
-    await deleteCompanySpecialOffer(offer.id);
-    setMessage("Акция удалена.");
     await load();
   }
 
@@ -415,63 +395,7 @@ export default function CompanyMediaSettingsPage() {
             </CardContent>
           </Card>
 
-          <Card className="glass border-white/10 py-0">
-            <CardContent className="space-y-5 p-5">
-              <div>
-                <h2 className="flex items-center gap-2 text-xl font-semibold"><BadgePercent className="h-5 w-5 text-fuchsia-200" /> Специальные акции и промокоды</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Предложения для клиентов NearLoy: понятный заголовок, красивое изображение и короткий код для применения при визите.</p>
-              </div>
-              <div className="grid gap-3 lg:grid-cols-[1fr_1fr_180px]">
-                <Input value={offerTitle} onChange={(event) => setOfferTitle(event.target.value)} placeholder="Например, Скидка на первый десерт" className="h-12 rounded-xl" />
-                <Input value={offerCode} onChange={(event) => setOfferCode(event.target.value.toUpperCase())} placeholder="Промокод, например WELCOME10" className="h-12 rounded-xl font-mono" />
-                <label>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      event.currentTarget.value = "";
-                      if (file) {
-                        void loadImage(file).then((loaded) =>
-                          setDraft({
-                            ...loaded,
-                            target: targetFor("offer"),
-                            title: offerTitle,
-                            description: offerDescription,
-                            code: offerCode,
-                          }),
-                        );
-                      }
-                    }}
-                  />
-                  <span className="inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-secondary px-4 text-sm font-medium">
-                    <Upload className="h-4 w-4" /> Картинка акции
-                  </span>
-                </label>
-              </div>
-              <Textarea value={offerDescription} onChange={(event) => setOfferDescription(event.target.value)} placeholder="Коротко объясните, что получает клиент и как воспользоваться предложением." className="min-h-24 rounded-xl" />
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {state?.offers.map((offer) => (
-                  <article key={offer.id} className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035]">
-                    <PreviewImage src={offer.imageUrl} title={offer.title} className="aspect-video rounded-none border-0" />
-                    <div className="space-y-2 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="font-semibold">{offer.title}</h3>
-                        <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-xl border-red-300/25 text-red-100" onClick={() => void removeOffer(offer)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      {offer.code && <p className="w-fit rounded-xl border border-fuchsia-200/20 bg-fuchsia-400/10 px-3 py-1 font-mono text-sm text-fuchsia-100">{offer.code}</p>}
-                      {offer.description && <p className="line-clamp-3 text-sm text-muted-foreground">{offer.description}</p>}
-                    </div>
-                  </article>
-                ))}
-                {!state?.offers.length && <div className="rounded-3xl border border-dashed border-white/15 p-8 text-sm text-muted-foreground md:col-span-2 xl:col-span-3">Акций пока нет. Заполните поля и загрузите картинку.</div>}
-              </div>
-            </CardContent>
-          </Card>
-        </>
+       </>
       )}
 
       {draft && (

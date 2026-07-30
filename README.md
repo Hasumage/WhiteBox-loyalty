@@ -48,12 +48,15 @@ npm run api:dev
 ## Public marketing routes
 
 - `/landing` - client-facing marketing landing and lead form.
+- `/faq` - public FAQ hub linking client and business FAQ pages.
+- `/faq/clients` and `/faq/business` - separate public FAQ pages with standard questions and security sections.
 - `/business` - company-facing landing with partner CTA and 100 000 RUB giveaway entry.
 - `/business/giveaway` - giveaway page with active-company progress vessel and business-development use cases.
 - `/business/giveaway/rules` - dedicated giveaway rules page for Russian companies.
+- `/mobile-app` - mobile application landing page with generated product visuals and Android APK download CTA.
 - `/careers` - localized careers hub with SEO metadata and role cards.
 - `/careers/[slug]` - generic vacancy detail pages.
-- `/careers/b2b-manager` - detailed B2B acquisition manager vacancy with Telegram contact CTA.
+- `/careers/b2b-manager` - detailed B2B acquisition manager vacancy with public PR manager registration and Telegram onboarding.
 - `/help/terms/users` and `/help/terms/companies` - public user/company usage rules linked from shared marketing footer.
 
 ## API Overview
@@ -147,6 +150,7 @@ Registered routes (`/api/registered/*`, CLIENT only):
 Payments:
 
 - `POST /api/payments/yookassa/webhook` - YooKassa webhook; the API verifies the provider payment by status sync
+- `POST /api/auth/register/request-code` + `POST /api/auth/register/verify` - email-confirmed registration; the B2B career page uses this flow for PR manager accounts with PR permissions and admin Telegram chat notification after verification
 - `GET /api/admin/payments` - admin payment ledger with status filters and provider identifiers
 - `POST /api/company/billing/checkout` - create YooKassa checkout for company NearLoy billing
 - `GET /api/company/billing/payments/:uuid` - sync/check company billing payment status
@@ -207,8 +211,9 @@ Set `DAILY_REPORT_SCHEDULER_ENABLED=true`, `DAILY_REPORT_TIME_MSK=23:00` and `DA
 - `/company/settings/media` - logo, hero, gallery and public offers
 - `/business` - company-facing public landing and giveaway entry
 - `/business/giveaway` - 100 000 RUB active-company giveaway page
+- `/mobile-app` - mobile application landing with generated visuals and APK download CTA
 - `/careers` - public localized careers hub
-- `/careers/b2b-manager` - detailed B2B acquisition manager vacancy
+- `/careers/b2b-manager` - detailed B2B acquisition manager vacancy with PR account registration
 - `/email-change/confirm?token=...` - public confirmation page for user email change
 - `/loyalty-cards` - client list of companies where the user has earned points
 - `/wallet/[slug]` - authenticated client card or public read-only company showcase

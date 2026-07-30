@@ -72,7 +72,7 @@ export default function BusinessLandingPage() {
             NearLoy для компаний и предпринимателей
           </div>
           <h1 className="mt-7 max-w-4xl text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
-            Запускайте подписки, возвращайте клиентов и управляйте лояльностью как продуктом
+            Запускайте, возвращайте и управляйте лояльностью как продуктом
           </h1>
           <p className="mt-6 max-w-2xl text-xl leading-9 text-white/62">
             NearLoy помогает бизнесу выпускать тарифы, начислять бонусы, контролировать услуги, видеть финансовую картину и работать с клиентами через удобный кабинет.
@@ -235,16 +235,20 @@ export default function BusinessLandingPage() {
         </div>
       </section>
 
-      <section className="relative z-10 border-y border-white/10 bg-white/[0.035] py-16">
+      <section id="contact" className="relative z-10 border-y border-white/10 bg-white/[0.035] py-16">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:items-start lg:px-8">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">Подключение</p>
-            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Company-доступ выдаётся проверенным партнёрам</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-100/64">Связь с командой</p>
+            <h2 className="mt-4 text-3xl font-semibold sm:text-4xl">Обсудим, как NearLoy подойдёт вашему бизнесу</h2>
             <p className="mt-4 text-lg leading-8 text-white/58">
-              Оставьте заявку, пройдите верификацию и получите кабинет компании. После подтверждения можно настраивать профиль, команду, подписки, уровни и финансы.
+              Оставьте контакты и коротко опишите задачу: бонусы, подписки, касса, онлайн-формат или партнёрские предложения. Мы свяжемся, покажем подходящий сценарий и ответим на вопросы до регистрации компании.
             </p>
+            <Link href="/company/register" className="mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/7 px-6 text-sm font-semibold text-white transition hover:bg-white/12">
+              Перейти к регистрации компании
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
-          <LandingLeadForm source="business_landing" title="Подключить компанию" note="Опишите бизнес и желаемый сценарий: бонусы, подписки, касса, онлайн-формат или партнёрская подписка." />
+          <LandingLeadForm source="business_landing" title="Связаться с NearLoy" note="Это форма для связи с командой NearLoy. Если вы уже готовы создать кабинет партнёра, используйте отдельную кнопку регистрации компании." />
         </div>
       </section>
 

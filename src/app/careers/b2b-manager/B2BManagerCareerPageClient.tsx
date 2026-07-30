@@ -1,21 +1,34 @@
 "use client";
 
+import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  ArrowRight,
   Building2,
   CheckCircle2,
   ClipboardList,
+  Copy,
   HeartHandshake,
+  Lock,
+  Mail,
   Megaphone,
   MessageCircle,
   Percent,
   Presentation,
   Search,
+  Send,
   Sparkles,
   TrendingUp,
+  UserPlus,
   Users,
 } from "lucide-react";
+import {
+  requestRegistrationCode,
+  setStoredSession,
+  verifyRegistrationCode,
+  type AuthTokensResponse,
+} from "@/lib/api/auth-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
 const taskIcons = [Search, MessageCircle, Presentation, ClipboardList, HeartHandshake, TrendingUp];
@@ -30,7 +43,7 @@ const b2bCopy = {
       "NearLoy — стартап в сфере программ лояльности, бонусов и работы с постоянными клиентами. Мы помогаем бизнесу запускать специальные предложения, анализировать активность и возвращать клиентов чаще.",
     mission:
       "Сейчас проект находится на стадии запуска. Нам нужен человек, который сможет привлекать первые компании и вместе с командой выстроить устойчивую систему B2B-продаж.",
-    contact: "Написать руководителю проекта",
+    contact: "Присоединиться к команде",
     tasksLink: "Что предстоит делать",
     tasksEyebrow: "Основные задачи",
     tasksTitle: "От первого контакта до подключённой компании",
@@ -48,9 +61,27 @@ const b2bCopy = {
     growthNote:
       "По мере роста NearLoy позиция может перерасти в роль руководителя направления B2B-продаж и маркетинга с собственной командой, процессами и бюджетом.",
     applyBadge: "Как откликнуться",
-    applyTitle: "Напишите пару строк о себе и опыте",
+    applyTitle: "Присоединиться к команде NearLoy",
     applyText:
-      "Расскажите, с какими бизнесами работали, как ищете клиентов и почему вам интересен запуск B2B-направления NearLoy. Длинное резюме не обязательно — важнее ясность и реальный интерес к задаче.",
+      "Вы присоединитесь к команде, которая создаёт новый опыт взаимодействия компаний и клиентов: понятный, быстрый и полезный для обеих сторон. После регистрации мы предложим подключить Telegram для рабочих уведомлений.",
+    formName: "Имя",
+    formEmail: "Email",
+    formPassword: "Пароль",
+    formConfirmPassword: "Повторите пароль",
+    formTerms: "Я принимаю правила NearLoy для пользователей и понимаю, что аккаунт создаётся для работы.",
+    formSubmit: "Присоединиться к команде",
+    formSendCode: "Отправить код",
+    formCode: "Код из письма",
+    formBack: "Изменить данные",
+    formLoading: "Создаём аккаунт...",
+    formSendingCode: "Отправляем код...",
+    formCodeSent: "Код отправлен. Проверьте почту и введите его здесь.",
+    telegramTitle: "Подключите Telegram для уведомлений",
+    telegramText: "Так вы будете получать рабочие уведомления по заявкам, выплатам и событиям PR-кабинета.",
+    telegramConnect: "Подключить Telegram",
+    telegramLater: "Подключить позже",
+    telegramCopy: "Скопировать ссылку",
+    telegramReady: "Ссылка готова на 15 минут. Откройте её в Telegram.",
     tasks: [
       {
         title: "Искать подходящие компании",
@@ -115,7 +146,7 @@ const b2bCopy = {
       "NearLoy is a startup in loyalty programs, rewards and recurring customer engagement. We help businesses launch special offers, analyze activity and bring customers back more often.",
     mission:
       "The product is at launch stage. We need someone who can attract first companies and help the team build a stable B2B sales system.",
-    contact: "Message the project lead",
+    contact: "Join the team",
     tasksLink: "What you will do",
     tasksEyebrow: "Key responsibilities",
     tasksTitle: "From first contact to an onboarded company",
@@ -133,9 +164,27 @@ const b2bCopy = {
     growthNote:
       "As NearLoy grows, the position can evolve into leadership of B2B sales and marketing with a team, processes and budget.",
     applyBadge: "How to apply",
-    applyTitle: "Write a few lines about yourself and your experience",
+    applyTitle: "Join the NearLoy team",
     applyText:
-      "Tell us which businesses you have worked with, how you find clients and why launching NearLoy’s B2B direction sounds interesting. A long CV is optional — clarity and genuine interest matter more.",
+      "You will join a team building a new experience for how companies and customers connect: clear, fast and useful for both sides. After registration, we will ask you to connect Telegram for work notifications.",
+    formName: "Name",
+    formEmail: "Email",
+    formPassword: "Password",
+    formConfirmPassword: "Repeat password",
+    formTerms: "I accept the NearLoy user terms and understand that this account is created for work.",
+    formSubmit: "Join the team",
+    formSendCode: "Send code",
+    formCode: "Email code",
+    formBack: "Edit details",
+    formLoading: "Creating account...",
+    formSendingCode: "Sending code...",
+    formCodeSent: "Code sent. Check your email and enter it here.",
+    telegramTitle: "Connect Telegram for notifications",
+    telegramText: "You will receive work notifications about applications, payouts and PR workspace events.",
+    telegramConnect: "Connect Telegram",
+    telegramLater: "Connect later",
+    telegramCopy: "Copy link",
+    telegramReady: "The link is ready for 15 minutes. Open it in the correct Telegram account.",
     tasks: [
       {
         title: "Find suitable companies",
@@ -197,6 +246,88 @@ const b2bCopy = {
 export function B2BManagerCareerPageClient() {
   const { locale } = useI18n("ru");
   const copy = b2bCopy[locale] ?? b2bCopy.ru;
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    termsAccepted: false,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [creatingTelegramLink, setCreatingTelegramLink] = useState(false);
+  const [step, setStep] = useState<"details" | "code">("details");
+  const [registered, setRegistered] = useState(false);
+  const [code, setCode] = useState("");
+  const [telegramLink, setTelegramLink] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function updateForm<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function submitPrRegistration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+    setSubmitting(true);
+    try {
+      if (step === "details") {
+        const response = await requestRegistrationCode({
+          ...form,
+          role: "MANAGER",
+          prManagerCareer: true,
+          locale,
+        });
+        if (!("success" in response)) {
+          setError(Array.isArray(response.message) ? response.message.join(", ") : response.message);
+          return;
+        }
+        setStep("code");
+        setNotice(copy.formCodeSent);
+        return;
+      }
+
+      const data = await verifyRegistrationCode({ email: form.email, code });
+      if (!("accessToken" in data) || !data.accessToken) {
+        const message = "message" in data ? data.message : "Не удалось зарегистрироваться.";
+        setError(Array.isArray(message) ? message.join(", ") : message);
+        return;
+      }
+      setStoredSession(data as AuthTokensResponse);
+      setRegistered(true);
+      setNotice(copy.telegramText);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось зарегистрироваться.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function createTelegramLink() {
+    setError(null);
+    setNotice(null);
+    setCreatingTelegramLink(true);
+    try {
+      const response = await fetch("/api/telegram/link-token", { method: "POST" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.deepLink) {
+        setError(Array.isArray(data.message) ? data.message.join(", ") : data.message ?? "Не удалось создать ссылку Telegram.");
+        return;
+      }
+      setTelegramLink(String(data.deepLink));
+      setNotice(copy.telegramReady);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось создать ссылку Telegram.");
+    } finally {
+      setCreatingTelegramLink(false);
+    }
+  }
+
+  async function copyTelegramLink() {
+    if (!telegramLink || typeof navigator === "undefined") return;
+    await navigator.clipboard?.writeText(telegramLink);
+  }
 
   return (
     <>
@@ -221,13 +352,11 @@ export function B2BManagerCareerPageClient() {
               <p className="mt-4 text-base leading-7 text-white/56">{copy.mission}</p>
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <Link
-                  href="https://t.me/Hasumage"
-                  target="_blank"
-                  rel="noreferrer"
+                  href="#join-team"
                   className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-sm font-semibold text-[#07101e] transition hover:bg-white/90"
                 >
                   {copy.contact}
-                  <MessageCircle className="h-4 w-4" />
+                  <UserPlus className="h-4 w-4" />
                 </Link>
                 <a
                   href="#tasks"
@@ -348,9 +477,9 @@ export function B2BManagerCareerPageClient() {
         </div>
       </section>
 
-      <section className="relative z-10 mx-auto max-w-7xl px-4 pb-14 sm:px-6 lg:px-8">
+      <section id="join-team" className="relative z-10 mx-auto max-w-7xl scroll-mt-24 px-4 pb-14 sm:px-6 lg:px-8">
         <div className="overflow-hidden rounded-[2.25rem] border border-cyan-100/18 bg-cyan-300/[0.055] p-6 shadow-[0_0_80px_rgba(34,211,238,0.08)] sm:p-8">
-          <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-violet-100/22 bg-violet-300/10 px-4 py-2 text-sm font-semibold text-violet-50">
                 <Sparkles className="h-4 w-4" />
@@ -359,15 +488,118 @@ export function B2BManagerCareerPageClient() {
               <h2 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">{copy.applyTitle}</h2>
               <p className="mt-4 max-w-3xl text-base leading-7 text-white/62">{copy.applyText}</p>
             </div>
-            <Link
-              href="https://t.me/Hasumage"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-sm font-semibold text-[#07101e] transition hover:bg-white/90"
-            >
-              {copy.contact}
-              <MessageCircle className="h-4 w-4" />
-            </Link>
+            <div className="rounded-[2rem] border border-white/10 bg-black/24 p-5">
+              {notice && <p className="mb-4 rounded-2xl border border-cyan-100/20 bg-cyan-300/10 p-3 text-sm text-cyan-50">{notice}</p>}
+              {error && <p className="mb-4 rounded-2xl border border-red-300/25 bg-red-300/10 p-3 text-sm text-red-100">{error}</p>}
+
+              {registered ? (
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-100/18 bg-cyan-300/10 text-cyan-100">
+                      <Send className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold">{copy.telegramTitle}</h3>
+                      <p className="mt-2 text-sm leading-6 text-white/58">{copy.telegramText}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => void createTelegramLink()}
+                      disabled={creatingTelegramLink}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-5 text-sm font-semibold text-[#07101e] transition hover:bg-white/90 disabled:opacity-60"
+                    >
+                      <Send className="h-4 w-4" />
+                      {creatingTelegramLink ? "..." : copy.telegramConnect}
+                    </button>
+                    <Link
+                      href="/admin/pr"
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/7 px-5 text-sm font-semibold text-white transition hover:bg-white/12"
+                    >
+                      {copy.telegramLater}
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                  {telegramLink && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-3">
+                      <a href={telegramLink} target="_blank" rel="noreferrer" className="break-all text-sm text-cyan-50 underline underline-offset-4">
+                        {telegramLink}
+                      </a>
+                      <button type="button" onClick={() => void copyTelegramLink()} className="mt-3 inline-flex h-10 items-center gap-2 rounded-xl border border-white/12 px-3 text-xs font-semibold text-white/70 transition hover:bg-white/10">
+                        <Copy className="h-3.5 w-3.5" />
+                        {copy.telegramCopy}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <form className="grid gap-4" onSubmit={submitPrRegistration}>
+                  {step === "details" ? (
+                    <>
+                      <label className="grid gap-2 text-sm text-white/60">
+                        {copy.formName}
+                        <span className="relative">
+                          <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/38" />
+                          <input className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.055] pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-cyan-100/35" value={form.name} onChange={(event) => updateForm("name", event.target.value)} required minLength={2} />
+                        </span>
+                      </label>
+                      <label className="grid gap-2 text-sm text-white/60">
+                        {copy.formEmail}
+                        <span className="relative">
+                          <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/38" />
+                          <input className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.055] pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-cyan-100/35" type="email" value={form.email} onChange={(event) => updateForm("email", event.target.value)} required />
+                        </span>
+                      </label>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="grid gap-2 text-sm text-white/60">
+                          {copy.formPassword}
+                          <span className="relative">
+                            <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/38" />
+                            <input className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.055] pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-cyan-100/35" type="password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} required minLength={8} />
+                          </span>
+                        </label>
+                        <label className="grid gap-2 text-sm text-white/60">
+                          {copy.formConfirmPassword}
+                          <span className="relative">
+                            <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/38" />
+                            <input className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.055] pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-cyan-100/35" type="password" value={form.confirmPassword} onChange={(event) => updateForm("confirmPassword", event.target.value)} required minLength={8} />
+                          </span>
+                        </label>
+                      </div>
+                      <label className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-sm leading-6 text-white/58">
+                        <input type="checkbox" checked={form.termsAccepted} onChange={(event) => updateForm("termsAccepted", event.currentTarget.checked)} required className="mt-1 h-4 w-4 shrink-0 accent-cyan-100" />
+                        <span>{copy.formTerms}</span>
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-sm text-white/62">{form.email}</div>
+                      <label className="grid gap-2 text-sm text-white/60">
+                        {copy.formCode}
+                        <input
+                          className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.055] px-4 text-center text-2xl tracking-[0.45em] text-white outline-none transition placeholder:text-white/28 focus:border-cyan-100/35"
+                          inputMode="numeric"
+                          pattern="[0-9]{6}"
+                          value={code}
+                          onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                          required
+                          minLength={6}
+                          maxLength={6}
+                        />
+                      </label>
+                      <button type="button" onClick={() => { setStep("details"); setCode(""); setError(null); setNotice(null); }} className="inline-flex h-10 w-fit items-center justify-center rounded-xl border border-white/12 px-3 text-xs font-semibold text-white/70 transition hover:bg-white/10">
+                        {copy.formBack}
+                      </button>
+                    </>
+                  )}
+                  <button type="submit" disabled={submitting} className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-sm font-semibold text-[#07101e] transition hover:bg-white/90 disabled:opacity-60">
+                    <UserPlus className="h-4 w-4" />
+                    {submitting ? (step === "details" ? copy.formSendingCode : copy.formLoading) : (step === "details" ? copy.formSendCode : copy.formSubmit)}
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         </div>
       </section>

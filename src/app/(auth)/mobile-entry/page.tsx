@@ -10,6 +10,7 @@ import {
 import { SESSION_RESTORE_TIMEOUT_MS } from "@/lib/api/fetch-timeout";
 
 const DEFAULT_NEXT = "/app?app=capacitor";
+const MOBILE_LANGUAGE_SELECTED_KEY = "nearloy:mobile-language-selected";
 
 function readSafeNext() {
   if (typeof window === "undefined") return DEFAULT_NEXT;
@@ -22,6 +23,11 @@ function readSafeNext() {
 function mobileLoginHref(next: string) {
   const params = new URLSearchParams({ app: "capacitor", next });
   return `/mobile-login?${params.toString()}`;
+}
+
+function mobileLanguageHref(next: string) {
+  const params = new URLSearchParams({ app: "capacitor", next });
+  return `/mobile-language?${params.toString()}`;
 }
 
 function withCapacitorFlag(href: string) {
@@ -48,6 +54,12 @@ export default function MobileEntryPage() {
 
     try {
       window.localStorage.setItem("nearloy:capacitor-app", "1");
+      if (!window.localStorage.getItem(MOBILE_LANGUAGE_SELECTED_KEY)) {
+        replaceHard(mobileLanguageHref(next));
+        return () => {
+          cancelled = true;
+        };
+      }
     } catch {
       // Native WebView can deny storage in edge cases; routing still works.
     }

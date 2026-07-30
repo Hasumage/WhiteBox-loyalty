@@ -1,0 +1,2 @@
+ALTER TABLE "User"
+ADD COLUMN "birthDateChangedAt" TIMESTAMP(3);

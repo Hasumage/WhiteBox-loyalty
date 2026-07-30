@@ -60,7 +60,7 @@ function initials(name: string) {
 }
 
 const fallbackProfile: TwaProfile = {
-  user: { uuid: "", name: "", email: "", birthDate: null, createdAt: "" },
+  user: { uuid: "", name: "", email: "", birthDate: null, birthDateChangedAt: null, birthDateNextChangeAt: null, createdAt: "" },
   preferences: {
     onboardingCompletedAt: null,
     onboardingSkippedAt: null,

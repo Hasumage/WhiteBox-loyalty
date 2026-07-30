@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { User, UserRole, type Prisma } from "@prisma/client";
+import { NotificationDeliveryStatus, User, UserRole, type Prisma } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { createHash, randomBytes, randomInt } from "crypto";
 import { EmailService } from "../email/email.service";
@@ -244,7 +244,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private assertPublicRegistrationRole(role: UserRole) {
+  private assertPublicRegistrationRole(role: UserRole, options: { prManagerCareer?: boolean } = {}) {
+    if (options.prManagerCareer && role === UserRole.MANAGER) return;
+
     const publicRegistrationBlockedRoles = new Set<UserRole>([
       UserRole.ADMIN,
       UserRole.SUPER_ADMIN,
@@ -691,6 +693,13 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       const user = existing
         ? await this.verifyExistingUnconfirmedUser(tx, existing, pending)
         : await this.createVerifiedUserFromPending(tx, pending, email);
+      if (user.role === UserRole.MANAGER) {
+        await tx.adminUserPermission.upsert({
+          where: { userId_scope: { userId: user.id, scope: "PR" } },
+          create: { userId: user.id, scope: "PR", canView: true, canEdit: true, canApprove: false },
+          update: { canView: true, canEdit: true, canApprove: false },
+        });
+      }
       await tx.emailVerificationCode.update({
         where: { id: pending.id },
         data: { status: "CONSUMED", consumedAt: new Date() },
@@ -698,7 +707,56 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       return user;
     });
 
+    if (user.role === UserRole.MANAGER) {
+      await this.notifyPrManagerJoined(user).catch((error) => {
+        this.logger.warn(`PR manager joined Telegram notification failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+
     return this.issueTokens(user);
+  }
+
+  private normalizeTelegramAdminChatId(value = this.config.get<string>("TELEGRAM_ADMIN_CHAT_ID") || "3977200071") {
+    const chatId = value.trim();
+    if (!chatId) return "";
+    if (chatId.startsWith("-")) return chatId;
+    if (/^\d{10,}$/.test(chatId)) return `-100${chatId}`;
+    return chatId;
+  }
+
+  private async notifyPrManagerJoined(user: Pick<User, "uuid" | "name" | "email" | "createdAt">) {
+    const chatId = this.normalizeTelegramAdminChatId();
+    if (!chatId) return;
+    const text = [
+      "🤝 <b>К команде присоединился новый PR менеджер</b>",
+      "",
+      `Имя: <b>${this.escapeTelegramHtml(user.name)}</b>`,
+      `Email: ${this.escapeTelegramHtml(user.email)}`,
+      `UUID: <code>${this.escapeTelegramHtml(user.uuid)}</code>`,
+      `Дата: ${this.escapeTelegramHtml(user.createdAt.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" }))}`,
+    ].join("\n");
+
+    await this.prisma.telegramMessageQueue.create({
+      data: {
+        recipientChatId: chatId,
+        recipientRole: "admin_chat",
+        recipientLabel: "NearLoy admin chat",
+        text,
+        parseMode: "HTML",
+        status: NotificationDeliveryStatus.PENDING,
+        source: "pr-manager-joined",
+        sourceId: user.uuid,
+        priority: 35,
+      },
+    });
+  }
+
+  private escapeTelegramHtml(value: string) {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   async validateUser(email: string, password: string): Promise<User | null> {

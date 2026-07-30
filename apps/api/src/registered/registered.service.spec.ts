@@ -13,10 +13,12 @@ describe("RegisteredService", () => {
     subscriptionBundle: { findMany: jest.Mock; findUnique: jest.Mock };
     userSubscription: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
     userSubscriptionBundle: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
+    subscriptionRedemption: { findMany: jest.Mock };
+    subscriptionBundleRedemption: { findMany: jest.Mock };
     company: { findMany: jest.Mock; findFirst: jest.Mock };
     loyaltyTransaction: { findMany: jest.Mock; groupBy: jest.Mock; create: jest.Mock };
     userCompany: { upsert: jest.Mock; updateMany: jest.Mock };
-    user: { findUnique: jest.Mock };
+    user: { findUnique: jest.Mock; update: jest.Mock };
     userProfilePreference: { upsert: jest.Mock };
     promoCode: { findUnique: jest.Mock };
     promoCodeRedemption: { create: jest.Mock };
@@ -53,14 +55,16 @@ describe("RegisteredService", () => {
         findFirst: jest.fn(),
         create: jest.fn(),
       },
+      subscriptionRedemption: { findMany: jest.fn().mockResolvedValue([]) },
+      subscriptionBundleRedemption: { findMany: jest.fn().mockResolvedValue([]) },
       company: { findMany: jest.fn(), findFirst: jest.fn() },
       loyaltyTransaction: {
         findMany: jest.fn(),
-        groupBy: jest.fn(),
+        groupBy: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
       },
       userCompany: { upsert: jest.fn(), updateMany: jest.fn() },
-      user: { findUnique: jest.fn() },
+      user: { findUnique: jest.fn(), update: jest.fn() },
       userProfilePreference: { upsert: jest.fn() },
       promoCode: { findUnique: jest.fn() },
       promoCodeRedemption: { create: jest.fn() },
@@ -101,6 +105,51 @@ describe("RegisteredService", () => {
 
     await expect(service.activateSubscription(9, "sub-30")).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(prisma.subscription.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("allows setting birth date for the first time", async () => {
+    const currentUser = { birthDate: null, birthDateChangedAt: null };
+    prisma.user.findUnique
+      .mockResolvedValueOnce(currentUser)
+      .mockResolvedValueOnce({
+        uuid: "user-1",
+        name: "User",
+        email: "user@example.com",
+        birthDate: new Date("2000-01-01T00:00:00.000Z"),
+        birthDateChangedAt: new Date("2026-07-30T00:00:00.000Z"),
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      });
+    prisma.user.update.mockResolvedValue({});
+    prisma.userProfilePreference.upsert.mockResolvedValue({
+      onboardingCompletedAt: null,
+      onboardingSkippedAt: null,
+      geolocationPromptedAt: null,
+    });
+    prisma.userFavoriteCategory.findMany.mockResolvedValue([]);
+    prisma.company.findMany.mockResolvedValue([]);
+    prisma.loyaltyTransaction.findMany.mockResolvedValue([]);
+    prisma.userSubscription.findMany.mockResolvedValue([]);
+    prisma.referralCampaign.findFirst.mockResolvedValue({ uuid: "campaign-1" });
+    prisma.referralInvite.findFirst.mockResolvedValue(null);
+    prisma.referralInvite.findUnique.mockResolvedValue(null);
+    prisma.referralInvite.create.mockResolvedValue({ code: "WB-USER" });
+
+    await service.updateProfile(7, { birthDate: "2000-01-01" });
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { birthDate: new Date("2000-01-01T00:00:00.000Z"), birthDateChangedAt: expect.any(Date) },
+    });
+  });
+
+  it("rejects birth date changes before one year passes", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      birthDate: new Date("2000-01-01T00:00:00.000Z"),
+      birthDateChangedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    });
+
+    await expect(service.updateProfile(7, { birthDate: "2001-02-03" })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it("marketplace returns active DB subscriptions with ownership flags", async () => {

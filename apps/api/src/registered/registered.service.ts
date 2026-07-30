@@ -22,6 +22,7 @@ import {
 
 const CUSTOMER_LOOKUP_CODE_TTL_MS = 5 * 60 * 1000;
 const MIN_BIRTH_YEAR = 1900;
+const BIRTH_DATE_CHANGE_INTERVAL_DAYS = 365;
 
 type ListCompaniesOptions = {
   surface?: "default" | "map" | "wallet";
@@ -213,6 +214,26 @@ export class RegisteredService {
     }
 
     return birthDate;
+  }
+
+  private addUtcDays(date: Date, days: number) {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
+  }
+
+  private isSameUtcDate(left: Date | null | undefined, right: Date | null | undefined) {
+    if (!left && !right) return true;
+    if (!left || !right) return false;
+    return (
+      left.getUTCFullYear() === right.getUTCFullYear() &&
+      left.getUTCMonth() === right.getUTCMonth() &&
+      left.getUTCDate() === right.getUTCDate()
+    );
+  }
+
+  private birthDateChangeAvailability(changedAt: Date | null | undefined, now = new Date()) {
+    if (!changedAt) return { canChange: true, nextChangeAt: null as Date | null };
+    const nextChangeAt = this.addUtcDays(changedAt, BIRTH_DATE_CHANGE_INTERVAL_DAYS);
+    return { canChange: now >= nextChangeAt, nextChangeAt };
   }
 
   private async getReferralCampaign() {
@@ -582,7 +603,7 @@ export class RegisteredService {
     const [user, preferences, favoriteCategories, wallet, activeSubscriptions, history, referral] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: userId },
-        select: { uuid: true, name: true, email: true, birthDate: true, createdAt: true },
+        select: { uuid: true, name: true, email: true, birthDate: true, birthDateChangedAt: true, createdAt: true },
       }),
       this.ensurePreferences(userId),
       this.prisma.userFavoriteCategory.findMany({
@@ -600,7 +621,14 @@ export class RegisteredService {
     const earned = history.transactions.filter((tx) => tx.type === "EARN").reduce((sum, tx) => sum + tx.amount, 0);
     const spent = history.transactions.filter((tx) => tx.type === "SPEND").reduce((sum, tx) => sum + tx.amount, 0);
     return {
-      user,
+      user: {
+        uuid: user.uuid,
+        name: user.name,
+        email: user.email,
+        birthDate: user.birthDate,
+        birthDateChangedAt: user.birthDateChangedAt,
+        birthDateNextChangeAt: this.birthDateChangeAvailability(user.birthDateChangedAt).nextChangeAt,
+      },
       preferences,
       onboarding: {
         completed: Boolean(preferences.onboardingCompletedAt || preferences.onboardingSkippedAt),
@@ -624,9 +652,26 @@ export class RegisteredService {
   async updateProfile(userId: number, dto: { birthDate?: string | null }) {
     const birthDate = this.parseBirthDate(dto.birthDate);
     if (birthDate !== undefined) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { birthDate: true, birthDateChangedAt: true },
+      });
+      if (!user) throw new NotFoundException("User not found.");
+      if (this.isSameUtcDate(user.birthDate, birthDate)) return this.profile(userId);
+
+      const availability = this.birthDateChangeAvailability(user.birthDateChangedAt);
+      if (user.birthDate && !availability.canChange) {
+        const nextDate = availability.nextChangeAt?.toISOString().slice(0, 10);
+        throw new BadRequestException(
+          nextDate
+            ? `Birth date can be changed once a year. Next change is available on ${nextDate}.`
+            : "Birth date can be changed once a year.",
+        );
+      }
+
       await this.prisma.user.update({
         where: { id: userId },
-        data: { birthDate },
+        data: { birthDate, birthDateChangedAt: new Date() },
       });
     }
     return this.profile(userId);

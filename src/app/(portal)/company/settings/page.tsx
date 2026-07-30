@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Check, Copy, ExternalLink, Globe2, Images, Link2, Loader2, MapPinned, Power, RotateCcw, Save, Settings2, Share2, Sparkles, Tags } from "lucide-react";
+import { Building2, Check, Copy, ExternalLink, Globe2, Link2, Loader2, MapPinned, Power, RotateCcw, Save, Settings2, Share2, Sparkles, Tags } from "lucide-react";
 import { CategoryMultiSelect } from "@/components/ui/category-multi-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -245,34 +245,6 @@ export default function CompanySettingsPage() {
                   </Link>
                 </Button>
               </div>
-            </div>
-          </div>
-          <div className="rounded-3xl border border-cyan-200/20 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.14),transparent_34%),rgba(255,255,255,0.03)] p-4 sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/25 bg-cyan-200/10 text-cyan-50">
-                  <Images className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-lg font-semibold">Фото и акции публичной карточки</p>
-                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                    Логотип, шапка, галерея до 10 фото и специальные предложения с промокодами. Перед загрузкой изображения можно подрезать под стандарты NearLoy.
-                  </p>
-                </div>
-              </div>
-              {canManage ? (
-                <Button asChild variant="secondary" className="shrink-0 rounded-xl">
-                  <Link href="/company/settings/media">
-                    <Images className="h-4 w-4" />
-                    Открыть медиа
-                  </Link>
-                </Button>
-              ) : (
-                <Button disabled variant="secondary" className="shrink-0 rounded-xl">
-                  <Images className="h-4 w-4" />
-                  Доступно владельцу
-                </Button>
-              )}
             </div>
           </div>
           <label className="block space-y-2">
