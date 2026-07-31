@@ -296,8 +296,8 @@ function categoryIconName(point: PartnerMapPoint) {
 function normalizeCityName(value: string | null | undefined) {
   return (value ?? "")
     .toLowerCase()
-    .replace(/С‘/g, "Рµ")
-    .replace(/[^a-zР°-СЏ0-9]+/gi, " ")
+    .replace(/\u0451/g, "\u0435")
+    .replace(/[^a-z\u0430-\u044f0-9]+/gi, " ")
     .trim();
 }
 
@@ -739,7 +739,7 @@ function PartnerMap({
               onClick={() => onClusterPreview(item.points)}
               className="absolute -translate-x-1/2 -translate-y-1/2 rounded-2xl focus:outline-none focus:ring-2 focus:ring-cyan-200"
               style={{ left: `${position.x}%`, top: `${position.y}%` }}
-              aria-label={`${item.city.name}: ${item.partnerCount} РїР°СЂС‚РЅС‘СЂРѕРІ`}
+              aria-label={`${item.city.name}: ${item.partnerCount} партнёров`}
             >
               <CityClusterBadge item={item} compact />
             </button>
@@ -1026,7 +1026,7 @@ function YandexPartnerMap({
                       });
                     }}
                     className="transition-transform focus:outline-none focus:ring-2 focus:ring-cyan-200 active:scale-95"
-                    aria-label={`${item.city.name}: ${item.partnerCount} РїР°СЂС‚РЅС‘СЂРѕРІ`}
+                    aria-label={`${item.city.name}: ${item.partnerCount} партнёров`}
                   >
                     <CityClusterBadge item={item} />
                   </button>
