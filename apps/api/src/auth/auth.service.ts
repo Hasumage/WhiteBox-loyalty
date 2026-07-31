@@ -457,17 +457,28 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     keys.forEach((key) => this.emailRequestGuards.set(key, firstState));
   }
 
-  async requestRegistrationCode(dto: RequestRegistrationCodeDto, ctx: EmailRequestContext = {}) {
-    if (dto.password !== dto.confirmPassword) {
-      throw new BadRequestException("Passwords do not match");
-    }
-    if (dto.termsAccepted !== true) {
-      throw new BadRequestException("Accept the NearLoy user terms before creating an account.");
-    }
-    const role = dto.role ?? UserRole.CLIENT;
-    this.assertPublicRegistrationRole(role);
+  async requestRegistrationCode(
+    dto: RequestRegistrationCodeDto,
+    ctx: EmailRequestContext = {},
+  ) {
+  if (dto.password !== dto.confirmPassword) {
+    throw new BadRequestException("Passwords do not match");
+  }
 
-    const email = dto.email.trim().toLowerCase();
+  if (dto.termsAccepted !== true) {
+    throw new BadRequestException(
+      "Accept the NearLoy user terms before creating an account.",
+    );
+  }
+
+  const role = dto.role ?? UserRole.CLIENT;
+
+  this.assertPublicRegistrationRole(role, {
+    prManagerCareer: dto.prManagerCareer,
+  });
+
+  const email = dto.email.trim().toLowerCase();
+  
     this.assertEmailRequestAllowed(email, ctx);
     const existing = await this.prisma.user.findUnique({
       where: { email },
