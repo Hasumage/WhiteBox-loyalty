@@ -151,7 +151,7 @@ export default function CompanySocialLinksPage() {
             >
               {kindOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            <Input disabled={limitReached || saving} value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Название, например Instagram или меню" className="h-12 rounded-xl" />
+            <Input disabled={limitReached || saving} value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Название, например VK или сайт" className="h-12 rounded-xl" />
             <Input disabled={limitReached || saving} value={draft.url} onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))} placeholder="https://..." className="h-12 rounded-xl" />
             <Button type="button" disabled={limitReached || saving} className="h-12 rounded-xl" onClick={() => void addLink()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}

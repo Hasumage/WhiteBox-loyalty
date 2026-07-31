@@ -89,6 +89,6 @@ describe("daily report", () => {
     expect(text).toContain("🧭 Операционный контроль");
     expect(text).toContain("• Telegram-очередь: 2 ждут | 1 с ошибкой | 18 отправлено");
     expect(text).toContain("━━━━━━━━━━━━━━━━━━━━");
-    expect(text).not.toMatch(/[�]|Рџ|Рђ|Рµ|СЃ|Ð|Ñ/);
+    expect(text).not.toMatch(/\uFFFD|\u0420\u045f|\u0420\u0402|\u0420\u00b5|\u0421\u0453|\u00d0|\u00d1/);
   });
 });
