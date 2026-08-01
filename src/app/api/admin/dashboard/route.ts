@@ -31,7 +31,13 @@ export async function GET(request: NextRequest) {
   const session = await requireAdminSession(request);
   if (isAuthResponse(session)) return session;
 
-  await syncAdminTasksFromSignals();
+  let syncError = false;
+  try {
+    await syncAdminTasksFromSignals();
+  } catch (error) {
+    syncError = true;
+    console.error("[admin-dashboard] Failed to sync live task signals.", error);
+  }
 
   const actor = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -261,6 +267,7 @@ export async function GET(request: NextRequest) {
       companiesWithSupportManager: platformRevenue.companiesWithSupportManager,
     },
     permittedSources: sources,
+    syncError,
     pr: prDashboard,
     trend,
     tasks: priorityTasks.map((task) => ({

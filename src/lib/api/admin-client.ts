@@ -345,6 +345,7 @@ export type AdminAiMetaResponse = {
 
 export type AdminDashboardResponse = {
   generatedAt: string;
+  syncError?: boolean;
   metrics: {
     usersTotal: number;
     usersActive: number;
