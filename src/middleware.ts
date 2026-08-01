@@ -15,9 +15,9 @@ function destinationForRole(role: string) {
   return "/app";
 }
 
-function responseWithLocale(request: NextRequest, response = NextResponse.next()) {
-  if (!request.cookies.get(LOCALE_COOKIE)?.value) {
-    const locale = detectPreferredLocale({
+function responseWithLocale(request: NextRequest, response = NextResponse.next(), forceLocale?: "ru" | "en") {
+  if (forceLocale || !request.cookies.get(LOCALE_COOKIE)?.value) {
+    const locale = forceLocale ?? detectPreferredLocale({
       countryCode:
         request.headers.get("x-vercel-ip-country") ??
         request.headers.get("cf-ipcountry") ??
@@ -61,6 +61,10 @@ function isCapacitorClientRoute(path: string) {
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+
+  if (path === "/max") {
+    return responseWithLocale(request, undefined, "ru");
+  }
 
   if (
     path === "/" ||
@@ -152,6 +156,7 @@ export const config = {
     "/mobile-login",
     "/mobile-register",
     "/mobile-forgot-password",
+    "/max",
     "/app",
     "/company/register",
     "/map",
