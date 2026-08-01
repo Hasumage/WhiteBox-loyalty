@@ -29,6 +29,25 @@ function signedTelegramInitData(
   return params.toString();
 }
 
+function signedMaxInitData(
+  user: { id: number | string; first_name?: string; username?: string },
+  botToken = "max-bot-token",
+  authDate = Math.floor(Date.now() / 1000),
+) {
+  const params = new URLSearchParams({
+    auth_date: String(authDate),
+    user: JSON.stringify(user),
+  });
+  const dataCheckString = [...params.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+  const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
+  const hash = createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+  params.set("hash", hash);
+  return params.toString();
+}
+
 describe("AuthService", () => {
   let service: AuthService;
   let prisma: {
@@ -125,6 +144,8 @@ describe("AuthService", () => {
               if (key === "JWT_REFRESH_EXPIRES_DAYS") return "7";
               if (key === "TELEGRAM_BOT_TOKEN") return "123456:test-bot-token";
               if (key === "TELEGRAM_MINI_APP_AUTH_MAX_AGE_SECONDS") return "86400";
+              if (key === "MAX_BOT_TOKEN") return "max-bot-token";
+              if (key === "MAX_MINI_APP_AUTH_MAX_AGE_SECONDS") return "86400";
               return def;
             },
             getOrThrow: (key: string) => {
@@ -541,6 +562,24 @@ describe("AuthService", () => {
     );
   });
 
+  it("login fails for a passwordless VK ID account", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 3,
+      uuid: "33333333-3333-4333-8333-333333333333",
+      email: "vk-user@example.com",
+      name: "VK User",
+      role: UserRole.CLIENT,
+      passwordHash: null,
+      accountStatus: "ACTIVE",
+      deletionScheduledAt: null,
+    });
+
+    await expect(service.login({ email: "vk-user@example.com", password: "password12" })).rejects.toThrow(
+      "Invalid email or password",
+    );
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+  });
+
   it("logs in from a linked client session for an active user", async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 13,
@@ -583,6 +622,49 @@ describe("AuthService", () => {
     );
   });
 
+  it("logs in from a linked MAX mini-app session for an active user", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 14,
+      uuid: "14141414-1414-4414-8414-141414141414",
+      email: "max@user.com",
+      name: "MAX User",
+      role: UserRole.CLIENT,
+      passwordHash: "hash",
+      telegramId: null,
+      maxId: "max-user-1",
+      phoneNumber: null,
+      phoneVerifiedAt: null,
+      emailVerifiedAt: null,
+      accountStatus: "ACTIVE",
+      deletionScheduledAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    prisma.loginEvent.findFirst.mockResolvedValue(null);
+    prisma.loginEvent.create.mockResolvedValue({ id: "max-mini-app-device" });
+    prisma.loginEvent.findMany.mockResolvedValue([]);
+    prisma.refreshToken.create.mockResolvedValue({ id: "rt-max-mini" });
+
+    const result = await service.loginWithMaxMiniApp(
+      signedMaxInitData({ id: "max-user-1", first_name: "Max" }),
+      { userAgent: "MAXWebView" },
+    );
+
+    expect(result.accessToken).toBe("access.jwt.token");
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { maxId: "max-user-1" },
+    });
+    expect(prisma.loginEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 14,
+          userAgent: "MAXWebView",
+          deviceLabel: "MAX mini-app session",
+        }),
+      }),
+    );
+  });
+
 
   it("rejects linked client session login when the signature is invalid", async () => {
     const params = new URLSearchParams({
@@ -595,6 +677,46 @@ describe("AuthService", () => {
       "Linked client sign-in signature is invalid",
     );
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects MAX mini-app login when the signature is invalid", async () => {
+    const params = new URLSearchParams({
+      auth_date: String(Math.floor(Date.now() / 1000)),
+      user: JSON.stringify({ id: "max-user-1" }),
+      hash: "deadbeef",
+    });
+
+    await expect(service.loginWithMaxMiniApp(params.toString())).rejects.toThrow(
+      "MAX linked client sign-in signature is invalid",
+    );
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("links the current account to a verified MAX mini-app identity", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.update.mockResolvedValue({ id: 7, maxId: "max-user-1" });
+
+    await expect(
+      service.linkMaxMiniApp(7, signedMaxInitData({ id: "max-user-1" })),
+    ).resolves.toEqual({ linked: true, provider: "max" });
+
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { maxId: "max-user-1" },
+      select: { id: true },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: { maxId: "max-user-1" },
+    });
+  });
+
+  it("does not link a MAX identity that belongs to another account", async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 8 });
+
+    await expect(
+      service.linkMaxMiniApp(7, signedMaxInitData({ id: "max-user-1" })),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it("rejects linked client session login when account is not linked", async () => {

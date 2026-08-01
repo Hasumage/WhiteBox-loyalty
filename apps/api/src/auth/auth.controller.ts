@@ -10,6 +10,7 @@ import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ConfirmEmailChangeDto } from "./dto/confirm-email-change.dto";
 import { ConfirmPasswordResetDto } from "./dto/confirm-password-reset.dto";
 import { LoginDto } from "./dto/login.dto";
+import { MaxMiniAppLoginDto } from "./dto/max-mini-app-login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { RequestPasswordResetDto } from "./dto/request-password-reset.dto";
@@ -173,6 +174,35 @@ export class AuthController {
   })
   telegramMiniAppLogin(@Req() req: Request, @Body() dto: TelegramMiniAppLoginDto) {
     return this.auth.loginWithTelegramMiniApp(dto.initData, loginContextFromRequest(req));
+  }
+
+  @Post("telegram-mini-app/link")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("access-token")
+  @ApiBody({ type: TelegramMiniAppLoginDto })
+  @ApiOperation({ summary: "Link current account to Telegram mini-app identity" })
+  linkTelegramMiniApp(@CurrentUser() user: RequestUser, @Body() dto: TelegramMiniAppLoginDto) {
+    return this.auth.linkTelegramMiniApp(user.userId, dto.initData);
+  }
+
+  @Post("max-mini-app")
+  @ApiBody({ type: MaxMiniAppLoginDto })
+  @ApiOperation({
+    summary: "Login from linked MAX mini-app session",
+    description:
+      "Validates a MAX mini-app payload and issues regular access + refresh tokens.",
+  })
+  maxMiniAppLogin(@Req() req: Request, @Body() dto: MaxMiniAppLoginDto) {
+    return this.auth.loginWithMaxMiniApp(dto.initData, loginContextFromRequest(req));
+  }
+
+  @Post("max-mini-app/link")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("access-token")
+  @ApiBody({ type: MaxMiniAppLoginDto })
+  @ApiOperation({ summary: "Link current account to MAX mini-app identity" })
+  linkMaxMiniApp(@CurrentUser() user: RequestUser, @Body() dto: MaxMiniAppLoginDto) {
+    return this.auth.linkMaxMiniApp(user.userId, dto.initData);
   }
 
   @Post("refresh")

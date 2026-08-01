@@ -23,7 +23,6 @@ import {
   Link2,
   LogOut,
   MapPinned,
-  Menu,
   Megaphone,
   MoreHorizontal,
   QrCode,
@@ -409,7 +408,7 @@ export default function PortalLayout({
         .map((item) => ({ ...item, label: t(item.labelKey) }))
     : [...visibleCompanyMenu, ...visibleCompanyQuickActions];
   const adminAllowedHrefs = useMemo(() => adminSections.flatMap((section) => section.items.map((item) => item.href)), [adminSections]);
-  const currentLabel = menuLabelForPath(pathname, menu, isAdmin ? t("admin.layout.workspace") : COMPANY_WORKSPACE_LABEL);
+  const isAiPage = pathname === "/admin/ai" || pathname === "/company/ai";
   const billingWarning = getCompanyBillingWarning(companyBillingData);
   const canManageCompanyBilling = !isAdmin && companyMemberRole !== null && companyMemberRole !== "CASHIER";
 
@@ -560,6 +559,10 @@ export default function PortalLayout({
   const mobilePrimaryItems = isAdmin
     ? menu.slice(0, 4)
     : visibleCompanyMenu.slice(0, 4);
+  function mobileNavLabel(href: string, label: string) {
+    if (href === "/admin/ai" || href === "/company/ai") return "AI";
+    return label;
+  }
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground">
@@ -681,28 +684,7 @@ export default function PortalLayout({
           </div>
         </aside>
 
-        <main className="min-w-0 px-4 pb-24 pt-20 sm:px-6 lg:px-8 lg:py-7">
-          <div className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-background/88 px-4 py-3 backdrop-blur-xl lg:hidden">
-            <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3">
-              <Link href={isAdmin ? adminHomeHref : "/company"} className="flex min-w-0 items-center gap-3">
-                <NearLoyLogo className="h-9 w-9 shrink-0" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">NearLoy</p>
-                  <p className="truncate text-xs text-muted-foreground">{currentLabel}</p>
-                </div>
-              </Link>
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(true)}
-                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold"
-                aria-label="Open navigation menu"
-              >
-                <Menu className="h-4 w-4" />
-                {t("admin.layout.mobileMenu")}
-              </button>
-            </div>
-          </div>
-
+        <main className={cn("min-w-0 px-4 pt-4 sm:px-6 lg:px-8 lg:py-7", isAiPage ? "pb-2 lg:pb-7" : "pb-24")}>
           <PageTransition>{children}</PageTransition>
         </main>
       </div>
@@ -721,7 +703,7 @@ export default function PortalLayout({
                 )}
               >
                 <Icon className="h-4 w-4" />
-                <span className="max-w-full truncate px-1">{label}</span>
+                <span className="max-w-full truncate px-1">{mobileNavLabel(href, label)}</span>
                 <span className="absolute right-2 top-2">
                   <NotificationBadge count={notifications.items[href]} />
                 </span>
@@ -868,4 +850,3 @@ export default function PortalLayout({
     </div>
   );
 }
-

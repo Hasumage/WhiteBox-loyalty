@@ -670,6 +670,10 @@ describe("CompanyService", () => {
         }),
       }),
     );
+    expect(prisma.company.findFirst).toHaveBeenCalledWith({
+      where: { id: 8, isActive: true },
+      select: { id: true },
+    });
     expect(result.participants.map((participant) => participant.approvalStatus)).toEqual(["APPROVED", "PENDING"]);
   });
 

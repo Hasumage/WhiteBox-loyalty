@@ -25,6 +25,7 @@
     "telegram:ping": "node scripts/telegram-ping.mjs",
     "telegram:webhook:set": "node scripts/telegram-set-webhook.mjs",
     "telegram:menu:set": "node scripts/telegram-set-menu-button.mjs",
+    "max:webhook:set": "node scripts/max-set-webhook.mjs",
     "reports:daily:scheduler": "node scripts/daily-report-scheduler.mjs",
     "reports:daily:send": "node scripts/daily-report-scheduler.mjs --once",
     "test:web": "jest --config jest.web.config.cjs",

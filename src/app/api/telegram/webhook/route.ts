@@ -46,11 +46,12 @@ type TelegramBotRuntime = {
 function nearloyWebAppUrl(base: string | undefined, path = "/app") {
   const configured = base || process.env.TELEGRAM_WEB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://nearloy.up.railway.app/";
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const loginPath = `/login?${new URLSearchParams({ surface: "telegram", next: normalizedPath }).toString()}`;
   try {
     const url = new URL(configured);
-    return new URL(normalizedPath, url.origin).toString();
+    return new URL(loginPath, url.origin).toString();
   } catch {
-    return `${configured.replace(/\/$/, "")}${normalizedPath}`;
+    return `${configured.replace(/\/$/, "")}${loginPath}`;
   }
 }
 

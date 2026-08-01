@@ -374,6 +374,63 @@ export async function completeVkIdLogin(ticket: string): Promise<(AuthTokensResp
   }
 }
 
+export async function loginWithMaxMiniApp(
+  initData: string,
+): Promise<AuthTokensResponse | { message: string }> {
+  try {
+    const res = await fetchWithTimeout(`${apiBase()}/auth/max-mini-app`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initData }),
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        message: Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message ?? `MAX login failed (HTTP ${res.status})`,
+      };
+    }
+    return data as AuthTokensResponse;
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
+async function linkMiniAppIdentity(
+  path: string,
+  initData: string,
+): Promise<{ linked: true; provider: string } | { message: string }> {
+  try {
+    const res = await fetchWithTimeout(`${apiBase()}${path}`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ initData }),
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.linked !== true) {
+      return {
+        message: Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message ?? `Mini-app link failed (HTTP ${res.status})`,
+      };
+    }
+    return { linked: true, provider: String(data.provider ?? "mini-app") };
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
+export function linkTelegramMiniApp(initData: string) {
+  return linkMiniAppIdentity("/auth/telegram-mini-app/link", initData);
+}
+
+export function linkMaxMiniApp(initData: string) {
+  return linkMiniAppIdentity("/auth/max-mini-app/link", initData);
+}
+
 export async function createVkIdLinkUrl(next?: string | null): Promise<{ url: string } | { message: string }> {
   try {
     const res = await fetchWithTimeout(`${apiBase()}/oauth/vkid/link/start`, {

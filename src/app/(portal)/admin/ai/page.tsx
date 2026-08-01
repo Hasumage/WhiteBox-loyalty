@@ -7,7 +7,6 @@ import {
   ImagePlus,
   Loader2,
   Send,
-  Sparkles,
   User,
   X,
 } from "lucide-react";
@@ -40,6 +39,15 @@ function newId() {
 
 function visibleHistory(messages: ChatMessage[]): AdminAiChatMessage[] {
   return messages.map((message) => ({ role: message.role, content: message.content })).slice(-12);
+}
+
+function resizePromptTextarea(element: HTMLTextAreaElement | null) {
+  if (!element) return;
+  const maxHeight = 136;
+  element.style.height = "auto";
+  const nextHeight = Math.min(element.scrollHeight, maxHeight);
+  element.style.height = `${nextHeight}px`;
+  element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
 }
 
 function dataUrlFromFile(file: File, maxSide = IMAGE_MAX_SIDE, quality = IMAGE_QUALITY) {
@@ -152,20 +160,14 @@ function AiTable({ table }: { table: AdminAiTable }) {
 }
 
 export default function AdminAiPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: newId(),
-      role: "assistant",
-      content:
-        "Привет! Напишите, что нужно проверить или сделать — разберусь и предложу аккуратный следующий шаг.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState("");
 
@@ -174,6 +176,10 @@ export default function AdminAiPage() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    resizePromptTextarea(inputRef.current);
+  }, [input]);
 
   async function attachImage(file: File) {
     if (!file.type.startsWith("image/")) {
@@ -285,18 +291,7 @@ export default function AdminAiPage() {
   }
 
   return (
-    <main className="flex h-[calc(100dvh-1px)] flex-col gap-3 overflow-hidden px-4 py-4 md:px-8">
-      <section className="glass shrink-0 rounded-[20px] border border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.08),transparent_30%),rgba(255,255,255,0.018)] px-4 py-3 md:px-5">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/25 bg-cyan-300/10 text-cyan-100">
-            <Sparkles className="h-4 w-4" />
-          </span>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight md:text-2xl">AI-помощник админки</h1>
-          </div>
-        </div>
-      </section>
-
+    <main className="flex h-[calc(100dvh-6.25rem)] min-h-0 flex-col overflow-hidden px-0 py-0 md:h-[calc(100dvh-1px)] md:px-8 md:py-4">
       <Card className="glass min-h-0 flex-1 overflow-hidden border-white/10">
         <CardContent className="flex h-full min-h-0 flex-col p-0">
           {error ? (
@@ -309,6 +304,11 @@ export default function AdminAiPage() {
             ref={scrollRef}
             className="min-h-0 flex-1 overflow-y-auto p-4 [scrollbar-width:none] md:p-6 [&::-webkit-scrollbar]:hidden"
           >
+            {messages.length === 0 && !loading ? (
+              <div className="flex h-full items-center justify-center px-6 text-center text-2xl font-semibold tracking-tight text-white/45 sm:text-3xl">
+                Чем займёмся?
+              </div>
+            ) : null}
             <div className="space-y-5">
               {messages.map((message) => {
                 const assistant = message.role === "assistant";
@@ -371,7 +371,7 @@ export default function AdminAiPage() {
           </div>
 
           <form
-            className="shrink-0 border-t border-white/10 p-4"
+            className="shrink-0 border-t border-white/10 p-3 md:p-4"
             onPaste={handlePaste}
             onSubmit={(event) => {
               event.preventDefault();
@@ -394,7 +394,7 @@ export default function AdminAiPage() {
                 </Button>
               </div>
             ) : null}
-            <div className="flex items-center gap-3">
+            <div className="rounded-[1.25rem] border border-white/10 bg-black/20 p-2 shadow-[0_18px_60px_rgba(0,0,0,0.22)] transition-all">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -405,20 +405,17 @@ export default function AdminAiPage() {
                   if (file) void attachImage(file);
                 }}
               />
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-[54px] w-[54px] shrink-0 rounded-2xl p-0"
-                title="Прикрепить изображение"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <ImagePlus className="h-5 w-5" />
-              </Button>
               <Textarea
+                ref={inputRef}
                 value={input}
-                onChange={(event) => setInput(event.target.value.slice(0, 1500))}
-                placeholder="Например: «Почему Aurora без подписки?» или «Посмотри выплаты и скажи, где риск»"
-                className="min-h-[54px] resize-none rounded-2xl bg-black/20 py-4"
+                onChange={(event) => {
+                  const nextValue = event.target.value.slice(0, 1500);
+                  setInput(nextValue);
+                  resizePromptTextarea(event.currentTarget);
+                }}
+                placeholder="Введите ваш запрос"
+                rows={1}
+                className="max-h-[136px] min-h-[38px] resize-none border-0 bg-transparent px-3 py-2 text-sm leading-6 shadow-none outline-none transition-[height] duration-75 ease-out placeholder:text-sm focus-visible:ring-0"
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -426,9 +423,20 @@ export default function AdminAiPage() {
                   }
                 }}
               />
-              <Button type="submit" size="lg" disabled={!canSend} className="h-[54px] w-[54px] shrink-0 rounded-2xl p-0">
-                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-              </Button>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-10 min-w-10 rounded-2xl px-3"
+                  title="Прикрепить изображение"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImagePlus className="h-5 w-5" />
+                </Button>
+                <Button type="submit" size="lg" disabled={!canSend} className="h-10 min-w-10 rounded-2xl px-3">
+                  {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                </Button>
+              </div>
             </div>
           </form>
         </CardContent>

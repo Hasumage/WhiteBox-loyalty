@@ -3,7 +3,7 @@
 import { ArrowUpRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +19,10 @@ import { FrozenAccountDialog } from "@/components/auth/FrozenAccountDialog";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import {
   authenticatedDestination,
+  linkMaxMiniApp,
+  linkTelegramMiniApp,
   login,
+  loginWithMaxMiniApp,
   loginWithTelegramMiniApp,
   refreshStoredSession,
   setStoredSession,
@@ -30,13 +33,19 @@ import { SESSION_RESTORE_TIMEOUT_MS } from "@/lib/api/fetch-timeout";
 import { useIsCapacitorApp } from "@/lib/capacitor/use-is-capacitor-app";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
+type MiniAppWebApp = {
+  initData?: string;
+  ready?: () => void;
+  expand?: () => void;
+};
+
 type TelegramWindow = Window & {
   Telegram?: {
-    WebApp?: {
-      initData?: string;
-      ready?: () => void;
-      expand?: () => void;
-    };
+    WebApp?: MiniAppWebApp;
+  };
+  WebApp?: MiniAppWebApp;
+  MAX?: {
+    WebApp?: MiniAppWebApp;
   };
 };
 
@@ -51,6 +60,92 @@ const loginCopy = {
   },
 } as const;
 
+const TELEGRAM_SDK_SRC = "https://telegram.org/js/telegram-web-app.js";
+const TELEGRAM_SDK_TIMEOUT_MS = 5_000;
+
+function loadTelegramWebApp() {
+  const loadedWebApp = (window as TelegramWindow).Telegram?.WebApp;
+  if (loadedWebApp) return Promise.resolve(loadedWebApp);
+
+  return new Promise<MiniAppWebApp | undefined>((resolve) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[data-nearloy-telegram-sdk="true"]',
+    );
+    const script = existingScript ?? document.createElement("script");
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      resolve((window as TelegramWindow).Telegram?.WebApp);
+    };
+
+    const timeoutId = window.setTimeout(finish, TELEGRAM_SDK_TIMEOUT_MS);
+    script.addEventListener("load", finish, { once: true });
+    script.addEventListener("error", finish, { once: true });
+
+    if (!existingScript) {
+      script.src = TELEGRAM_SDK_SRC;
+      script.async = true;
+      script.dataset.nearloyTelegramSdk = "true";
+      document.head.appendChild(script);
+    }
+  });
+}
+
+function getMaxWebApp() {
+  const source = window as TelegramWindow;
+  return source.WebApp ?? source.MAX?.WebApp;
+}
+
+function shouldShowLinkedClientError(message: string) {
+  return !message.toLowerCase().includes("not linked");
+}
+
+function detectMaxMiniAppInitData() {
+  const maxWebApp = getMaxWebApp();
+  maxWebApp?.ready?.();
+  maxWebApp?.expand?.();
+  const max = maxWebApp?.initData?.trim() || null;
+  if (max) return { provider: "max" as const, initData: max };
+
+  return null;
+}
+
+async function detectTelegramMiniAppInitData() {
+  const telegramWebApp = await loadTelegramWebApp();
+  telegramWebApp?.ready?.();
+  telegramWebApp?.expand?.();
+  const telegram = telegramWebApp?.initData?.trim() || null;
+  if (telegram) return { provider: "telegram" as const, initData: telegram };
+
+  return null;
+}
+
+async function detectMiniAppInitData(preferredProvider?: "telegram" | "max" | null) {
+  if (preferredProvider === "max") {
+    return detectMaxMiniAppInitData() ?? await detectTelegramMiniAppInitData();
+  }
+  if (preferredProvider === "telegram") {
+    return await detectTelegramMiniAppInitData() ?? detectMaxMiniAppInitData();
+  }
+
+  return await detectTelegramMiniAppInitData() ?? detectMaxMiniAppInitData();
+}
+
+async function linkMiniAppIdentityAfterLogin(preferredProvider?: "telegram" | "max" | null) {
+  const miniApp = await detectMiniAppInitData(preferredProvider);
+  if (miniApp?.provider === "telegram") {
+    const result = await linkTelegramMiniApp(miniApp.initData);
+    if ("message" in result) console.warn("Telegram mini-app link failed:", result.message);
+  }
+  if (miniApp?.provider === "max") {
+    const result = await linkMaxMiniApp(miniApp.initData);
+    if ("message" in result) console.warn("MAX mini-app link failed:", result.message);
+  }
+}
+
 type LoginFormProps = {
   deleted?: boolean;
   frozen?: boolean;
@@ -59,6 +154,7 @@ type LoginFormProps = {
 
 export function LoginForm({ deleted = false, frozen = false, requestedNext = null }: LoginFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { locale, setLocale, t } = useI18n("ru");
   const isCapacitorApp = useIsCapacitorApp();
   const text = loginCopy[locale] ?? loginCopy.ru;
@@ -71,6 +167,11 @@ export function LoginForm({ deleted = false, frozen = false, requestedNext = nul
   const [frozenOpen, setFrozenOpen] = useState(false);
   const [pendingNext, setPendingNext] = useState("/");
   const [frozenMeta, setFrozenMeta] = useState<{ name: string; at: string | null } | null>(null);
+  const preferredMiniAppProvider = searchParams.get("surface") === "max"
+    ? "max"
+    : searchParams.get("surface") === "telegram"
+      ? "telegram"
+      : null;
 
   function enterSession(data: AuthTokensResponse) {
     const destination = authenticatedDestination(data.user, requestedNext);
@@ -102,30 +203,62 @@ export function LoginForm({ deleted = false, frozen = false, requestedNext = nul
     setRestoringSession(true);
 
     void (async () => {
-      const webApp = (window as TelegramWindow).Telegram?.WebApp;
-      webApp?.ready?.();
-      webApp?.expand?.();
-      const initData = webApp?.initData?.trim();
-      let telegramError: string | null = null;
-
-      if (initData && !isCapacitorApp) {
-        const result = await loginWithTelegramMiniApp(initData);
-        if (cancelled) return;
-        if ("accessToken" in result && result.accessToken) {
-          enterSession(result);
-          return;
-        }
-        telegramError = "message" in result ? result.message : "automatic sign-in failed";
-      }
-
       const restored = await refreshStoredSession();
       if (cancelled) return;
       if (restored) {
         enterSession(restored);
         return;
       }
-      if (telegramError) {
-        setError(`Telegram: ${telegramError}`);
+
+      let linkedClientError: string | null = null;
+      if (!isCapacitorApp) {
+        const maxInitData = preferredMiniAppProvider === "max"
+          ? detectMaxMiniAppInitData()?.initData
+          : null;
+        if (maxInitData) {
+          const result = await loginWithMaxMiniApp(maxInitData);
+          if (cancelled) return;
+          if ("accessToken" in result && result.accessToken) {
+            enterSession(result);
+            return;
+          }
+          const message = "message" in result ? result.message : "automatic sign-in failed";
+          if (shouldShowLinkedClientError(message)) linkedClientError = `MAX: ${message}`;
+        }
+
+        const telegramInitData = preferredMiniAppProvider === "max"
+          ? null
+          : (await detectTelegramMiniAppInitData())?.initData;
+        if (cancelled) return;
+        if (telegramInitData) {
+          const result = await loginWithTelegramMiniApp(telegramInitData);
+          if (cancelled) return;
+          if ("accessToken" in result && result.accessToken) {
+            enterSession(result);
+            return;
+          }
+          const message = "message" in result ? result.message : "automatic sign-in failed";
+          if (shouldShowLinkedClientError(message)) linkedClientError = `Telegram: ${message}`;
+        }
+
+        const fallbackMaxInitData = preferredMiniAppProvider === "max"
+          ? null
+          : detectMaxMiniAppInitData()?.initData;
+        if (cancelled) return;
+        if (fallbackMaxInitData) {
+          const result = await loginWithMaxMiniApp(fallbackMaxInitData);
+          if (cancelled) return;
+          if ("accessToken" in result && result.accessToken) {
+            enterSession(result);
+            return;
+          }
+          const message = "message" in result ? result.message : "automatic sign-in failed";
+          if (shouldShowLinkedClientError(message)) linkedClientError = `MAX: ${message}`;
+        }
+      }
+
+      if (linkedClientError) {
+        setError(linkedClientError);
       }
       setRestoringSession(false);
     })().catch((err: unknown) => {
@@ -142,7 +275,7 @@ export function LoginForm({ deleted = false, frozen = false, requestedNext = nul
     };
     // Session restoration navigates away; rerun only if the destination changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCapacitorApp, requestedNext, router]);
+  }, [isCapacitorApp, requestedNext, router, preferredMiniAppProvider]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -168,6 +301,11 @@ export function LoginForm({ deleted = false, frozen = false, requestedNext = nul
       }
 
       setStoredSession(data);
+      if (!isCapacitorApp) {
+        void linkMiniAppIdentityAfterLogin(preferredMiniAppProvider).catch((error) => {
+          console.warn("Mini-app link after password login failed:", error);
+        });
+      }
       router.replace(safe);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("client.auth.loginFailed"));

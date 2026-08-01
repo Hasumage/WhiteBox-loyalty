@@ -298,6 +298,7 @@ model User {
   id                          Int           @id @default(autoincrement())
   uuid                        String        @unique @default(uuid())
   telegramId                  BigInt?       @unique
+  maxId                       String?       @unique
   phoneNumber                 String?       @unique
   phoneVerifiedAt             DateTime?
   companyReferralCode         String?       @unique
