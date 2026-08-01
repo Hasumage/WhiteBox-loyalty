@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
+import type { Locale } from "@/lib/i18n/shared";
 import { getAccessToken } from "@/lib/api/auth-client";
 
 const navItems = [
@@ -19,9 +20,28 @@ const navItems = [
   { href: "/settings", labelKey: "client.nav.profile", icon: User },
 ] satisfies Array<{ href: string; labelKey: TranslationKey; icon: LucideIcon; isFab?: boolean }>;
 
+const navLabels: Record<Locale, Partial<Record<TranslationKey, string>>> = {
+  ru: {
+    "client.nav.home": "Главная",
+    "client.nav.map": "Карта",
+    "client.nav.scan": "Скан",
+    "client.nav.history": "История",
+    "client.nav.profile": "Профиль",
+    "client.nav.scanQr": "Сканировать QR",
+  },
+  en: {
+    "client.nav.home": "Home",
+    "client.nav.map": "Map",
+    "client.nav.scan": "Scan",
+    "client.nav.history": "History",
+    "client.nav.profile": "Profile",
+    "client.nav.scanQr": "Scan QR",
+  },
+};
+
 export function BottomNav() {
   const pathname = usePathname();
-  const { t } = useI18n("ru");
+  const { locale, t } = useI18n("ru");
   const [hasSession, setHasSession] = useState(false);
   useEffect(() => {
     const updateSessionState = () => setHasSession(Boolean(getAccessToken()));
@@ -54,7 +74,7 @@ export function BottomNav() {
           <Link
             href="/scan"
             className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-transform active:scale-95 hover:bg-primary/90"
-            aria-label={t("client.nav.scanQr")}
+            aria-label={navLabels[locale]["client.nav.scanQr"] ?? t("client.nav.scanQr")}
           >
             <QrCode className="h-7 w-7" strokeWidth={2.5} />
           </Link>
@@ -96,7 +116,7 @@ export function BottomNav() {
                 <span className="relative">
                   <Icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
                 </span>
-                <span className="relative text-[10px] font-medium">{t(labelKey)}</span>
+                <span className="relative text-[10px] font-medium">{navLabels[locale][labelKey] ?? t(labelKey)}</span>
               </>
             );
 

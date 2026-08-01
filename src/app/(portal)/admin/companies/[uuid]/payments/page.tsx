@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Landmark,
   RefreshCcw,
+  ReceiptText,
   Search,
   WalletCards,
 } from "lucide-react";
@@ -158,6 +159,13 @@ function IncomingPaymentRow({ payment }: { payment: AdminPaymentRow }) {
           <Button asChild variant="secondary" size="sm">
             <a href={payment.confirmationUrl} target="_blank" rel="noreferrer">
               <ExternalLink className="h-4 w-4" />
+            </a>
+          </Button>
+        )}
+        {payment.receiptUrl && (
+          <Button asChild variant="secondary" size="sm">
+            <a href={payment.receiptUrl} target="_blank" rel="noreferrer" title="Чек">
+              <ReceiptText className="h-4 w-4" />
             </a>
           </Button>
         )}

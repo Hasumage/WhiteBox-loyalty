@@ -1,11 +1,12 @@
 jest.mock("@/lib/prisma", () => ({
   prisma: {
-    user: { findUnique: jest.fn(), count: jest.fn() },
+    user: { findUnique: jest.fn(), count: jest.fn(), findMany: jest.fn() },
     company: { count: jest.fn() },
     companyReferral: { findMany: jest.fn() },
+    companyBillingInvoice: { findMany: jest.fn() },
     userSubscription: { count: jest.fn() },
     companyVerificationApplication: { count: jest.fn() },
-    financeOperation: { count: jest.fn() },
+    financeOperation: { count: jest.fn(), findMany: jest.fn() },
     adminTask: { count: jest.fn(), findMany: jest.fn() },
   },
 }));
@@ -38,7 +39,10 @@ describe("admin dashboard route", () => {
     mockedPrisma.user.findUnique.mockResolvedValue({ role: "ADMIN", permissions: [] } as never);
     mockedPrisma.user.count.mockResolvedValueOnce(40).mockResolvedValueOnce(38);
     mockedPrisma.company.count.mockResolvedValue(6);
+    mockedPrisma.user.findMany.mockResolvedValue([]);
     mockedPrisma.companyReferral.findMany.mockResolvedValue([]);
+    mockedPrisma.companyBillingInvoice.findMany.mockResolvedValue([]);
+    mockedPrisma.financeOperation.findMany.mockResolvedValue([]);
     mockedPrisma.userSubscription.count.mockResolvedValue(17);
     mockedPrisma.companyVerificationApplication.count.mockResolvedValue(2);
     mockedPrisma.adminTask.count.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
@@ -105,7 +109,10 @@ describe("admin dashboard route", () => {
       mockedPrisma.companyVerificationApplication.count.mockResolvedValueOnce(0);
       mockedPrisma.adminTask.count.mockReset().mockResolvedValueOnce(0).mockResolvedValueOnce(0);
       mockedPrisma.adminTask.findMany.mockReset().mockResolvedValueOnce([] as never).mockResolvedValueOnce([] as never);
-      mockedPrisma.companyReferral.findMany.mockResolvedValueOnce([]);
+      mockedPrisma.user.findMany.mockResolvedValue([]);
+      mockedPrisma.companyReferral.findMany.mockResolvedValue([]);
+      mockedPrisma.companyBillingInvoice.findMany.mockResolvedValue([]);
+      mockedPrisma.financeOperation.findMany.mockResolvedValue([]);
 
       const response = await GET(new NextRequest("http://localhost/api/admin/dashboard"));
       const body = await response.json();

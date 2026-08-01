@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Bell, CalendarDays, CheckCircle2, Copy, ExternalLink, Lock, LogOut, MapPin, RefreshCw, Send, Shield, ShieldCheck } from "lucide-react";
+import { VkIdLinkButton } from "@/components/auth/VkIdLinkButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -81,6 +82,10 @@ export default function SettingsAccountPage() {
   useEffect(() => {
     setUser(getStoredUser());
     setNotificationPermission(getBrowserNotificationPermission());
+    if (new URLSearchParams(window.location.search).get("vkid") === "linked") {
+      setMessage("VK ID связан с аккаунтом.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
     void (async () => {
       const [profile, telegram] = await Promise.all([getTwaProfile(), getUserTelegramStatus()]);
       setPreferences(profile.preferences);
@@ -479,6 +484,19 @@ export default function SettingsAccountPage() {
                 : t("client.account.telegramPhoneRequest")}
             </Button>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="glass mt-3 border-white/10">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            VK ID
+          </CardTitle>
+          <CardDescription>Свяжите VK ID, чтобы входить без пароля. Email из VK считается подтверждённым.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <VkIdLinkButton next="/settings/account" className="w-full rounded-xl" />
         </CardContent>
       </Card>
 

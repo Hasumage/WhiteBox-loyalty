@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAdminScope } from "@/lib/admin/require-admin-scope";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
+import { getPaymentReceiptUrl } from "@/lib/finance/payment-receipts";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -140,6 +141,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       providerPaymentId: payment.providerPaymentId,
       providerStatus: payment.providerStatus,
       confirmationUrl: payment.confirmationUrl,
+      receiptUrl: getPaymentReceiptUrl(payment),
       paidAt: payment.paidAt?.toISOString() ?? null,
       canceledAt: payment.canceledAt?.toISOString() ?? null,
       createdAt: payment.createdAt.toISOString(),

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { ArrowUpRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -24,6 +24,7 @@ import {
   refreshStoredSession,
   setStoredSession,
   type AuthTokensResponse,
+  vkIdLoginUrl,
 } from "@/lib/api/auth-client";
 import { SESSION_RESTORE_TIMEOUT_MS } from "@/lib/api/fetch-timeout";
 import { useIsCapacitorApp } from "@/lib/capacitor/use-is-capacitor-app";
@@ -175,6 +176,10 @@ export function LoginForm({ deleted = false, frozen = false, requestedNext = nul
     }
   }
 
+  function startVkIdLogin() {
+    window.location.assign(vkIdLoginUrl(requestedNext));
+  }
+
   return (
     <Card className="glass border-white/10">
       <CardHeader>
@@ -275,6 +280,14 @@ export function LoginForm({ deleted = false, frozen = false, requestedNext = nul
         <CardFooter className="flex flex-col gap-3 pt-6">
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? t("client.auth.signingIn") : t("client.auth.signIn")}
+          </Button>
+          <Button
+            type="button"
+            className="w-full bg-[#0077ff] text-white shadow-[0_12px_30px_rgba(0,119,255,0.28)] hover:bg-[#0b83ff]"
+            onClick={startVkIdLogin}
+            disabled={loading}
+          >
+            Войти через VK ID
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             {t("client.auth.noAccount")}{" "}

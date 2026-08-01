@@ -552,7 +552,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       email,
       expiresAt: expiresAt.toISOString(),
     };
-    if (!user || user.accountStatus === "BLOCKED" || !user.passwordHash) {
+    if (!user || user.accountStatus === "BLOCKED") {
       return generic;
     }
 

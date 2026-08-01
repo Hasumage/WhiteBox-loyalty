@@ -2,9 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Building2, Download, LogIn, Menu, Sparkles, X } from "lucide-react";
+import { ArrowRight, Building2, Download, Menu, Sparkles, X } from "lucide-react";
 import { NearLoyLogo } from "@/components/brand/NearLoyLogo";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { MarketingAccountButton } from "@/components/landing/MarketingAccountButton";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { getAccessToken, vkIdLoginUrl } from "@/lib/api/auth-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +20,7 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
   const isBusiness = active === "business";
   const { locale, setLocale } = useI18n("ru");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [vkSheetOpen, setVkSheetOpen] = useState(false);
   const labels =
     locale === "ru"
       ? {
@@ -27,7 +32,6 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
           features: "Возможности",
           contacts: "Контакты",
           downloadApp: "Скачать приложение",
-          signIn: "Войти",
           becomePartner: "Стать партнёром",
           apply: "Подать заявку",
           menuHint: "Навигация по NearLoy",
@@ -41,7 +45,6 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
           features: "Features",
           contacts: "Contacts",
           downloadApp: "Download app",
-          signIn: "Sign in",
           becomePartner: "Become a partner",
           apply: "Apply",
           menuHint: "NearLoy navigation",
@@ -50,14 +53,24 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
   const navItems = [
     { label: labels.users, href: "/", active: active === "users" },
     { label: labels.business, href: "/business", active: active === "business" },
-    // #SubNearloyCode: клиентские подписки скрыты до запуска, поэтому на лендинге ведём в общий блок возможностей.
-    {
-      label: labels.features,
-      href: "#features",
-      sectionId: "features",
-    },
+    { label: labels.features, href: "#features", sectionId: "features" },
     { label: labels.contacts, href: "#contact", sectionId: "contact" },
   ];
+
+  const vkLabels =
+    locale === "ru"
+      ? {
+          title: "Быстрый вход через VK ID",
+          text: "Войдите в NearLoy без пароля: мы откроем VK ID и вернём вас обратно на эту страницу.",
+          primary: "Войти через VK ID",
+          later: "Позже",
+        }
+      : {
+          title: "Quick sign in with VK ID",
+          text: "Sign in to NearLoy without a password: we will open VK ID and bring you back here.",
+          primary: "Sign in with VK ID",
+          later: "Later",
+        };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -77,6 +90,14 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
     };
   }, [menuOpen]);
 
+  useEffect(() => {
+    const seenKey = "nearloy.vkid-auth-sheet.seen.v1";
+    if (getAccessToken() || localStorage.getItem(seenKey)) return;
+    localStorage.setItem(seenKey, "1");
+    const timeoutId = window.setTimeout(() => setVkSheetOpen(true), 850);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
   function handleSectionClick(event: React.MouseEvent<HTMLAnchorElement>, sectionId: string) {
     const target = document.getElementById(sectionId);
     if (!target) return;
@@ -89,6 +110,11 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
   function handleMenuClick(event: React.MouseEvent<HTMLAnchorElement>, sectionId?: string) {
     if (sectionId) handleSectionClick(event, sectionId);
     setMenuOpen(false);
+  }
+
+  function startVkIdLogin() {
+    const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.assign(vkIdLoginUrl(next));
   }
 
   return (
@@ -125,13 +151,7 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
             <div className="hidden lg:block">
               <LanguageSwitcher locale={locale} onChange={(nextLocale) => void setLocale(nextLocale)} />
             </div>
-            <Link
-              href="/login"
-              className="hidden h-11 items-center gap-2 rounded-2xl border border-white/12 bg-white/7 px-4 text-sm font-semibold text-white transition hover:bg-white/12 lg:inline-flex"
-            >
-              <LogIn className="h-4 w-4" />
-              {labels.signIn}
-            </Link>
+            <MarketingAccountButton locale={locale} className="hidden h-11 px-4 lg:inline-flex" />
             <Link
               href={isBusiness ? "/company/register" : "/business"}
               className="hidden h-11 items-center gap-2 rounded-2xl bg-white px-5 text-sm font-semibold text-[#07101e] shadow-[0_0_30px_rgba(255,255,255,0.16)] transition hover:bg-white/90 lg:inline-flex"
@@ -192,19 +212,19 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
                   {labels.menuHint}
                 </p>
                 <nav className="grid gap-2">
-                {navItems.map((item) => (
-                  <Link
-                    key={`${item.label}-${item.href}`}
-                    href={item.href}
-                    onClick={(event) => handleMenuClick(event, item.sectionId)}
-                    className={cn(
-                      "rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-sm font-semibold text-white/70 transition hover:border-cyan-100/30 hover:bg-cyan-200/10 hover:text-white",
-                      item.active && "border-cyan-100/35 bg-cyan-200/12 text-cyan-50",
-                    )}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
+                  {navItems.map((item) => (
+                    <Link
+                      key={`${item.label}-${item.href}`}
+                      href={item.href}
+                      onClick={(event) => handleMenuClick(event, item.sectionId)}
+                      className={cn(
+                        "rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-sm font-semibold text-white/70 transition hover:border-cyan-100/30 hover:bg-cyan-200/10 hover:text-white",
+                        item.active && "border-cyan-100/35 bg-cyan-200/12 text-cyan-50",
+                      )}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
                 </nav>
               </div>
             </div>
@@ -219,14 +239,7 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
                 <Download className="h-4 w-4" />
                 {labels.downloadApp}
               </a>
-              <Link
-                href="/login"
-                onClick={() => setMenuOpen(false)}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/7 px-4 text-sm font-semibold text-white transition hover:bg-white/12"
-              >
-                <LogIn className="h-4 w-4" />
-                {labels.signIn}
-              </Link>
+              <MarketingAccountButton locale={locale} className="h-12 px-4" onClick={() => setMenuOpen(false)} />
               <Link
                 href={isBusiness ? "/company/register" : "/business"}
                 onClick={() => setMenuOpen(false)}
@@ -240,6 +253,35 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
           </aside>
         </div>
       ) : null}
+
+      <Sheet open={vkSheetOpen} onOpenChange={setVkSheetOpen}>
+        <SheetContent side="bottom" className="mx-auto max-w-xl rounded-t-[2rem] border-cyan-100/18 bg-[#050914] p-0 text-white">
+          <SheetHeader className="px-6 pb-2 pt-7 text-left">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0077ff] text-sm font-black text-white shadow-[0_16px_40px_rgba(0,119,255,0.32)]">
+              VK
+            </div>
+            <SheetTitle className="text-2xl text-white">{vkLabels.title}</SheetTitle>
+            <SheetDescription className="text-base leading-7 text-white/62">{vkLabels.text}</SheetDescription>
+          </SheetHeader>
+          <SheetFooter className="grid gap-2 px-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-4 sm:grid-cols-2 sm:space-x-0">
+            <Button
+              type="button"
+              className="h-12 rounded-2xl bg-[#0077ff] text-base font-semibold text-white hover:bg-[#0b83ff]"
+              onClick={startVkIdLogin}
+            >
+              {vkLabels.primary}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 rounded-2xl border-white/12 bg-white/7 text-base font-semibold text-white hover:bg-white/12 hover:text-white"
+              onClick={() => setVkSheetOpen(false)}
+            >
+              {vkLabels.later}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

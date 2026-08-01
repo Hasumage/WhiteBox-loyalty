@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateLandingLeadStatus } from "@/lib/leads/landing-leads";
 import { prisma } from "@/lib/prisma";
+import {
+  createTelegramCustomerLookupCode,
+  isTelegramLookupCodeRequest,
+} from "@/lib/telegram/customer-lookup-code";
 import { answerTelegramCallbackQuery } from "@/lib/telegram/telegram-service";
 import { sendTelegramMessageQueued } from "@/lib/telegram/telegram-queue";
 import {
@@ -266,6 +270,51 @@ async function handleTelegramContact(telegram: TelegramBotRuntime, message: Tele
   return { ok: true, phoneLinked: true };
 }
 
+async function handleTelegramLookupCode(telegram: TelegramBotRuntime, message: TelegramMessage) {
+  if (!isTelegramLookupCodeRequest(message.text)) return { skipped: "not_lookup_code_request" };
+  if (!message.from?.id) return { ok: false, message: "missing_sender" };
+
+  if (message.chat?.type && message.chat.type !== "private") {
+    await reply(telegram, message.chat?.id, "Код клиента можно получить только в личном чате с ботом NearLoy.");
+    return { ok: false, message: "private_chat_required" };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { telegramId: BigInt(message.from.id) },
+    select: { id: true, accountStatus: true },
+  });
+
+  if (!user) {
+    await reply(
+      telegram,
+      message.chat?.id,
+      "Сначала подключите Telegram к аккаунту NearLoy. После этого напишите «код», и я сразу пришлю код для кассы.",
+      nearloyInlineKeyboard(telegram),
+    );
+    return { ok: false, message: "telegram_not_linked" };
+  }
+
+  if (user.accountStatus !== "ACTIVE") {
+    await reply(telegram, message.chat?.id, "Аккаунт NearLoy сейчас не активен. Быстрый код временно недоступен.");
+    return { ok: false, message: "account_not_active" };
+  }
+
+  const lookupCode = await createTelegramCustomerLookupCode(user.id);
+  await reply(
+    telegram,
+    message.chat?.id,
+    [
+      "Ваш код NearLoy для компании:",
+      "",
+      lookupCode.code.split("").join(" "),
+      "",
+      "Код действует 5 минут. Покажите его сотруднику компании вместо QR.",
+    ].join("\n"),
+  );
+
+  return { ok: true, lookupCode: true, expiresAt: lookupCode.expiresAt };
+}
+
 async function handleTelegramLink(telegram: TelegramBotRuntime, message: TelegramMessage) {
   if (!message.from?.id) return { skipped: "not_link_start" };
 
@@ -360,6 +409,8 @@ export async function POST(request: NextRequest) {
     try {
       const contactResult = await handleTelegramContact(telegram, update.message);
       if (!("skipped" in contactResult)) return NextResponse.json(contactResult);
+      const lookupCodeResult = await handleTelegramLookupCode(telegram, update.message);
+      if (!("skipped" in lookupCodeResult)) return NextResponse.json(lookupCodeResult);
       return NextResponse.json(await handleTelegramLink(telegram, update.message));
     } catch {
       await safeReply(

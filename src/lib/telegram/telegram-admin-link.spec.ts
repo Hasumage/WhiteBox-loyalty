@@ -5,6 +5,10 @@ jest.mock("@/lib/prisma", () => ({
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    customerLookupCode: {
+      updateMany: jest.fn(),
+      create: jest.fn(),
+    },
     user: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
     $transaction: jest.fn((operations: unknown[]) => Promise.all(operations)),
   },
@@ -117,5 +121,34 @@ describe("telegram admin link webhook", () => {
         text: expect.stringContaining("Добро пожаловать в NearLoy"),
       }),
     );
+  });
+
+  it("generates a cashier lookup code from a linked Telegram account", async () => {
+    mockedPrisma.user.findUnique.mockResolvedValue({ id: 7, accountStatus: "ACTIVE" } as never);
+    mockedPrisma.customerLookupCode.updateMany.mockResolvedValue({ count: 0 } as never);
+    mockedPrisma.customerLookupCode.create.mockResolvedValue({ id: "lookup-code" } as never);
+
+    const res = await POST(new NextRequest("http://localhost/api/telegram/webhook", {
+      method: "POST",
+      body: JSON.stringify({ message: { text: "дай код", from: { id: 1348887499 }, chat: { id: 1348887499, type: "private" } } }),
+    }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({ ok: true, lookupCode: true });
+    expect(mockedPrisma.customerLookupCode.updateMany).toHaveBeenCalledWith({
+      where: { userId: 7, usedAt: null, expiresAt: { gt: expect.any(Date) } },
+      data: { usedAt: expect.any(Date) },
+    });
+    expect(mockedPrisma.customerLookupCode.create).toHaveBeenCalledWith({
+      data: {
+        userId: 7,
+        codeHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      },
+    });
+    expect(mockedSend).toHaveBeenCalledWith(expect.objectContaining({
+      text: expect.stringContaining("Код действует 5 минут"),
+    }));
   });
 });

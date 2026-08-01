@@ -3,6 +3,12 @@ import type { AdminTaskSource, CompanyReferralPipelineStatus } from "@prisma/cli
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { resolveEffectivePermissions } from "@/lib/admin/access-control";
 import { ACTIVE_ADMIN_TASK_STATUSES, syncAdminTasksFromSignals } from "@/lib/admin/admin-tasks";
+import {
+  canClosePreviousPrMonth,
+  getCompanyReferralMonthlyReport,
+  getCurrentMoscowMonthPeriod,
+  getPreviousMoscowMonthPeriod,
+} from "@/lib/company-referrals/monthly-close";
 import { calculatePlatformRevenueSummary } from "@/lib/finance/platform-revenue";
 import { prisma } from "@/lib/prisma";
 
@@ -150,6 +156,20 @@ export async function GET(request: NextRequest) {
   let prDashboard = null;
   if (seesPr) {
     const seesAllReferrals = actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN";
+    const currentPrPeriod = getCurrentMoscowMonthPeriod();
+    const [monthlyReport, previousMonthReport] = await Promise.all([
+      getCompanyReferralMonthlyReport({
+        scope: seesAllReferrals ? "ALL" : "OWN",
+        userId: seesAllReferrals ? undefined : session.userId,
+        period: currentPrPeriod,
+      }),
+      seesAllReferrals
+        ? getCompanyReferralMonthlyReport({
+            scope: "ALL",
+            period: getPreviousMoscowMonthPeriod(),
+          })
+        : Promise.resolve(null),
+    ]);
     const referralRows = await prisma.companyReferral.findMany({
       where: seesAllReferrals ? {} : { referrerUserId: session.userId },
       orderBy: [{ status: "asc" }, { startedAt: "desc" }],
@@ -161,7 +181,14 @@ export async function GET(request: NextRequest) {
     const referralCompanyIds = referralRows.map((row) => row.companyId);
     const paidInvoices = referralCompanyIds.length
       ? await prisma.companyBillingInvoice.findMany({
-          where: { companyId: { in: referralCompanyIds }, status: "PAID" },
+          where: {
+            companyId: { in: referralCompanyIds },
+            status: "PAID",
+            OR: [
+              { paidAt: { gte: currentPrPeriod.start, lt: currentPrPeriod.end } },
+              { paidAt: null, createdAt: { gte: currentPrPeriod.start, lt: currentPrPeriod.end } },
+            ],
+          },
           select: { companyId: true, paidAmount: true },
         })
       : [];
@@ -185,9 +212,6 @@ export async function GET(request: NextRequest) {
         ];
       }),
     );
-    const prRecognizedGross = [...revenueByCompany.values()].reduce((sum, row) => sum + row.recognizedGross, 0);
-    const prReferralCommission = [...revenueByCompany.values()].reduce((sum, row) => sum + row.referralCommission, 0);
-    const prWhiteBoxCommission = [...revenueByCompany.values()].reduce((sum, row) => sum + row.whiteBoxCommission, 0);
     const pipeline = referralRows.reduce<Record<CompanyReferralPipelineStatus, number>>(
       (acc, row) => {
         acc[row.pipelineStatus] += 1;
@@ -201,12 +225,23 @@ export async function GET(request: NextRequest) {
       totals: {
         companies: referralRows.length,
         activeCompanies: referralRows.filter((row) => row.status === "ACTIVE" && row.company.isActive).length,
-        recognizedGross: Math.round(prRecognizedGross * 100) / 100,
+        recognizedGross: monthlyReport.totals.monthlyGross,
         futureGross: 0,
-        whiteBoxNetCommission: Math.round(prWhiteBoxCommission * 100) / 100,
-        referralCommission: Math.round(prReferralCommission * 100) / 100,
+        whiteBoxNetCommission: Math.round(Math.max(0, monthlyReport.totals.monthlyGross - monthlyReport.totals.monthlyReferralCommission) * 100) / 100,
+        referralCommission: monthlyReport.totals.monthlyReferralCommission,
         supportManagerCommission: 0,
       },
+      month: monthlyReport.period,
+      monthly: monthlyReport,
+      monthlyClose: seesAllReferrals && previousMonthReport
+        ? {
+            canClose: canClosePreviousPrMonth(),
+            period: previousMonthReport.period,
+            totalAmount: previousMonthReport.totals.availableToClose,
+            agentsToClose: previousMonthReport.agents.filter((agent) => agent.availableToClose > 0).length,
+            agents: previousMonthReport.agents,
+          }
+        : null,
       pipeline,
       companies: referralRows.slice(0, 12).map((row) => {
         const revenue = revenueByCompany.get(row.companyId);

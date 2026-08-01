@@ -329,6 +329,7 @@ model User {
   subscriptionBundles                    UserSubscriptionBundle[]
   refreshTokens                          RefreshToken[]
   oauthAccounts                          OAuthAccount[]
+  oauthLoginTickets                      OAuthLoginTicket[]
   favoriteCategories                     UserFavoriteCategory[]
   emailChangeRequests                    EmailChangeRequest[]            @relation("EmailChangeTarget")
   requestedEmailChanges                  EmailChangeRequest[]            @relation("EmailChangeRequester")
@@ -1392,6 +1393,38 @@ model OAuthAccount {
 
   @@unique([provider, providerAccountId])
   @@index([userId])
+}
+
+model OAuthState {
+  id           String    @id @default(cuid())
+  provider     String
+  stateHash    String    @unique
+  codeVerifier String    @db.Text
+  redirectAfter String?
+  linkUserId    Int?
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([provider, expiresAt])
+}
+
+model OAuthLoginTicket {
+  id          String    @id @default(cuid())
+  ticketHash  String    @unique
+  userId      Int
+  provider    String
+  redirectAfter String?
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([provider, expiresAt])
 }
 
 model LoginEvent {

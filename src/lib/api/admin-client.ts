@@ -41,6 +41,7 @@ export type AdminPaymentRow = {
   providerPaymentId: string | null;
   providerStatus: string | null;
   confirmationUrl: string | null;
+  receiptUrl: string | null;
   paidAt: string | null;
   canceledAt: string | null;
   createdAt: string;
@@ -377,6 +378,69 @@ export type AdminDashboardResponse = {
       referralCommission: number;
       supportManagerCommission: number;
     };
+    month: {
+      key: string;
+      startsAt: string;
+      endsAt: string;
+    };
+    monthly: {
+      period: {
+        key: string;
+        startsAt: string;
+        endsAt: string;
+      };
+      totals: {
+        agents: number;
+        companies: number;
+        activeCompanies: number;
+        monthlyGross: number;
+        monthlyReferralCommission: number;
+        closedAmount: number;
+        paidAmount: number;
+        pendingAmount: number;
+        availableToClose: number;
+      };
+      agents?: Array<{
+        userId: number;
+        uuid: string;
+        name: string;
+        email: string;
+        referralCode: string | null;
+        companies: number;
+        activeCompanies: number;
+        monthlyGross: number;
+        monthlyReferralCommission: number;
+        closedAmount: number;
+        paidAmount: number;
+        pendingAmount: number;
+        availableToClose: number;
+      }>;
+    };
+    monthlyClose: null | {
+      canClose: boolean;
+      period: {
+        key: string;
+        startsAt: string;
+        endsAt: string;
+      };
+      totalAmount: number;
+      agentsToClose: number;
+      agents: Array<{
+        userId: number;
+        uuid: string;
+        name: string;
+        email: string;
+        referralCode: string | null;
+        companies: number;
+        activeCompanies: number;
+        monthlyGross: number;
+        monthlyReferralCommission: number;
+        closedAmount: number;
+        paidAmount: number;
+        pendingAmount: number;
+        availableToClose: number;
+      }>;
+    };
     pipeline: Record<AdminCompanyReferralPipelineStatus, number>;
     companies: Array<{
       uuid: string;
@@ -398,6 +462,20 @@ export type AdminDashboardResponse = {
   };
   trend: Array<{ date: string; events: number }>;
   tasks: AdminTaskRow[];
+};
+
+export type AdminPrMonthlyCloseResponse = {
+  period: { key: string; startsAt: string; endsAt: string };
+  generated: number;
+  skippedExisting: number;
+  totalAmount: number;
+  operations: Array<{
+    uuid: string;
+    amount: number;
+    status: string;
+    createdAt: string;
+    created: boolean;
+  }>;
 };
 
 export type AdminCompanyVerificationStatus = "DRAFT" | "SUBMITTED" | "REVIEWING" | "APPROVED" | "REJECTED";
@@ -2574,6 +2652,18 @@ export async function adminGetDashboard() {
     return { ok: false as const, message: data.message ?? "Failed to fetch dashboard" };
   }
   return { ok: true as const, data: (await res.json()) as AdminDashboardResponse };
+}
+
+export async function adminClosePrMonth() {
+  const res = await fetchWithAuthRecovery("/api/admin/pr/monthly-close", {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { ok: false as const, message: data.message ?? "Failed to close PR month" };
+  }
+  return { ok: true as const, data: data as AdminPrMonthlyCloseResponse };
 }
 
 export async function adminGetAiMeta() {

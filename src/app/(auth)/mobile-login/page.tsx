@@ -22,6 +22,7 @@ import {
   login,
   refreshStoredSession,
   setStoredSession,
+  vkIdLoginUrl,
 } from "@/lib/api/auth-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
@@ -143,6 +144,10 @@ export default function MobileLoginPage() {
     }
   }
 
+  function startVkIdLogin() {
+    window.location.assign(vkIdLoginUrl(readSafeNext() ?? "/app?app=capacitor"));
+  }
+
   return (
     <Card className="glass border-white/10">
       <CardHeader>
@@ -219,6 +224,14 @@ export default function MobileLoginPage() {
         <CardFooter className="flex flex-col gap-3 pt-8">
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? text.submitting : text.submit}
+          </Button>
+          <Button
+            type="button"
+            className="w-full bg-[#0077ff] text-white shadow-[0_12px_30px_rgba(0,119,255,0.28)] hover:bg-[#0b83ff]"
+            disabled={loading}
+            onClick={startVkIdLogin}
+          >
+            Войти через VK ID
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             {text.noAccount}{" "}
