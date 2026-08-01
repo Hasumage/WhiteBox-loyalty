@@ -1,7 +1,7 @@
-import { createHash, randomInt } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 
-const CUSTOMER_LOOKUP_CODE_TTL_MS = 5 * 60 * 1000;
+const CUSTOMER_LOOKUP_CODE_TTL_MS = 15 * 60 * 1000;
 const CUSTOMER_LOOKUP_PHRASES = new Set([
   "/code",
   "/kod",
@@ -49,6 +49,21 @@ export function isTelegramLookupCodeRequest(text: string | undefined) {
 
 export async function createTelegramCustomerLookupCode(userId: number) {
   const now = new Date();
+  const activeRows = await prisma.$queryRaw<Array<{ code: string | null; expiresAt: Date }>>`
+    SELECT "code", "expiresAt"
+    FROM "CustomerLookupCode"
+    WHERE "userId" = ${userId}
+      AND "usedAt" IS NULL
+      AND "expiresAt" > ${now}
+      AND "code" IS NOT NULL
+    ORDER BY "expiresAt" DESC
+    LIMIT 1
+  `;
+  const activeCode = activeRows[0] ?? null;
+  if (activeCode?.code) {
+    return { code: activeCode.code, expiresAt: activeCode.expiresAt };
+  }
+
   const expiresAt = new Date(now.getTime() + CUSTOMER_LOOKUP_CODE_TTL_MS);
 
   await prisma.customerLookupCode.updateMany({
@@ -59,14 +74,22 @@ export async function createTelegramCustomerLookupCode(userId: number) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = randomInt(0, 100_000).toString().padStart(5, "0");
     try {
-      await prisma.customerLookupCode.create({
-        data: { userId, codeHash: customerLookupHash(code), expiresAt },
-      });
+      await prisma.$executeRaw`
+        INSERT INTO "CustomerLookupCode" ("id", "userId", "code", "codeHash", "expiresAt", "createdAt")
+        VALUES (${randomUUID()}, ${userId}, ${code}, ${customerLookupHash(code)}, ${expiresAt}, ${now})
+      `;
       return { code, expiresAt };
     } catch (error) {
-      if ((error as { code?: string }).code !== "P2002") throw error;
+      const prismaError = error as { code?: string };
+      if (prismaError.code !== "P2002" && !isUniqueViolation(error)) throw error;
     }
   }
 
   throw new Error("CUSTOMER_LOOKUP_CODE_GENERATION_FAILED");
+}
+
+function isUniqueViolation(error: unknown) {
+  const prismaError = error as { code?: string };
+  const message = error instanceof Error ? error.message : String(error);
+  return prismaError.code === "P2002" || message.includes("CustomerLookupCode_codeHash_key");
 }

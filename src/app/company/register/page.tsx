@@ -39,7 +39,7 @@ const copy = {
     badge: "Ручная проверка",
     title: "Регистрация компании в NearLoy",
     intro:
-      "Company-доступ выдается только проверенным партнерам. На старте мы просим только универсальные данные для заявки, а условия выплат и договорные поля подключим позже под конкретный тип бизнеса.",
+      "Company-доступ открывается сразу. Данные проверки сохраняются отдельно и не блокируют рабочие инструменты компании.",
     cards: [
       [Building2, "Самозанятый", "ФИО, ИНН и контакт для первичной проверки. Реквизиты запросим отдельно, если они понадобятся."],
       [Landmark, "ИП", "ФИО, ИНН и описание бизнеса. ОГРНИП, банк и договорные поля не тащим в заявку заранее."],
@@ -61,7 +61,7 @@ const copy = {
     password: "Пароль для кабинета",
     passwordConfirm: "Повторите пароль",
     accountHint:
-      "Мы сразу создадим учетную запись Company. После проверки она станет владельцем компании, а позже сюда можно будет добавлять сотрудников.",
+      "Мы сразу создадим учётную запись Company и назначим её владельцем компании, а позже сюда можно будет добавлять сотрудников.",
     companyName: "Название компании или проекта",
     businessCategory: "Что продаете / сфера бизнеса",
     legalHint:
@@ -78,7 +78,7 @@ const copy = {
     verifyLater: "Пропустить проверку",
     verifyLaterText: "Кабинет будет создан сразу, а проверку можно пройти позже в разделе верификации.",
     verifyDeferredTitle: "Проверка отложена",
-    verifyDeferredText: "Вы сможете настроить компанию и оплатить подписку. Вывод средств будет доступен после проверки.",
+    verifyDeferredText: "Вы сможете настроить компанию, подключить инструменты и вернуться к проверке позже.",
     passportSeries: "Серия паспорта",
     passportNumber: "Номер паспорта",
     passportIssuedBy: "Кем выдан",
@@ -95,7 +95,7 @@ const copy = {
     sending: "Отправляем...",
     submit: "Отправить на проверку",
     submitDeferred: "Создать кабинет",
-    success: "Заявка отправлена. Мы свяжемся после ручной проверки.",
+    success: "Кабинет компании создан. Данные проверки сохранены для ручного просмотра.",
     error: "Не удалось отправить заявку.",
     stepBlocked: "Заполните обязательные поля текущего шага, чтобы идти дальше.",
     ageBlocked: "Партнерский кабинет доступен только с 16 лет.",
@@ -106,7 +106,7 @@ const copy = {
     badge: "Manual verification",
     title: "Register a company in NearLoy",
     intro:
-      "Company access is issued only to verified partners. We collect only universal application details first; payout and contract fields will be added later per business type.",
+      "Company access opens immediately. Verification data is saved separately and does not block workspace tools.",
     cards: [
       [Building2, "Self-employed", "Legal name, tax ID and contact details for the first review. Payout details are requested separately if needed."],
       [Landmark, "Individual entrepreneur", "Legal name, tax ID and business description. Registration and bank fields are not requested upfront."],
@@ -128,7 +128,7 @@ const copy = {
     password: "Account password",
     passwordConfirm: "Repeat password",
     accountHint:
-      "We will create a Company account immediately. After review, it becomes the company owner and later can invite employees.",
+      "We will create a Company account immediately and assign it as the company owner. Employees can be invited later.",
     companyName: "Company or project name",
     businessCategory: "What do you sell / business area",
     legalHint:
@@ -145,7 +145,7 @@ const copy = {
     verifyLater: "Skip verification",
     verifyLaterText: "Create the workspace now and complete verification later from the company cabinet.",
     verifyDeferredTitle: "Verification deferred",
-    verifyDeferredText: "You can set up the company and pay for access. Payouts become available after verification.",
+    verifyDeferredText: "You can set up the company, enable tools and return to verification later.",
     passportSeries: "Passport series",
     passportNumber: "Passport number",
     passportIssuedBy: "Issued by",
@@ -162,7 +162,7 @@ const copy = {
     sending: "Sending...",
     submit: "Submit verification",
     submitDeferred: "Create workspace",
-    success: "Verification request submitted. We will contact you after manual review.",
+    success: "Company workspace created. Verification data is saved for manual review.",
     error: "Failed to submit request.",
     stepBlocked: "Fill in the required fields on this step before moving forward.",
     ageBlocked: "Company access is available only from age 16.",

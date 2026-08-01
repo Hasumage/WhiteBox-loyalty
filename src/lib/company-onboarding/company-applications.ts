@@ -315,7 +315,7 @@ export async function createCompanyVerificationApplication(params: {
         description: `Pending verification: ${params.payload.businessCategory}`,
         categoryId: category.id,
         ...supportManager,
-        isActive: false,
+        isActive: true,
         ownerUserId: user.id,
         employmentType: params.payload.employmentType,
         identityVerificationMode: params.payload.identityVerificationMode,

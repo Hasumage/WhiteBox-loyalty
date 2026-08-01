@@ -174,7 +174,7 @@ export default function CompanyCompliancePage() {
                     )}
                     {application?.status === "APPROVED" && !isVerified && (
                       <p className="mt-3 text-sm text-emerald-100">
-                        Тестовый доступ одобрен. Для подписок и выплат завершите полную проверку.
+                        Тестовый доступ одобрен. Данные проверки сохранены, а инструменты компании остаются доступны.
                       </p>
                     )}
                   </div>

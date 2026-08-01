@@ -308,7 +308,7 @@ async function handleTelegramLookupCode(telegram: TelegramBotRuntime, message: T
       "",
       lookupCode.code.split("").join(" "),
       "",
-      "Код действует 5 минут. Покажите его сотруднику компании вместо QR.",
+      "Код действует 15 минут. Покажите его сотруднику компании вместо QR.",
     ].join("\n"),
   );
 
@@ -416,9 +416,9 @@ export async function POST(request: NextRequest) {
       await safeReply(
         telegram,
         update.message.chat?.id,
-        "Не удалось обработать привязку Telegram. Создайте новую ссылку в NearLoy и попробуйте ещё раз.",
+        "Не удалось обработать сообщение. Попробуйте ещё раз позже или откройте NearLoy.",
       );
-      return NextResponse.json({ ok: false, message: "telegram_message_processing_failed" }, { status: 500 });
+      return NextResponse.json({ ok: false, message: "telegram_message_processing_failed" });
     }
   }
 

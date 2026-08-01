@@ -902,6 +902,7 @@ model TelegramLinkToken {
 model CustomerLookupCode {
   id        String    @id @default(cuid())
   codeHash  String    @unique
+  code      String?   @db.VarChar(5)
   userId    Int
   expiresAt DateTime
   usedAt    DateTime?

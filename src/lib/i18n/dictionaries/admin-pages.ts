@@ -1198,7 +1198,7 @@ export const adminPagesDictionary = {
     "admin.verifications.detail.kycAction.VIEW_PHOTO": "Фото паспорта просмотрено",
     "admin.verifications.detail.kycAction.DELETE_PHOTO": "Фото паспорта удалено",
     "admin.verifications.detail.payoutDetails": "Данные выплат",
-    "admin.verifications.detail.payoutDeferred": "Отложено. Поля выплат зависят от типа бизнеса и будут запрошены после проверки.",
+    "admin.verifications.detail.payoutDeferred": "Отложено. Поля выплат зависят от типа бизнеса и могут быть заполнены позже.",
     "admin.verifications.detail.reviewedAt": "Проверено",
     "admin.verifications.detail.auditTrail": "История проверки",
     "admin.verifications.detail.hide": "Скрыть",

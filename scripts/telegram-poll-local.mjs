@@ -200,9 +200,9 @@ async function main() {
         console.log(`Processed ${update.update_id}: ${text} -> ${JSON.stringify(result)}`);
       } catch (error) {
         console.error(`[poll] Local webhook failed for update ${update.update_id}: ${errorMessage(error)}`);
+        offset = update.update_id + 1;
         if (once) throw error;
         await sleep(retryDelayMs);
-        break;
       }
     }
 
