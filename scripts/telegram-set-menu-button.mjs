@@ -13,11 +13,12 @@ if (!token) throw new Error(`${isDevBot ? "TELEGRAM_DEV_BOT_TOKEN" : "TELEGRAM_B
 
 function nearloyWebAppUrl(path = "/app") {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const loginPath = `/login?${new URLSearchParams({ surface: "telegram", next: normalizedPath }).toString()}`;
   try {
     const url = new URL(webAppUrl);
-    return new URL(normalizedPath, url.origin).toString();
+    return new URL(loginPath, url.origin).toString();
   } catch {
-    return `${webAppUrl.replace(/\/$/, "")}${normalizedPath}`;
+    return `${webAppUrl.replace(/\/$/, "")}${loginPath}`;
   }
 }
 

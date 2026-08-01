@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
 import { DeleteAccountDialog } from "@/components/settings/DeleteAccountDialog";
+import { AccountConnectionsPanel } from "@/components/settings/AccountConnectionsPanel";
 import { clearStoredSession, getStoredUser, type StoredUser } from "@/lib/api/auth-client";
 import {
   createUserTelegramLink,
@@ -370,6 +371,8 @@ export default function SettingsAccountPage() {
         </CardContent>
       </Card>
 
+      {false && (
+      <>
       <Card className="glass mt-3 overflow-hidden border-white/10">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -392,12 +395,12 @@ export default function SettingsAccountPage() {
                   </p>
                   <p className="mt-2 text-xs text-emerald-50/65">
                     {t("client.account.telegramConnectedId")}:{" "}
-                    <span className="font-semibold text-emerald-50">{maskTelegramId(telegramStatus.telegramId)}</span>
+                    <span className="font-semibold text-emerald-50">{maskTelegramId(telegramStatus?.telegramId)}</span>
                   </p>
                   <p className="mt-1 text-xs text-emerald-50/65">
                     {t("client.account.telegramPhone")}:{" "}
                     <span className="font-semibold text-emerald-50">
-                      {telegramStatus.phoneNumber ?? t("client.account.telegramPhoneMissing")}
+                      {telegramStatus?.phoneNumber ?? t("client.account.telegramPhoneMissing")}
                     </span>
                   </p>
                 </div>
@@ -418,20 +421,20 @@ export default function SettingsAccountPage() {
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/45">
                   {t("client.account.telegramDeepLink")}
                 </p>
-                <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-cyan-50/90">{telegramLink.deepLink}</p>
+                <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-cyan-50/90">{telegramLink?.deepLink}</p>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/35 px-3 py-2">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/45">
                   {t("client.account.telegramStartCommand")}
                 </p>
                 <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-white/90">
-                  /start link_{telegramLink.token}
+                  /start link_{telegramLink?.token}
                 </p>
               </div>
               <p className="text-xs leading-relaxed text-cyan-50/70">{t("client.account.telegramManualHint")}</p>
               <div className="grid gap-2 sm:grid-cols-3">
                 <Button asChild size="sm" className="rounded-xl">
-                  <a href={telegramLink.deepLink} target="_blank" rel="noreferrer">
+                  <a href={telegramLink?.deepLink ?? "#"} target="_blank" rel="noreferrer">
                     <ExternalLink className="mr-2 h-4 w-4 shrink-0" />
                     <span className="truncate">{t("client.account.telegramOpenBot")}</span>
                   </a>
@@ -479,7 +482,7 @@ export default function SettingsAccountPage() {
               onClick={requestPhoneBinding}
             >
               <Send className="mr-2 h-4 w-4" />
-              {telegramStatus.phoneNumber
+              {telegramStatus?.phoneNumber
                 ? t("client.account.telegramPhoneRefresh")
                 : t("client.account.telegramPhoneRequest")}
             </Button>
@@ -499,6 +502,10 @@ export default function SettingsAccountPage() {
           <VkIdLinkButton next="/settings/account" className="w-full rounded-xl" />
         </CardContent>
       </Card>
+      </>
+      )}
+
+      <AccountConnectionsPanel next="/settings/account" className="mt-3" />
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <Button type="button" variant="secondary" className="glass border-white/10" onClick={() => setPasswordOpen(true)}>

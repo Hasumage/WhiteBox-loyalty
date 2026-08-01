@@ -41,7 +41,7 @@ export async function askAdminAiOpenAi(params: {
   context: AdminAiOpenAiContextItem[];
   imageDataUrl?: string;
 }) {
-  const model = process.env.OPENAI_ADMIN_ASSISTANT_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-5.4-nano";
+  const model = process.env.OPENAI_ADMIN_ASSISTANT_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
   const maxOutputTokens = Math.min(
     1000,
     Math.max(260, Number(process.env.OPENAI_ADMIN_ASSISTANT_MAX_OUTPUT_TOKENS ?? 680)),
@@ -120,7 +120,10 @@ export async function askAdminAiOpenAi(params: {
       code?: string;
     } | null;
     const providerCode = errorPayload?.error?.code ?? errorPayload?.code;
-    throw new Error(`AI request failed (${response.status}${providerCode ? `: ${providerCode}` : ""}).`);
+    const providerMessage = errorPayload?.error && "message" in errorPayload.error ? String(errorPayload.error.message ?? "") : "";
+    throw new Error(
+      `AI request failed (${response.status}${providerCode ? `: ${providerCode}` : ""}${providerMessage ? `: ${providerMessage}` : ""}).`,
+    );
   }
   const payload = (await response.json().catch(() => null)) as {
     output_text?: string;

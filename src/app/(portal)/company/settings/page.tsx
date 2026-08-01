@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Building2, Check, Copy, ExternalLink, Globe2, Link2, Loader2, MapPinned, Power, RotateCcw, Save, Settings2, Share2, Sparkles, Tags } from "lucide-react";
 import { VkIdLinkButton } from "@/components/auth/VkIdLinkButton";
+import { AccountConnectionsPanel } from "@/components/settings/AccountConnectionsPanel";
 import { CategoryMultiSelect } from "@/components/ui/category-multi-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -200,6 +201,9 @@ export default function CompanySettingsPage() {
         <p className="mt-2 text-sm text-muted-foreground">Публичное название, описание, категории и формат обслуживания клиентов.</p>
       </header>
       {(error || message) && <div className={`rounded-2xl border p-4 text-sm ${error ? "border-red-300/20 bg-red-400/10 text-red-100" : "border-cyan-300/20 bg-cyan-300/[0.06] text-cyan-50"}`}>{error || message}</div>}
+      <AccountConnectionsPanel next="/company/settings" />
+
+      {false && (
       <Card className="glass border-white/10">
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -209,6 +213,7 @@ export default function CompanySettingsPage() {
           <VkIdLinkButton next="/company/settings" className="w-full sm:w-auto" />
         </CardContent>
       </Card>
+      )}
       <Card className="glass border-white/10 py-0">
         <CardContent className="space-y-6 p-5 sm:p-6">
           <div className="grid gap-4 lg:grid-cols-2">

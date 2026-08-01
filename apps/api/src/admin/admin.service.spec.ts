@@ -1105,7 +1105,7 @@ describe("AdminService", () => {
       managedCompany: {
         id: 44,
         categoryId: 2,
-        identityVerificationCompleted: true,
+        identityVerificationCompleted: false,
         categories: [],
         levelRules: [],
       },

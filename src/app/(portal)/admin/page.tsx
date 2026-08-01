@@ -78,15 +78,15 @@ function priorityTone(priority: AdminTaskPriority) {
 function MetricCard({ icon: Icon, label, value, hint }: { icon: DashboardIcon; label: string; value: number | string; hint: string }) {
   return (
     <Card className="overflow-hidden border-white/10 bg-white/[0.045]">
-      <CardContent className="relative flex min-h-32 items-start justify-between gap-4 p-5">
+      <CardContent className="relative flex min-h-24 items-start justify-between gap-3 p-3 sm:min-h-32 sm:gap-4 sm:p-5">
         <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-cyan-300/[0.08] blur-3xl" />
-        <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">{label}</p>
-          <p className="mt-3 text-4xl font-semibold tracking-tight">{value}</p>
-          <p className="mt-2 text-xs leading-5 text-muted-foreground">{hint}</p>
+        <div className="relative min-w-0">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.22em]">{label}</p>
+          <p className="mt-2 text-2xl font-semibold tracking-tight sm:mt-3 sm:text-4xl">{value}</p>
+          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground sm:mt-2 sm:text-xs sm:leading-5">{hint}</p>
         </div>
-        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/15 bg-cyan-300/[0.08] text-cyan-100">
-          <Icon className="h-5 w-5" />
+        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-200/15 bg-cyan-300/[0.08] text-cyan-100 sm:h-12 sm:w-12 sm:rounded-2xl">
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
         </span>
       </CardContent>
     </Card>
@@ -145,15 +145,16 @@ export default function AdminPortalPage() {
   const metrics = dashboard?.metrics;
 
   return (
-    <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_12%_10%,rgba(103,232,249,0.17),transparent_32%),radial-gradient(circle_at_90%_90%,rgba(52,211,153,0.12),transparent_32%),linear-gradient(135deg,rgba(255,255,255,0.075),rgba(255,255,255,0.025))] p-6 lg:p-8">
+    <div className="space-y-4 sm:space-y-6">
+      <section className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-[radial-gradient(circle_at_12%_10%,rgba(103,232,249,0.17),transparent_32%),radial-gradient(circle_at_90%_90%,rgba(52,211,153,0.12),transparent_32%),linear-gradient(135deg,rgba(255,255,255,0.075),rgba(255,255,255,0.025))] p-4 sm:rounded-[2rem] sm:p-6 lg:p-8">
         <div className="relative z-10 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-3">
             <Badge variant="outline" className="border-cyan-200/25 bg-cyan-300/10 px-3 py-1 text-cyan-100">
               <BellRing className="h-3.5 w-3.5" /> {t("admin.dashboard.badge")}
             </Badge>
-            <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">{t("admin.dashboard.title")}</h1>
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">{t("admin.dashboard.description")}</p>
+            <h1 className="max-w-3xl text-2xl font-semibold tracking-tight sm:text-4xl">
+              {locale === "ru" ? "Дашборд" : "Dashboard"}
+            </h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {dashboard?.generatedAt && (
@@ -170,7 +171,7 @@ export default function AdminPortalPage() {
 
       {error && <div className="rounded-2xl border border-red-300/25 bg-red-300/10 p-4 text-sm text-red-100">{error}</div>}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-4">
         <MetricCard icon={Users} label={t("admin.dashboard.activeUsers")} value={metrics?.usersActive ?? 0} hint={`${metrics?.usersTotal ?? 0} ${t("admin.dashboard.totalAccounts")}`} />
         <MetricCard icon={Building2} label={t("admin.dashboard.activeCompanies")} value={metrics?.companiesActive ?? 0} hint={`${metrics?.subscriptionsActive ?? 0} ${t("admin.dashboard.activeSubscriptions")}`} />
         <MetricCard icon={ClipboardCheck} label={t("admin.dashboard.pendingVerifications")} value={metrics?.verificationOpen ?? 0} hint={t("admin.dashboard.pendingVerificationsHint")} />
@@ -178,7 +179,7 @@ export default function AdminPortalPage() {
       </section>
 
       {dashboard?.permittedSources.includes("FINANCE") && (
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-4">
           <MetricCard
             icon={Landmark}
             label={t("admin.dashboard.whiteBoxRevenue")}
@@ -207,16 +208,16 @@ export default function AdminPortalPage() {
       )}
       {dashboard?.pr && <AdminPrCompactCard dashboard={dashboard.pr} locale={locale} />}
 
-      <section className="grid gap-6 xl:grid-cols-[1.42fr_0.9fr]">
+      <section className="grid gap-4 sm:gap-6 xl:grid-cols-[1.42fr_0.9fr]">
         <Card className="overflow-hidden border-white/10 bg-card/70">
-          <CardHeader className="border-b border-white/10 bg-white/[0.025] px-6 py-5">
+          <CardHeader className="border-b border-white/10 bg-white/[0.025] px-4 py-4 sm:px-6 sm:py-5">
             <CardTitle className="flex items-center gap-3 text-lg">
               <ListChecks className="h-5 w-5 text-cyan-100" />
               {t("admin.dashboard.queueTitle")}
             </CardTitle>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{t("admin.dashboard.queueDescription")}</p>
           </CardHeader>
-          <CardContent className="space-y-3 p-5">
+          <CardContent className="space-y-3 p-4 sm:p-5">
             {loading ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-6 text-muted-foreground">{t("admin.common.loading")}</div>
             ) : dashboard?.tasks.length ? (

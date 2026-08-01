@@ -162,7 +162,7 @@ describe("telegram webhook phone binding", () => {
         replyMarkup: expect.objectContaining({
           keyboard: [
             [expect.objectContaining({ request_contact: true })],
-            [expect.objectContaining({ web_app: { url: "https://nearloy.up.railway.app/app" } })],
+            [expect.objectContaining({ web_app: { url: "https://nearloy.up.railway.app/login?surface=telegram&next=%2Fapp" } })],
           ],
         }),
       }),
@@ -239,8 +239,8 @@ describe("telegram webhook phone binding", () => {
         text: expect.stringContaining("Добро пожаловать в NearLoy"),
         replyMarkup: {
           inline_keyboard: [
-            [{ text: "Открыть NearLoy", web_app: { url: "https://nearloy.up.railway.app/app" } }],
-            [{ text: "Помощь", web_app: { url: "https://nearloy.up.railway.app/help" } }],
+            [{ text: "Открыть NearLoy", web_app: { url: "https://nearloy.up.railway.app/login?surface=telegram&next=%2Fapp" } }],
+            [{ text: "Помощь", web_app: { url: "https://nearloy.up.railway.app/login?surface=telegram&next=%2Fhelp" } }],
           ],
         },
       }),
@@ -282,7 +282,7 @@ describe("telegram webhook phone binding", () => {
         replyMarkup: expect.objectContaining({
           keyboard: [
             [expect.objectContaining({ request_contact: true })],
-            [expect.objectContaining({ web_app: { url: "https://nearloy.up.railway.app/app" } })],
+            [expect.objectContaining({ web_app: { url: "https://nearloy.up.railway.app/login?surface=telegram&next=%2Fapp" } })],
           ],
         }),
       }),
@@ -313,7 +313,7 @@ describe("telegram webhook phone binding", () => {
       expect.objectContaining({
         text: expect.stringContaining("Ссылка NearLoy устарела"),
         replyMarkup: {
-          inline_keyboard: [[{ text: "Открыть NearLoy", web_app: { url: "https://nearloy.up.railway.app/app" } }]],
+          inline_keyboard: [[{ text: "Открыть NearLoy", web_app: { url: "https://nearloy.up.railway.app/login?surface=telegram&next=%2Fapp" } }]],
         },
       }),
     );
@@ -347,4 +347,5 @@ describe("telegram webhook phone binding", () => {
     );
   });
 });
+
 

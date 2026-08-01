@@ -467,14 +467,14 @@ export default function CompanyClientsPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-4 sm:space-y-5">
+      <header className="grid gap-4 xl:flex xl:items-end xl:justify-between">
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">Клиентская база</p>
-          <h1 className="text-3xl font-semibold">Клиенты компании</h1>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100 sm:text-xs sm:tracking-[0.24em]">Клиентская база</p>
+          <h1 className="text-2xl font-semibold sm:text-3xl">Клиенты компании</h1>
           <p className="mt-2 text-sm text-muted-foreground">Все клиенты, сегменты, балансы и быстрый переход в кассовую карточку.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <Button
             variant={workspaceMode === "registry" ? "default" : "secondary"}
             onClick={() => {
@@ -498,7 +498,7 @@ export default function CompanyClientsPage() {
               setWorkspaceMode("cashier");
               void startScanner();
             }}
-            className="rounded-xl"
+            className="col-span-2 rounded-xl sm:col-span-1"
           >
             <Camera /> Сканировать QR
           </Button>
@@ -506,44 +506,44 @@ export default function CompanyClientsPage() {
       </header>
 
       <Card className="glass overflow-hidden border-cyan-300/15 bg-cyan-300/[0.025] py-0">
-        <CardContent className="space-y-5 p-5">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Всего</span>
+        <CardContent className="space-y-4 p-4 sm:space-y-5 sm:p-5">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
+              <div className="mb-2 flex items-center justify-between sm:mb-3">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.2em]">Всего</span>
                 <UsersRound className="h-5 w-5 text-cyan-100" />
               </div>
-              <p className="text-3xl font-semibold">{registryStats.all}</p>
-              <p className="mt-1 text-sm text-muted-foreground">клиентов в базе</p>
+              <p className="text-2xl font-semibold sm:text-3xl">{registryStats.all}</p>
+              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">клиентов в базе</p>
             </div>
-            <div className="rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.04] p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Активные</span>
+            <div className="rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.04] p-3 sm:p-4">
+              <div className="mb-2 flex items-center justify-between sm:mb-3">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.2em]">Активные</span>
                 <Clock3 className="h-5 w-5 text-emerald-100" />
               </div>
-              <p className="text-3xl font-semibold">{registryStats.active}</p>
-              <p className="mt-1 text-sm text-muted-foreground">были недавно</p>
+              <p className="text-2xl font-semibold sm:text-3xl">{registryStats.active}</p>
+              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">были недавно</p>
             </div>
-            <div className="rounded-2xl border border-violet-300/15 bg-violet-300/[0.04] p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">VIP</span>
+            <div className="rounded-2xl border border-violet-300/15 bg-violet-300/[0.04] p-3 sm:p-4">
+              <div className="mb-2 flex items-center justify-between sm:mb-3">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.2em]">VIP</span>
                 <Sparkles className="h-5 w-5 text-violet-100" />
               </div>
-              <p className="text-3xl font-semibold">{registryStats.vip}</p>
-              <p className="mt-1 text-sm text-muted-foreground">ценные клиенты</p>
+              <p className="text-2xl font-semibold sm:text-3xl">{registryStats.vip}</p>
+              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">ценные клиенты</p>
             </div>
-            <div className="rounded-2xl border border-amber-300/15 bg-amber-300/[0.035] p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Баланс</span>
+            <div className="rounded-2xl border border-amber-300/15 bg-amber-300/[0.035] p-3 sm:p-4">
+              <div className="mb-2 flex items-center justify-between sm:mb-3">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.2em]">Баланс</span>
                 <WalletCards className="h-5 w-5 text-amber-100" />
               </div>
-              <p className="text-3xl font-semibold">{registryStats.totalBalance.toLocaleString("ru-RU")}</p>
-              <p className="mt-1 text-sm text-muted-foreground">баллов на руках</p>
+              <p className="text-2xl font-semibold sm:text-3xl">{registryStats.totalBalance.toLocaleString("ru-RU")}</p>
+              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">баллов на руках</p>
             </div>
           </div>
 
           <form
-            className="grid gap-3 xl:grid-cols-[1fr_220px_150px_auto]"
+            className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_220px_150px_auto]"
             onSubmit={(event) => {
               event.preventDefault();
               void loadRegistry({ page: 1 });
@@ -587,14 +587,14 @@ export default function CompanyClientsPage() {
             </Button>
           </form>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
             {registrySegments.map((segment) => (
               <button
                 key={segment.value}
                 type="button"
                 onClick={() => void loadRegistry({ segment: segment.value, page: 1 })}
                 className={cn(
-                  "rounded-full border px-4 py-2 text-sm font-semibold transition",
+                  "shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition",
                   registrySegment === segment.value
                     ? "border-cyan-200/60 bg-cyan-200/15 text-cyan-50"
                     : "border-white/10 bg-white/[0.035] text-muted-foreground hover:border-cyan-200/30 hover:text-foreground",
@@ -675,21 +675,21 @@ export default function CompanyClientsPage() {
                   key={client.uuid}
                   type="button"
                   onClick={() => void openClient(client.uuid)}
-                  className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-left"
+                  className="rounded-2xl border border-white/10 bg-white/[0.025] p-3 text-left"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-semibold">{client.name}</p>
                       <p className="truncate text-xs text-muted-foreground">{client.email || shortUuid(client.uuid)}</p>
                     </div>
-                    <Badge variant="outline" className="shrink-0">{client.balance} баллов</Badge>
+                    <Badge variant="outline" className="shrink-0 text-[11px]">{client.balance} баллов</Badge>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {segmentBadges(client).slice(0, 3).map((label) => (
                       <Badge key={label} variant="outline" className="rounded-full text-[11px]">{label}</Badge>
                     ))}
                   </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
                     <span>Покупки: <b className="text-foreground">{formatMoney(client.totalSpend)}</b></span>
                     <span>Уровень: <b className="text-foreground">{client.level.name}</b></span>
                     <span>Чеков: <b className="text-foreground">{client.purchaseCount}</b></span>
@@ -705,11 +705,11 @@ export default function CompanyClientsPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <div className="grid gap-3 text-sm text-muted-foreground sm:flex sm:items-center sm:justify-between">
             <div>
               Показано {registry?.items.length ?? 0} из {registry?.total ?? 0} · средний оборот {formatMoney(registryStats.averageSpend)}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2 sm:justify-start">
               <Button
                 variant="outline"
                 size="sm"
@@ -746,17 +746,17 @@ export default function CompanyClientsPage() {
               <div className="absolute inset-8 rounded-2xl border-2 border-cyan-200/70" />
             </div>
             <div className="flex flex-col justify-center gap-3">
-              <div className="flex items-center gap-2 text-lg font-semibold"><QrCode className="text-cyan-100" /> Наведите камеру на QR клиента</div>
+              <div className="flex items-center gap-2 text-base font-semibold sm:text-lg"><QrCode className="text-cyan-100" /> Наведите камеру на QR клиента</div>
               <p className="text-sm text-muted-foreground">{scannerMessage || "Код будет распознан автоматически и откроет карточку обслуживания."}</p>
-              <Button variant="outline" onClick={stopScanner} className="w-fit"><Square /> Закрыть сканер</Button>
+              <Button variant="outline" onClick={stopScanner} className="w-full sm:w-fit"><Square /> Закрыть сканер</Button>
             </div>
           </CardContent>
         </Card>
       )}
 
       <Card className="glass border-white/10 py-0">
-        <CardContent className="space-y-5 p-5">
-          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.05] p-4">
+        <CardContent className="space-y-4 p-4 sm:space-y-5 sm:p-5">
+          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.05] p-3 sm:p-4">
             <div className="mb-3 flex items-center gap-2">
               <Hash className="h-5 w-5 text-cyan-100" />
               <div>
@@ -810,7 +810,7 @@ export default function CompanyClientsPage() {
                   key={item.uuid}
                   type="button"
                   onClick={() => void openClient(item.uuid)}
-                  className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-left transition hover:border-cyan-200/35 hover:bg-cyan-200/[0.06]"
+                  className="rounded-2xl border border-white/10 bg-white/[0.025] p-3 text-left transition hover:border-cyan-200/35 hover:bg-cyan-200/[0.06] sm:p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -830,9 +830,9 @@ export default function CompanyClientsPage() {
       {selected ? (
         <div className="space-y-4">
           <Card className="glass border-white/10 py-0">
-            <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+            <CardContent className="grid gap-4 p-4 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:p-5">
               <div>
-                <p className="text-xl font-semibold">{selected.name}</p>
+                <p className="text-lg font-semibold sm:text-xl">{selected.name}</p>
                 <p className="text-sm text-muted-foreground">{selected.email || "Новый клиент, найден по QR"}</p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -844,8 +844,8 @@ export default function CompanyClientsPage() {
           </Card>
 
           <Card className="border-cyan-300/20 bg-cyan-300/[0.035] py-0">
-            <CardContent className="space-y-3 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardContent className="space-y-3 p-4 sm:p-5">
+              <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
                 <h3 className="flex items-center gap-2 font-semibold">
                   <MessageSquareText className="h-4 w-4 text-cyan-100" /> Комментарий для клиента
                 </h3>
@@ -853,7 +853,7 @@ export default function CompanyClientsPage() {
                   variant="secondary"
                   onClick={() => void saveCustomerComment()}
                   disabled={commentSaving || customerCommentDraft === (selected.customerComment ?? "")}
-                  className="rounded-xl"
+                  className="w-full rounded-xl sm:w-auto"
                 >
                   {commentSaving ? "Сохраняем..." : "Сохранить"}
                 </Button>
@@ -870,7 +870,7 @@ export default function CompanyClientsPage() {
 
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="glass border-white/10 py-0">
-              <CardContent className="space-y-4 p-5">
+              <CardContent className="space-y-4 p-4 sm:p-5">
                 <h3 className="flex items-center gap-2 font-semibold"><Coins className="h-4 w-4 text-cyan-100" /> Начислить вручную</h3>
                 <p className="text-xs text-muted-foreground">Для компенсации, подарка или ручной корректировки.</p>
                 <Input type="number" min={1} value={manualPoints} onChange={(event) => setManualPoints(event.target.value)} placeholder="Количество баллов" className="h-11 rounded-xl" />
@@ -878,7 +878,7 @@ export default function CompanyClientsPage() {
               </CardContent>
             </Card>
             <Card className="border-cyan-300/20 bg-cyan-300/[0.04] py-0">
-              <CardContent className="space-y-4 p-5">
+              <CardContent className="space-y-4 p-4 sm:p-5">
                 <h3 className="flex items-center gap-2 font-semibold"><ReceiptText className="h-4 w-4 text-cyan-100" /> Покупка с бонусами</h3>
                 <p className="text-xs text-muted-foreground">WhiteBox рассчитает баллы по уровню клиента.</p>
                 <Input type="number" min={0.01} value={purchaseAmount} onChange={(event) => setPurchaseAmount(event.target.value)} placeholder="Сумма чека, ₽" className="h-11 rounded-xl" />
@@ -886,7 +886,7 @@ export default function CompanyClientsPage() {
               </CardContent>
             </Card>
             <Card className="border-amber-300/20 bg-amber-300/[0.035] py-0">
-              <CardContent className="space-y-4 p-5">
+              <CardContent className="space-y-4 p-4 sm:p-5">
                 <h3 className="flex items-center gap-2 font-semibold"><MinusCircle className="h-4 w-4 text-amber-100" /> Списать баллы</h3>
                 <p className="text-xs text-muted-foreground">Сервер проверит баланс и не даст списать больше доступного.</p>
                 <Input type="number" min={1} max={selected.balance} value={spendPoints} onChange={(event) => setSpendPoints(event.target.value)} placeholder={`Доступно: ${selected.balance}`} className="h-11 rounded-xl" />
@@ -897,8 +897,8 @@ export default function CompanyClientsPage() {
 
           {SUBSCRIPTIONS_ENABLED && (
           <Card className="glass border-white/10 py-0">
-            <CardContent className="p-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <CardContent className="p-4 sm:p-5">
+              <div className="mb-4 grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
                 <h3 className="flex items-center gap-2 font-semibold"><TicketCheck className="h-4 w-4 text-cyan-100" /> Списать услугу по подписке</h3>
                 <Badge variant="outline" className="rounded-full"><ShieldCheck className="h-3.5 w-3.5" /> лимиты проверяет сервер</Badge>
               </div>
@@ -907,7 +907,7 @@ export default function CompanyClientsPage() {
                   const state = item.redemption;
                   const disabled = state ? !state.canRedeem : false;
                   return (
-                    <div key={`${item.source}-${item.uuid}`} className={cn("rounded-2xl border p-4", disabled ? "border-amber-300/25 bg-amber-300/[0.035]" : "border-white/10 bg-white/[0.025]") }>
+                    <div key={`${item.source}-${item.uuid}`} className={cn("rounded-2xl border p-3 sm:p-4", disabled ? "border-amber-300/25 bg-amber-300/[0.035]" : "border-white/10 bg-white/[0.025]") }>
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-semibold">{item.title}</p>
@@ -919,11 +919,11 @@ export default function CompanyClientsPage() {
                         </Badge>
                       </div>
                       {item.description && <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{item.description}</p>}
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="mt-4 grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
                         <div className="text-xs text-muted-foreground">
                           {state?.lastRedeemedAt ? `Последнее списание: ${formatDate(state.lastRedeemedAt)}` : "Ещё не списывали"}
                         </div>
-                        <Button variant="secondary" disabled={disabled} onClick={() => void redeem(item)} className="rounded-xl">
+                        <Button variant="secondary" disabled={disabled} onClick={() => void redeem(item)} className="w-full rounded-xl sm:w-auto">
                           <TicketCheck /> {disabled ? "Лимит исчерпан" : "Списать услугу"}
                         </Button>
                       </div>
@@ -942,11 +942,11 @@ export default function CompanyClientsPage() {
 
           <div className={cn("grid gap-4", SUBSCRIPTIONS_ENABLED && "lg:grid-cols-2")}>
             <Card className="glass border-white/10 py-0">
-              <CardContent className="p-5">
+              <CardContent className="p-4 sm:p-5">
                 <h3 className="mb-4 flex items-center gap-2 font-semibold"><History className="h-4 w-4 text-cyan-100" /> Баллы и покупки</h3>
                 <div className="space-y-2">
                   {selected.recentPointOperations.map((operation) => (
-                    <div key={operation.uuid} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                    <div key={operation.uuid} className="grid gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3 sm:flex sm:items-center sm:justify-between">
                       <div className="flex min-w-0 items-center gap-3">
                         <span className={cn("rounded-lg p-2", operation.type === "EARN" ? "bg-emerald-300/10 text-emerald-200" : "bg-amber-300/10 text-amber-200")}>
                           {operation.type === "EARN" ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
@@ -979,7 +979,7 @@ export default function CompanyClientsPage() {
 
             {SUBSCRIPTIONS_ENABLED && (
             <Card className="glass border-cyan-300/15 bg-cyan-300/[0.025] py-0">
-              <CardContent className="p-5">
+              <CardContent className="p-4 sm:p-5">
                 <h3 className="mb-4 flex items-center gap-2 font-semibold"><TicketCheck className="h-4 w-4 text-cyan-100" /> История погашений</h3>
                 <div className="space-y-2">
                   {(selected.recentSubscriptionRedemptions ?? []).map((redemption) => (

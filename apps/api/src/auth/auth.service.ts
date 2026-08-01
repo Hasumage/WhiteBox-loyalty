@@ -25,6 +25,7 @@ import { RegisterDto } from "./dto/register.dto";
 import { RequestPasswordResetDto } from "./dto/request-password-reset.dto";
 import { RequestRegistrationCodeDto } from "./dto/request-registration-code.dto";
 import { VerifyRegistrationCodeDto } from "./dto/verify-registration-code.dto";
+import { maxMiniAppUserId, verifyMaxMiniAppInitData } from "./max-mini-app";
 import { verifyTelegramMiniAppInitData } from "./telegram-mini-app";
 
 /** Mirrors Prisma `AccountStatus` — string union keeps emitted `.d.ts` stable if Prisma re-exports differ. */
@@ -907,6 +908,108 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       deviceLabel: ctx.deviceLabel ?? "Linked client session",
     });
     return this.issueTokens(user);
+  }
+
+  async linkTelegramMiniApp(userId: number, initData: string) {
+    const maxAgeSecondsRaw = Number(
+      this.config.get("TELEGRAM_MINI_APP_AUTH_MAX_AGE_SECONDS") ?? 24 * 60 * 60,
+    );
+    const verified = verifyTelegramMiniAppInitData(
+      initData,
+      this.config.get<string>("TELEGRAM_BOT_TOKEN"),
+      {
+        maxAgeSeconds: Number.isFinite(maxAgeSecondsRaw)
+          ? Math.max(60, Math.floor(maxAgeSecondsRaw))
+          : 24 * 60 * 60,
+      },
+    );
+
+    let telegramId: bigint;
+    try {
+      telegramId = BigInt(String(verified.user.id));
+    } catch {
+      throw new UnauthorizedException("Linked client user id is invalid.");
+    }
+
+    const linked = await this.prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
+    if (linked && linked.id !== userId) {
+      throw new ConflictException("This Telegram account is already linked to another NearLoy account.");
+    }
+
+    await this.prisma.user.update({ where: { id: userId }, data: { telegramId } });
+    return { linked: true as const, provider: "telegram" as const };
+  }
+
+  async loginWithMaxMiniApp(initData: string, ctx: LoginContext = {}) {
+    const maxAgeSecondsRaw = Number(
+      this.config.get("MAX_MINI_APP_AUTH_MAX_AGE_SECONDS") ?? 24 * 60 * 60,
+    );
+    const verified = verifyMaxMiniAppInitData(
+      initData,
+      this.config.get<string>("MAX_BOT_TOKEN"),
+      {
+        maxAgeSeconds: Number.isFinite(maxAgeSecondsRaw)
+          ? Math.max(60, Math.floor(maxAgeSecondsRaw))
+          : 24 * 60 * 60,
+      },
+    );
+
+    const maxId = maxMiniAppUserId(verified.user);
+    if (!maxId) {
+      throw new UnauthorizedException("MAX linked client user id is invalid.");
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { maxId } });
+    if (!user) {
+      throw new UnauthorizedException("Account is not linked to NearLoy.");
+    }
+
+    const now = new Date();
+    if (
+      user.accountStatus === "FROZEN_PENDING_DELETION" &&
+      user.deletionScheduledAt &&
+      user.deletionScheduledAt <= now
+    ) {
+      await this.finalizeExpiredFrozenAccount(user.id, now, user.uuid);
+      throw new UnauthorizedException("Account is not linked to an active NearLoy account.");
+    }
+    if (user.accountStatus === "BLOCKED") {
+      throw new UnauthorizedException("Account is blocked.");
+    }
+
+    await this.recordLoginEvent(user.id, {
+      ...ctx,
+      deviceLabel: ctx.deviceLabel ?? "MAX mini-app session",
+    });
+    return this.issueTokens(user);
+  }
+
+  async linkMaxMiniApp(userId: number, initData: string) {
+    const maxAgeSecondsRaw = Number(
+      this.config.get("MAX_MINI_APP_AUTH_MAX_AGE_SECONDS") ?? 24 * 60 * 60,
+    );
+    const verified = verifyMaxMiniAppInitData(
+      initData,
+      this.config.get<string>("MAX_BOT_TOKEN"),
+      {
+        maxAgeSeconds: Number.isFinite(maxAgeSecondsRaw)
+          ? Math.max(60, Math.floor(maxAgeSecondsRaw))
+          : 24 * 60 * 60,
+      },
+    );
+
+    const maxId = maxMiniAppUserId(verified.user);
+    if (!maxId) {
+      throw new UnauthorizedException("MAX linked client user id is invalid.");
+    }
+
+    const linked = await this.prisma.user.findUnique({ where: { maxId }, select: { id: true } });
+    if (linked && linked.id !== userId) {
+      throw new ConflictException("This MAX account is already linked to another NearLoy account.");
+    }
+
+    await this.prisma.user.update({ where: { id: userId }, data: { maxId } });
+    return { linked: true as const, provider: "max" as const };
   }
 
   async recordLoginEvent(userId: number, ctx: LoginContext) {

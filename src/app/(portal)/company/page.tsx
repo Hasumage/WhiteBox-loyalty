@@ -93,26 +93,26 @@ export default function CompanyPortalPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="relative overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_86%_8%,rgba(103,232,249,0.15),transparent_34%),linear-gradient(120deg,rgba(17,24,39,0.98),rgba(8,9,12,0.98))] p-6 sm:p-8">
+    <div className="space-y-4 sm:space-y-6">
+      <header className="relative overflow-hidden rounded-[1.35rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_86%_8%,rgba(103,232,249,0.15),transparent_34%),linear-gradient(120deg,rgba(17,24,39,0.98),rgba(8,9,12,0.98))] p-4 sm:rounded-[1.75rem] sm:p-8">
         <div className="relative z-10 max-w-2xl">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100 sm:mb-4 sm:text-xs sm:tracking-[0.24em]">
             <Sparkles className="h-3.5 w-3.5" /> Рабочая область партнёра
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{dashboard?.company.name ?? "Кабинет компании"}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">{dashboard?.company.name ?? "Кабинет компании"}</h1>
             {dashboard && <Badge className="bg-white text-black">{roleNames[dashboard.memberRole]}</Badge>}
           </div>
           <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
             Обслуживайте клиентов по QR, отслеживайте подписки и управляйте деньгами в одном рабочем пространстве.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button asChild size="lg" className="rounded-xl">
+          <div className="mt-5 grid gap-3 sm:mt-6 sm:flex sm:flex-wrap">
+            <Button asChild size="lg" className="w-full rounded-xl sm:w-auto">
               <Link href="/company/clients"><QrCode /> Сканировать QR клиента</Link>
             </Button>
             {/* #SubNearloyCode: вход в правила клиентских подписок скрыт до запуска. */}
             {SUBSCRIPTIONS_ENABLED && (
-              <Button asChild size="lg" variant="secondary" className="rounded-xl">
+              <Button asChild size="lg" variant="secondary" className="w-full rounded-xl sm:w-auto">
                 <Link href="/company/subscriptions"><WalletCards /> Правила подписок</Link>
               </Button>
             )}
@@ -150,7 +150,7 @@ export default function CompanyPortalPage() {
                 <p className="mt-1 text-sm leading-5 text-muted-foreground">{billingWarning.description}</p>
               </div>
             </div>
-            <Button asChild className="shrink-0 rounded-xl">
+            <Button asChild className="w-full shrink-0 rounded-xl sm:w-auto">
               <Link href="/company/billing">
                 {billingWarning.cta} <ArrowRight className="h-4 w-4" />
               </Link>
@@ -161,7 +161,7 @@ export default function CompanyPortalPage() {
 
       {tutorialOpen && (
         <Card className="overflow-hidden border-cyan-300/20 bg-[linear-gradient(110deg,rgba(103,232,249,0.1),rgba(255,255,255,0.025))] py-0">
-          <CardContent className="grid gap-5 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
+          <CardContent className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-center sm:p-5">
             <div className="flex gap-4">
               <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/20 bg-cyan-200/10 text-cyan-100">
                 <TutorialIcon className="h-6 w-6" />
@@ -174,7 +174,7 @@ export default function CompanyPortalPage() {
                 <p className="mt-1 text-sm text-muted-foreground">{tutorialSteps[safeTutorialStep].detail}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="grid gap-2 sm:flex sm:items-center">
               <Button variant="ghost" size="sm" onClick={closeTutorial}><X /> Пропустить</Button>
               <Button
                 size="sm"
@@ -187,7 +187,7 @@ export default function CompanyPortalPage() {
         </Card>
       )}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[
           { label: "Клиенты", value: metrics?.customers ?? "-", detail: "в программе лояльности", icon: Users },
           { label: "Активные подписки", value: metrics?.activeSubscribers ?? "-", detail: "платящих клиентов", icon: WalletCards },
@@ -197,14 +197,14 @@ export default function CompanyPortalPage() {
           .filter((item) => SUBSCRIPTIONS_ENABLED || (item.icon !== WalletCards && item.icon !== Banknote))
           .map(({ label, value, detail, icon: Icon }) => (
           <Card key={label} className="glass overflow-hidden border-white/10 py-0">
-            <CardContent className="flex items-start justify-between gap-3 p-5">
+            <CardContent className="flex min-h-[132px] items-start justify-between gap-2 p-4 sm:gap-3 sm:p-5">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-                <p className="mt-3 text-3xl font-semibold">{value}</p>
+                <p className="line-clamp-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:text-xs sm:tracking-[0.18em]">{label}</p>
+                <p className="mt-2 text-2xl font-semibold sm:mt-3 sm:text-3xl">{value}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
               </div>
-              <span className="rounded-2xl border border-cyan-200/15 bg-cyan-200/[0.06] p-3 text-cyan-100">
-                <Icon className="h-5 w-5" />
+              <span className="rounded-2xl border border-cyan-200/15 bg-cyan-200/[0.06] p-2 text-cyan-100 sm:p-3">
+                <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
               </span>
             </CardContent>
           </Card>
@@ -213,21 +213,21 @@ export default function CompanyPortalPage() {
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_0.8fr]">
         <Card className="glass border-white/10 py-0">
-          <CardContent className="p-6">
-            <div className="mb-5 flex items-center justify-between">
+          <CardContent className="p-4 sm:p-6">
+            <div className="mb-5 grid gap-3 sm:flex sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Последние операции</h2>
                 <p className="text-sm text-muted-foreground">
                   {SUBSCRIPTIONS_ENABLED ? "Подписки, начисления и списания баллов" : "Начисления и списания баллов"}
                 </p>
               </div>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm" className="w-full justify-center sm:w-auto">
                 <Link href="/company/clients">Открыть кассу <ArrowRight /></Link>
               </Button>
             </div>
             <div className="space-y-2">
               {recentOperations.map((operation) => (
-                <div key={operation.uuid} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3">
+                <div key={operation.uuid} className="grid gap-3 rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-3 sm:flex sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="rounded-xl border border-cyan-200/10 bg-cyan-200/[0.05] p-2 text-cyan-100">
                       {operation.kind === "SUBSCRIPTION" ? <WalletCards className="h-4 w-4" /> : <Coins className="h-4 w-4" />}
@@ -237,7 +237,7 @@ export default function CompanyPortalPage() {
                       <p className="text-xs text-muted-foreground">{new Date(operation.createdAt).toLocaleString("ru-RU")}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right">
                     {operation.kind === "SUBSCRIPTION" ? (
                       <p className="text-sm font-semibold">{money(operation.amount ?? 0)}</p>
                     ) : (
@@ -260,7 +260,7 @@ export default function CompanyPortalPage() {
         </Card>
 
         <Card className="glass border-white/10 py-0">
-          <CardContent className="space-y-4 p-6">
+          <CardContent className="space-y-4 p-4 sm:p-6">
             <h2 className="text-lg font-semibold">Контроль сегодня</h2>
             <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Заявки на вывод</p>

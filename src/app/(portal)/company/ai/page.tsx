@@ -9,7 +9,6 @@ import {
   MapPin,
   Paperclip,
   Send,
-  Sparkles,
   User,
   X,
 } from "lucide-react";
@@ -68,6 +67,15 @@ function limitText(value: string, limit: number) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= limit) return normalized;
   return `${normalized.slice(0, limit - 1).trim()}…`;
+}
+
+function resizePromptTextarea(element: HTMLTextAreaElement | null) {
+  if (!element) return;
+  const maxHeight = 136;
+  element.style.height = "auto";
+  const nextHeight = Math.min(element.scrollHeight, maxHeight);
+  element.style.height = `${nextHeight}px`;
+  element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
 }
 
 function normalizeText(value: string) {
@@ -345,17 +353,11 @@ async function cropImageToFile(file: File, width: number, height: number, prefix
 export default function CompanyAiPage() {
   const { locale } = useI18n("ru");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "hello",
-      role: "assistant",
-      content:
-        "Привет. Напишите, что хотите сделать: спросить статистику, обновить карточку компании, создать акцию, разобрать сайт или подготовить уровни. Если нужно фото для акции — просто прикрепите его к сообщению.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState("");
@@ -389,6 +391,10 @@ export default function CompanyAiPage() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    resizePromptTextarea(inputRef.current);
+  }, [input]);
 
   const pendingMessage = useMemo(
     () => [...messages].reverse().find((message) => message.role === "assistant" && message.pendingAction && message.actionStatus === "pending"),
@@ -675,26 +681,7 @@ export default function CompanyAiPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100svh-6.5rem)] flex-col gap-3 lg:h-[calc(100dvh-3.5rem)] lg:min-h-0 lg:overflow-hidden">
-      <header className="overflow-hidden rounded-[1.15rem] border border-cyan-300/20 bg-[radial-gradient(circle_at_12%_0%,rgba(103,232,249,0.12),transparent_26%),radial-gradient(circle_at_88%_0%,rgba(168,85,247,0.08),transparent_28%),rgba(255,255,255,0.018)] px-4 py-3 sm:px-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="border-cyan-300/25 bg-cyan-300/10 text-cyan-100">
-                <Sparkles className="h-3.5 w-3.5" /> Чат-помощник
-              </Badge>
-              <h1 className="text-xl font-semibold sm:text-2xl">Помощник компании</h1>
-            </div>
-            <p className="mt-1 text-sm leading-5 text-muted-foreground">
-              Спросите, поручите, подтвердите — AI аккуратно подготовит изменения.
-            </p>
-          </div>
-          <Badge variant="outline" className="shrink-0 border-violet-300/25 bg-violet-300/10 text-violet-100">
-            <Bot className="h-3.5 w-3.5" /> ИИ с уточняющими вопросами
-          </Badge>
-        </div>
-      </header>
-
+    <div className="flex h-[calc(100dvh-6.25rem)] min-h-0 flex-col gap-3 overflow-hidden lg:h-[calc(100dvh-3.5rem)]">
       {error && <div className="rounded-2xl border border-red-300/20 bg-red-400/10 p-4 text-sm text-red-100">{error}</div>}
 
       <Card className="glass mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden border-white/10 py-0">
@@ -703,9 +690,14 @@ export default function CompanyAiPage() {
             ref={scrollRef}
             className={cn(
               "nearloy-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5",
-              messages.length === 1 && !loading ? "flex flex-col justify-center" : "",
+              messages.length === 0 && !loading ? "flex flex-col justify-center" : "",
             )}
           >
+            {messages.length === 0 && !loading ? (
+              <div className="px-6 text-center text-2xl font-semibold tracking-tight text-white/45 sm:text-3xl">
+                Чем займёмся?
+              </div>
+            ) : null}
             {messages.map((message) => (
               <ChatBubble
                 key={message.id}
@@ -740,7 +732,7 @@ export default function CompanyAiPage() {
               </div>
             )}
 
-            <div className="mx-auto flex max-w-5xl items-end gap-2">
+            <div className="mx-auto w-full max-w-5xl rounded-[1.25rem] border border-white/10 bg-black/20 p-2 shadow-[0_18px_60px_rgba(0,0,0,0.22)] transition-all">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -752,26 +744,33 @@ export default function CompanyAiPage() {
                   if (file) void pickImage(file);
                 }}
               />
-              <Button type="button" variant="secondary" className="size-14 shrink-0 rounded-2xl p-0" onClick={() => fileInputRef.current?.click()}>
-                <Paperclip className="h-4 w-4" />
-              </Button>
               <Textarea
+                ref={inputRef}
                 value={input}
                 maxLength={INPUT_LIMIT}
                 disabled={bootLoading}
-                onChange={(event) => setInput(event.target.value)}
+                onChange={(event) => {
+                  setInput(event.target.value);
+                  resizePromptTextarea(event.currentTarget);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     void sendMessage();
                   }
                 }}
-                placeholder="Например: «Сколько у меня активных пользователей?» или «Компания теперь называется Супер кофе»"
-                className="h-14 min-h-14 resize-none rounded-2xl bg-black/10 py-4"
+                placeholder="Введите ваш запрос"
+                rows={1}
+                className="max-h-[136px] min-h-[38px] resize-none border-0 bg-transparent px-3 py-2 text-sm leading-6 shadow-none outline-none transition-[height] duration-75 ease-out placeholder:text-sm focus-visible:ring-0"
               />
-              <Button type="button" className="size-14 shrink-0 rounded-2xl p-0" disabled={loading || bootLoading || (!input.trim() && !imageFile)} onClick={() => void sendMessage()}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <Button type="button" variant="secondary" className="h-10 min-w-10 rounded-2xl px-3" onClick={() => fileInputRef.current?.click()}>
+                  <Paperclip className="h-4 w-4" />
+                </Button>
+                <Button type="button" className="h-10 min-w-10 rounded-2xl px-3" disabled={loading || bootLoading || (!input.trim() && !imageFile)} onClick={() => void sendMessage()}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
             <div className="mx-auto mt-2 flex max-w-5xl flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>{input.length}/{INPUT_LIMIT}</span>
