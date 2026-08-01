@@ -216,6 +216,11 @@ export default function AdminPaymentsPage() {
                       Ссылка оплаты <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}
+                  {payment.receiptUrl && (
+                    <a href={payment.receiptUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 text-sm text-emerald-100 hover:bg-emerald-300/15">
+                      Чек <ReceiptText className="h-3.5 w-3.5" />
+                    </a>
+                  )}
                   {payment.providerPaymentId && <p className="max-w-[220px] truncate font-mono text-xs text-muted-foreground">{payment.providerPaymentId}</p>}
                 </div>
               </CardContent>

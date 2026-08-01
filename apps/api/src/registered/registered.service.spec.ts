@@ -24,7 +24,7 @@ describe("RegisteredService", () => {
     promoCodeRedemption: { create: jest.Mock };
     referralCampaign: { findFirst: jest.Mock; create: jest.Mock };
     referralInvite: { findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; count: jest.Mock };
-    customerLookupCode: { updateMany: jest.Mock; create: jest.Mock };
+    customerLookupCode: { findFirst: jest.Mock; updateMany: jest.Mock; create: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -75,7 +75,7 @@ describe("RegisteredService", () => {
         create: jest.fn(),
         count: jest.fn(),
       },
-      customerLookupCode: { updateMany: jest.fn(), create: jest.fn() },
+      customerLookupCode: { findFirst: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
       $transaction: jest.fn(async (input) => {
         if (typeof input === "function") {
           return input({
@@ -258,8 +258,9 @@ describe("RegisteredService", () => {
     expect(first.generatedAt).toBeInstanceOf(Date);
   });
 
-  it("creates a five digit single-use lookup code without persisting its plaintext value", async () => {
+  it("creates a five digit single-use lookup code and keeps it reusable until it expires", async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 7 });
+    prisma.customerLookupCode.findFirst.mockResolvedValue(null);
     prisma.customerLookupCode.updateMany.mockResolvedValue({ count: 1 });
     prisma.customerLookupCode.create.mockResolvedValue({ id: "code-1" });
 
@@ -274,6 +275,19 @@ describe("RegisteredService", () => {
       data: expect.objectContaining({ userId: 7, expiresAt: result.expiresAt }),
     });
     expect(prisma.customerLookupCode.create.mock.calls[0][0].data.codeHash).not.toBe(result.code);
+    expect(prisma.customerLookupCode.create.mock.calls[0][0].data.code).toBe(result.code);
+  });
+
+  it("returns an active lookup code instead of creating a duplicate", async () => {
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    prisma.user.findUnique.mockResolvedValue({ id: 7 });
+    prisma.customerLookupCode.findFirst.mockResolvedValue({ code: "23826", expiresAt });
+
+    const result = await service.createCustomerLookupCode(7);
+
+    expect(result).toEqual({ code: "23826", expiresAt });
+    expect(prisma.customerLookupCode.updateMany).not.toHaveBeenCalled();
+    expect(prisma.customerLookupCode.create).not.toHaveBeenCalled();
   });
 
   it("completeOnboarding persists completion and geolocation prompt timestamps", async () => {

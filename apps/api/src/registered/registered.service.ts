@@ -20,7 +20,7 @@ import {
   recommendationBoostMultiplier,
 } from "./company-recommendation-score";
 
-const CUSTOMER_LOOKUP_CODE_TTL_MS = 5 * 60 * 1000;
+const CUSTOMER_LOOKUP_CODE_TTL_MS = 15 * 60 * 1000;
 const MIN_BIRTH_YEAR = 1900;
 const BIRTH_DATE_CHANGE_INTERVAL_DAYS = 365;
 
@@ -578,6 +578,15 @@ export class RegisteredService {
     if (!user) throw new NotFoundException("User not found.");
 
     const now = new Date();
+    const activeCode = await this.prisma.customerLookupCode.findFirst({
+      where: { userId, usedAt: null, expiresAt: { gt: now }, code: { not: null } },
+      orderBy: { expiresAt: "desc" },
+      select: { code: true, expiresAt: true },
+    });
+    if (activeCode?.code) {
+      return { code: activeCode.code, expiresAt: activeCode.expiresAt };
+    }
+
     const expiresAt = new Date(now.getTime() + CUSTOMER_LOOKUP_CODE_TTL_MS);
     await this.prisma.customerLookupCode.updateMany({
       where: { userId, usedAt: null, expiresAt: { gt: now } },
@@ -588,7 +597,7 @@ export class RegisteredService {
       const code = randomInt(0, 100_000).toString().padStart(5, "0");
       try {
         await this.prisma.customerLookupCode.create({
-          data: { userId, codeHash: this.customerLookupHash(code), expiresAt },
+          data: { userId, code, codeHash: this.customerLookupHash(code), expiresAt },
         });
         return { code, expiresAt };
       } catch (error) {

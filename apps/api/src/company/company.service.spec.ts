@@ -1586,15 +1586,29 @@ describe("CompanyService", () => {
     expect(tx.financeOperation.create).not.toHaveBeenCalled();
   });
 
-  it("rejects a payout when company verification is not completed", async () => {
+  it("allows a payout when company verification is not completed", async () => {
+    const day = 24 * 60 * 60 * 1000;
+    const startedAt = new Date(Date.now() - day - 1000);
     prisma.companyMember.findFirst.mockResolvedValueOnce({
       ...membership,
       company: { ...membership.company, identityVerificationCompleted: false, verificationStatus: "DRAFT" },
     });
+    tx.userSubscription.findMany.mockResolvedValue([
+      {
+        status: SubscriptionStatus.ACTIVE,
+        activatedAt: startedAt,
+        expiresAt: new Date(startedAt.getTime() + day * 10),
+        subscription: { price: 100000 },
+      },
+    ]);
+    tx.financeOperation.aggregate
+      .mockResolvedValueOnce({ _sum: { amount: 20 } })
+      .mockResolvedValueOnce({ _sum: { amount: 0 } });
+    tx.financeOperation.create.mockResolvedValue({ status: FinanceOperationStatus.PENDING_APPROVAL });
 
-    await expect(service.requestPayout(50, { amount: 5000 })).rejects.toBeInstanceOf(ForbiddenException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(tx.financeOperation.create).not.toHaveBeenCalled();
+    await service.requestPayout(50, { amount: 5000 });
+
+    expect(tx.financeOperation.create).toHaveBeenCalled();
   });
 
   it("reserves an eligible payout in a serializable transaction", async () => {

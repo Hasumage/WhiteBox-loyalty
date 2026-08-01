@@ -3509,9 +3509,6 @@ export class AdminService {
     if (!user.managedCompany) {
       throw new BadRequestException("Company profile must exist before creating subscriptions.");
     }
-    if (!user.managedCompany.identityVerificationCompleted) {
-      throw new BadRequestException("Full identity verification is required before creating subscriptions.");
-    }
     const entitlements = dto.entitlements ?? [];
     if (entitlements.length === 0) {
       throw new BadRequestException("Subscription must include at least one service.");

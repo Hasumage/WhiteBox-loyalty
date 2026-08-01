@@ -319,7 +319,7 @@ describe("telegram webhook phone binding", () => {
     );
   });
 
-  it("sends a safe Telegram error instead of leaking stack traces", async () => {
+  it("sends a safe Telegram error without forcing Telegram retries", async () => {
     mockedPrisma.telegramLinkToken.findUnique.mockRejectedValue(new Error("database exploded"));
     mockedSendTelegramMessage.mockResolvedValue({ ok: true, queued: false, result: { ok: true, result: { message_id: 3 } } });
 
@@ -337,12 +337,12 @@ describe("telegram webhook phone binding", () => {
     );
     const body = await res.json();
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
     expect(body).toMatchObject({ ok: false, message: "telegram_message_processing_failed" });
     expect(mockedSendTelegramMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         chatId: "1348887499",
-        text: expect.stringContaining("Не удалось обработать привязку Telegram"),
+        text: expect.stringContaining("Не удалось обработать сообщение"),
       }),
     );
   });

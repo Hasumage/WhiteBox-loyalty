@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { VkIdLinkButton } from "@/components/auth/VkIdLinkButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { fetchWithAuthRecovery } from "@/lib/api/authenticated-fetch";
@@ -242,8 +243,12 @@ export default function AdminPrSettingsPage() {
   }
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("vkid") === "linked") {
+      setNotice(locale === "ru" ? "VK ID связан с аккаунтом." : "VK ID is linked to your account.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
     void load();
-  }, [load]);
+  }, [load, locale]);
 
   const connectedTelegramId = telegram?.telegramId ?? settings?.user.telegramId ?? null;
   const connectedTelegram = Boolean(telegram?.connected ?? settings?.user.telegramId);
@@ -312,6 +317,20 @@ export default function AdminPrSettingsPage() {
         </Card>
       ) : settings ? (
         <>
+          <Card className="border-white/10 bg-white/[0.035]">
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold">VK ID</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {locale === "ru"
+                    ? "Свяжите VK ID, чтобы входить в админский аккаунт без пароля."
+                    : "Link VK ID to sign in to this admin account without a password."}
+                </p>
+              </div>
+              <VkIdLinkButton next="/admin/pr/settings" className="w-full sm:w-auto" />
+            </CardContent>
+          </Card>
+
           <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
             <Card className="overflow-hidden border-white/10 bg-card/70">
               <CardContent className="space-y-5 p-5">

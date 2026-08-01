@@ -465,9 +465,6 @@ function normalizeCompanyApiMessage(message: unknown) {
   if (text === "Only a company manager can perform this action.") {
     return "Это действие доступно только владельцу или менеджеру компании.";
   }
-  if (text === "Company verification must be completed before operations are enabled.") {
-    return "Для этой операции нужна завершённая верификация компании.";
-  }
   return text;
 }
 

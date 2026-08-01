@@ -696,7 +696,7 @@ function CompanyClubEnabledPage() {
                 ))}
                 {data?.companies.length === 0 && (
                   <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-muted-foreground">
-                    Пока нет других верифицированных компаний для коллаборации.
+                    Пока нет других активных компаний для коллаборации.
                   </p>
                 )}
               </div>

@@ -313,9 +313,9 @@ export class CompanyService {
     }
   }
 
-  private requireTradingEnabled(member: { company: { isActive: boolean; identityVerificationCompleted: boolean } }) {
-    if (!member.company.identityVerificationCompleted || !member.company.isActive) {
-      throw new ForbiddenException("Company verification must be completed before operations are enabled.");
+  private requireTradingEnabled(member: { company: { isActive: boolean } }) {
+    if (!member.company.isActive) {
+      throw new ForbiddenException("Company must be active before operations are enabled.");
     }
   }
 
@@ -1639,11 +1639,7 @@ export class CompanyService {
       include: { appliedPromoCode: true },
     });
     if (!account) {
-      const company = await this.prisma.company.findUnique({
-        where: { id: companyId },
-        select: { verificationReviewedAt: true },
-      });
-      const trialStartedAt = company?.verificationReviewedAt ?? now;
+      const trialStartedAt = now;
       const trialEndsAt = this.addDays(trialStartedAt, COMPANY_TRIAL_DAYS);
       account = await this.prisma.companyBillingAccount.create({
         data: {
@@ -2085,7 +2081,6 @@ export class CompanyService {
         where: {
           id: { not: member.companyId },
           isActive: true,
-          identityVerificationCompleted: true,
         },
         orderBy: { name: "asc" },
         take: 80,
@@ -2147,12 +2142,12 @@ export class CompanyService {
     }
     const [partner, category] = await Promise.all([
       this.prisma.company.findFirst({
-        where: { id: dto.partnerCompanyId, isActive: true, identityVerificationCompleted: true },
+        where: { id: dto.partnerCompanyId, isActive: true },
         select: { id: true },
       }),
       dto.categoryId ? this.prisma.category.findUnique({ where: { id: dto.categoryId }, select: { id: true } }) : Promise.resolve(null),
     ]);
-    if (!partner) throw new NotFoundException("Компания-партнёр не найдена или ещё не верифицирована.");
+    if (!partner) throw new NotFoundException("Компания-партнёр не найдена или неактивна.");
     if (dto.categoryId && !category) throw new NotFoundException("Категория не найдена.");
 
     const slug = await this.uniqueBundleSlug(dto.name);

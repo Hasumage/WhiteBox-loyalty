@@ -113,6 +113,26 @@ function updateLabel(update) {
   return update.message?.text || update.callback_query?.data || update.message?.contact?.phone_number || "update";
 }
 
+function isLookupCodeText(text) {
+  const normalized = (text || "")
+    .trim()
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[?!.,:;()[\]{}"'`]+/g, " ")
+    .replace(/\s+/g, " ");
+
+  if (!normalized) return false;
+  if (/^\/(code|kod)(\s|$)/.test(normalized)) return true;
+  if (["код", "кодик", "дай код", "дать код", "пришли код", "отправь код", "покажи код", "мой код", "нужен код", "code"].includes(normalized)) {
+    return true;
+  }
+
+  return (
+    /^(дай|дать|пришли|отправь|покажи|сгенерируй|нужен|можно)\s+(qr\s+)?код(ик)?(\s+пожалуйста)?$/.test(normalized) ||
+    /^(give|show|send|generate)\s+(my\s+)?(qr\s+)?code(\s+please)?$/.test(normalized)
+  );
+}
+
 function shouldForwardUpdate(update) {
   const chatType = updateChatType(update);
   if (privateOnly && chatType && chatType !== "private") {
@@ -123,6 +143,7 @@ function shouldForwardUpdate(update) {
   if (commandsOnly && message) {
     if (message.contact) return { forward: true };
     if (/^\/start(?:\s|$)/.test(message.text?.trim() || "")) return { forward: true };
+    if (isLookupCodeText(message.text)) return { forward: true };
     return { forward: false, reason: "non-command message" };
   }
 
@@ -179,9 +200,9 @@ async function main() {
         console.log(`Processed ${update.update_id}: ${text} -> ${JSON.stringify(result)}`);
       } catch (error) {
         console.error(`[poll] Local webhook failed for update ${update.update_id}: ${errorMessage(error)}`);
+        offset = update.update_id + 1;
         if (once) throw error;
         await sleep(retryDelayMs);
-        break;
       }
     }
 

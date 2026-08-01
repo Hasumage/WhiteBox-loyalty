@@ -13,6 +13,7 @@ const PUBLIC_AUTH_ROUTES = new Set([
   "/login",
   "/register",
   "/forgot-password",
+  "/oauth/vkid/complete",
   "/mobile-entry",
   "/mobile-login",
   "/mobile-register",
@@ -337,6 +338,115 @@ export async function loginWithTelegramMiniApp(
       };
     }
     return data as AuthTokensResponse;
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
+export function vkIdLoginUrl(requestedNext?: string | null) {
+  const params = new URLSearchParams();
+  if (requestedNext && requestedNext.startsWith("/") && !requestedNext.startsWith("//")) {
+    params.set("next", requestedNext);
+  }
+  const suffix = params.toString();
+  return `${apiBase()}/oauth/vkid/start${suffix ? `?${suffix}` : ""}`;
+}
+
+export async function completeVkIdLogin(ticket: string): Promise<(AuthTokensResponse & { redirectAfter?: string | null }) | { message: string }> {
+  try {
+    const res = await fetchWithTimeout(`${apiBase()}/oauth/vkid/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket }),
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        message: Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message ?? `VK ID login failed (HTTP ${res.status})`,
+      };
+    }
+    return data as AuthTokensResponse & { redirectAfter?: string | null };
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
+export async function createVkIdLinkUrl(next?: string | null): Promise<{ url: string } | { message: string }> {
+  try {
+    const res = await fetchWithTimeout(`${apiBase()}/oauth/vkid/link/start`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ next }),
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || typeof data.url !== "string") {
+      return {
+        message: Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message ?? `VK ID link failed (HTTP ${res.status})`,
+      };
+    }
+    return { url: data.url };
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
+export type VkIdStatus = {
+  linked: boolean;
+  canUnlink: boolean;
+  unlinkBlockedReason: string | null;
+};
+
+export async function getVkIdStatus(): Promise<VkIdStatus | { message: string }> {
+  try {
+    const res = await fetchWithTimeout(`${apiBase()}/oauth/vkid/status`, {
+      method: "GET",
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || typeof data.linked !== "boolean") {
+      return {
+        message: Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message ?? `VK ID status failed (HTTP ${res.status})`,
+      };
+    }
+    return {
+      linked: data.linked,
+      canUnlink: Boolean(data.canUnlink),
+      unlinkBlockedReason: typeof data.unlinkBlockedReason === "string" ? data.unlinkBlockedReason : null,
+    };
+  } catch {
+    return { message: "API is unavailable. Please check backend connection." };
+  }
+}
+
+export async function unlinkVkId(): Promise<VkIdStatus | { message: string }> {
+  try {
+    const res = await fetchWithTimeout(`${apiBase()}/oauth/vkid/link`, {
+      method: "DELETE",
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || typeof data.linked !== "boolean") {
+      return {
+        message: Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message ?? `VK ID unlink failed (HTTP ${res.status})`,
+      };
+    }
+    return {
+      linked: data.linked,
+      canUnlink: Boolean(data.canUnlink),
+      unlinkBlockedReason: typeof data.unlinkBlockedReason === "string" ? data.unlinkBlockedReason : null,
+    };
   } catch {
     return { message: "API is unavailable. Please check backend connection." };
   }

@@ -151,7 +151,7 @@ describe("company application helpers", () => {
     expect(tx.company.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         ownerUserId: 41,
-        isActive: false,
+        isActive: true,
         supportManagerId: 12,
         identityVerificationCompleted: false,
         verificationStatus: "SUBMITTED",
