@@ -19,6 +19,7 @@ import {
   ListFilter,
   MessageSquareText,
   MinusCircle,
+  Moon,
   QrCode,
   ReceiptText,
   RefreshCw,
@@ -185,6 +186,7 @@ export default function CompanyClientsPage() {
   const [registryPage, setRegistryPage] = useState(1);
   const [registryLoading, setRegistryLoading] = useState(true);
   const [registryError, setRegistryError] = useState("");
+  const [hydrated, setHydrated] = useState(false);
 
   // #SubNearloyCode: погашение клиентских подписок скрыто до запуска модуля.
   const redeemableItems = useMemo<RedeemableItem[]>(() => {
@@ -225,6 +227,10 @@ export default function CompanyClientsPage() {
     streamRef.current = null;
     setScannerOpen(false);
   }
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
     return () => stopScanner();
@@ -465,18 +471,21 @@ export default function CompanyClientsPage() {
     totalSpend: 0,
     averageSpend: 0,
   };
+  const visibleWorkspaceMode = hydrated ? workspaceMode : "registry";
+  const maxAudienceStat = Math.max(registryStats.all, registryStats.active, registryStats.withBalance, registryStats.vip, 1);
+  const audiencePercent = (value: number) => `${Math.max(6, Math.round((value / maxAudienceStat) * 100))}%`;
 
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className="space-y-3 pb-28 sm:space-y-5 lg:pb-0">
       <header className="grid gap-4 xl:flex xl:items-end xl:justify-between">
         <div>
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100 sm:text-xs sm:tracking-[0.24em]">Клиентская база</p>
           <h1 className="text-2xl font-semibold sm:text-3xl">Клиенты компании</h1>
           <p className="mt-2 text-sm text-muted-foreground">Все клиенты, сегменты, балансы и быстрый переход в кассовую карточку.</p>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <div className="hidden grid-cols-2 gap-2 sm:grid xl:flex xl:flex-wrap">
           <Button
-            variant={workspaceMode === "registry" ? "default" : "secondary"}
+            variant={visibleWorkspaceMode === "registry" ? "default" : "secondary"}
             onClick={() => {
               stopScanner();
               setWorkspaceMode("registry");
@@ -486,7 +495,7 @@ export default function CompanyClientsPage() {
             <UsersRound /> Реестр
           </Button>
           <Button
-            variant={workspaceMode === "cashier" ? "default" : "secondary"}
+            variant={visibleWorkspaceMode === "cashier" ? "default" : "secondary"}
             onClick={() => setWorkspaceMode("cashier")}
             className="rounded-xl"
           >
@@ -505,45 +514,183 @@ export default function CompanyClientsPage() {
         </div>
       </header>
 
+      <div className="fixed inset-x-3 bottom-[5.35rem] z-30 grid grid-cols-[1fr_1fr_3.25rem] gap-2 rounded-2xl border border-white/10 bg-background/95 p-2 shadow-[0_-16px_48px_rgba(0,0,0,0.45)] backdrop-blur-xl lg:hidden">
+        <Button
+          variant={visibleWorkspaceMode === "registry" ? "default" : "secondary"}
+          onClick={() => {
+            stopScanner();
+            setWorkspaceMode("registry");
+          }}
+          className="h-11 rounded-xl px-2 text-xs"
+        >
+          <UsersRound className="h-4 w-4" /> Реестр
+        </Button>
+        <Button
+          variant={visibleWorkspaceMode === "cashier" ? "default" : "secondary"}
+          onClick={() => setWorkspaceMode("cashier")}
+          className="h-11 rounded-xl px-2 text-xs"
+        >
+          <ReceiptText className="h-4 w-4" /> Касса
+        </Button>
+        <Button
+          size="icon"
+          onClick={() => {
+            setWorkspaceMode("cashier");
+            void startScanner();
+          }}
+          className="h-11 w-full rounded-xl"
+          aria-label="Сканировать QR"
+        >
+          <Camera className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {visibleWorkspaceMode === "registry" && (
       <Card className="glass overflow-hidden border-cyan-300/15 bg-cyan-300/[0.025] py-0">
         <CardContent className="space-y-4 p-4 sm:space-y-5 sm:p-5">
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-3 sm:p-4">
-              <div className="mb-2 flex items-center justify-between sm:mb-3">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.2em]">Всего</span>
-                <UsersRound className="h-5 w-5 text-cyan-100" />
-              </div>
-              <p className="text-2xl font-semibold sm:text-3xl">{registryStats.all}</p>
-              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">клиентов в базе</p>
+          <div className="grid grid-cols-[6.75rem_1fr] gap-2 rounded-2xl border border-cyan-200/20 bg-cyan-200/[0.04] p-2 sm:grid-cols-[15rem_1fr] sm:gap-3 sm:p-3">
+            <div className="grid gap-1.5 sm:grid-cols-2 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => void loadRegistry({ segment: "active", sortBy: "lastActivity", sortDir: "desc", page: 1 })}
+                className="flex min-h-10 items-center gap-2 rounded-xl border border-emerald-300/15 bg-emerald-300/[0.055] p-2 text-left transition active:scale-[0.98] sm:block sm:min-h-[5.25rem] sm:p-3"
+              >
+                <Clock3 className="h-4 w-4 shrink-0 text-emerald-100 sm:mb-2" />
+                <div className="min-w-0">
+                  <p className="text-lg font-semibold leading-none sm:text-xl">{registryStats.active}</p>
+                  <p className="mt-0.5 truncate text-[10px] leading-3 text-muted-foreground sm:mt-1 sm:text-[11px] sm:leading-4">живые</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadRegistry({ segment: "withBalance", sortBy: "balance", sortDir: "desc", page: 1 })}
+                className="flex min-h-10 items-center gap-2 rounded-xl border border-amber-300/15 bg-amber-300/[0.055] p-2 text-left transition active:scale-[0.98] sm:block sm:min-h-[5.25rem] sm:p-3"
+              >
+                <WalletCards className="h-4 w-4 shrink-0 text-amber-100 sm:mb-2" />
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-semibold leading-none sm:text-xl">{registryStats.totalBalance.toLocaleString("ru-RU")}</p>
+                  <p className="mt-0.5 truncate text-[10px] leading-3 text-muted-foreground sm:mt-1 sm:text-[11px] sm:leading-4">баллы</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadRegistry({ segment: "vip", sortBy: "totalSpend", sortDir: "desc", page: 1 })}
+                className="flex min-h-10 items-center gap-2 rounded-xl border border-violet-300/15 bg-violet-300/[0.055] p-2 text-left transition active:scale-[0.98] sm:block sm:min-h-[5.25rem] sm:p-3"
+              >
+                <Sparkles className="h-4 w-4 shrink-0 text-violet-100 sm:mb-2" />
+                <div className="min-w-0">
+                  <p className="text-lg font-semibold leading-none sm:text-xl">{registryStats.vip}</p>
+                  <p className="mt-0.5 truncate text-[10px] leading-3 text-muted-foreground sm:mt-1 sm:text-[11px] sm:leading-4">VIP</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadRegistry({ segment: "sleeping", sortBy: "lastActivity", sortDir: "asc", page: 1 })}
+                className="flex min-h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.045] p-2 text-left transition active:scale-[0.98] sm:block sm:min-h-[5.25rem] sm:p-3"
+              >
+                <Moon className="h-4 w-4 shrink-0 text-cyan-100 sm:mb-2" />
+                <div className="min-w-0">
+                  <p className="text-lg font-semibold leading-none sm:text-xl">{registryStats.sleeping}</p>
+                  <p className="mt-0.5 truncate text-[10px] leading-3 text-muted-foreground sm:mt-1 sm:text-[11px] sm:leading-4">уснули</p>
+                </div>
+              </button>
             </div>
-            <div className="rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.04] p-3 sm:p-4">
-              <div className="mb-2 flex items-center justify-between sm:mb-3">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.2em]">Активные</span>
-                <Clock3 className="h-5 w-5 text-emerald-100" />
+            <div className="grid content-between rounded-xl border border-white/10 bg-black/15 p-2.5 text-left sm:p-4">
+              <div className="mb-2 flex items-start justify-between gap-2 sm:mb-3 sm:gap-3">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-100 sm:text-[10px] sm:tracking-[0.18em]">Карта базы</p>
+                  <div className="mt-1.5 flex items-end gap-1.5 sm:mt-2 sm:gap-2">
+                    <p className="text-3xl font-semibold leading-none sm:text-4xl">{registryStats.all}</p>
+                    <p className="pb-0.5 text-[10px] text-muted-foreground sm:pb-1 sm:text-xs">клиентов</p>
+                  </div>
+                </div>
+                <span className="rounded-xl border border-cyan-200/25 bg-cyan-200/10 p-2 text-cyan-50 sm:p-2.5">
+                  <UsersRound className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
               </div>
-              <p className="text-2xl font-semibold sm:text-3xl">{registryStats.active}</p>
-              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">были недавно</p>
-            </div>
-            <div className="rounded-2xl border border-violet-300/15 bg-violet-300/[0.04] p-3 sm:p-4">
-              <div className="mb-2 flex items-center justify-between sm:mb-3">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.2em]">VIP</span>
-                <Sparkles className="h-5 w-5 text-violet-100" />
-              </div>
-              <p className="text-2xl font-semibold sm:text-3xl">{registryStats.vip}</p>
-              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">ценные клиенты</p>
-            </div>
-            <div className="rounded-2xl border border-amber-300/15 bg-amber-300/[0.035] p-3 sm:p-4">
-              <div className="mb-2 flex items-center justify-between sm:mb-3">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.2em]">Баланс</span>
-                <WalletCards className="h-5 w-5 text-amber-100" />
-              </div>
-              <p className="text-2xl font-semibold sm:text-3xl">{registryStats.totalBalance.toLocaleString("ru-RU")}</p>
-              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">баллов на руках</p>
+              {registryStats.all === 0 ? (
+                <div className="grid gap-2">
+                  <p className="text-[11px] leading-4 text-muted-foreground sm:text-xs sm:leading-5">
+                    Клиенты появятся после первого QR или быстрого кода на кассе.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkspaceMode("cashier");
+                        void startScanner();
+                      }}
+                      className="rounded-lg border border-cyan-200/25 bg-cyan-200/10 px-2 py-2 text-[10px] font-semibold text-cyan-50 transition active:scale-[0.98] sm:text-xs"
+                    >
+                      QR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceMode("cashier")}
+                      className="rounded-lg border border-white/10 bg-white/[0.045] px-2 py-2 text-[10px] font-semibold text-foreground transition active:scale-[0.98] sm:text-xs"
+                    >
+                      Код
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5 sm:space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => void loadRegistry({ segment: "active", sortBy: "lastActivity", sortDir: "desc", page: 1 })}
+                    className="grid w-full grid-cols-[3.95rem_1fr_1.25rem] items-center gap-1.5 text-left text-[10px] text-muted-foreground sm:grid-cols-[5.5rem_1fr_2rem] sm:gap-2 sm:text-xs"
+                  >
+                    <span>Активность</span>
+                    <div className="h-1.5 rounded-full bg-white/10 sm:h-2">
+                      <div className="h-full rounded-full bg-emerald-200" style={{ width: audiencePercent(registryStats.active) }} />
+                    </div>
+                    <span className="text-right">{registryStats.active}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void loadRegistry({ segment: "withBalance", sortBy: "balance", sortDir: "desc", page: 1 })}
+                    className="grid w-full grid-cols-[3.95rem_1fr_1.25rem] items-center gap-1.5 text-left text-[10px] text-muted-foreground sm:grid-cols-[5.5rem_1fr_2rem] sm:gap-2 sm:text-xs"
+                  >
+                    <span>Баланс</span>
+                    <div className="h-1.5 rounded-full bg-white/10 sm:h-2">
+                      <div className="h-full rounded-full bg-amber-200" style={{ width: audiencePercent(registryStats.withBalance) }} />
+                    </div>
+                    <span className="text-right">{registryStats.withBalance}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void loadRegistry({ segment: "vip", sortBy: "totalSpend", sortDir: "desc", page: 1 })}
+                    className="grid w-full grid-cols-[3.95rem_1fr_1.25rem] items-center gap-1.5 text-left text-[10px] text-muted-foreground sm:grid-cols-[5.5rem_1fr_2rem] sm:gap-2 sm:text-xs"
+                  >
+                    <span>VIP</span>
+                    <div className="h-1.5 rounded-full bg-white/10 sm:h-2">
+                      <div className="h-full rounded-full bg-violet-200" style={{ width: audiencePercent(registryStats.vip) }} />
+                    </div>
+                    <span className="text-right">{registryStats.vip}</span>
+                  </button>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => void loadRegistry({ segment: "all", sortBy: "totalSpend", sortDir: "desc", page: 1 })}
+                      className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[10px] text-muted-foreground"
+                    >
+                      Топ по чекам
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void loadRegistry({ segment: "withComment", sortBy: "updatedAt", sortDir: "desc", page: 1 })}
+                      className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[10px] text-muted-foreground"
+                    >
+                      С заметками
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           <form
-            className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_220px_150px_auto]"
+            className="grid gap-2 rounded-2xl border border-white/10 bg-black/15 p-2 md:grid-cols-2 md:bg-transparent md:p-0 xl:grid-cols-[1fr_220px_150px_auto]"
             onSubmit={(event) => {
               event.preventDefault();
               void loadRegistry({ page: 1 });
@@ -555,7 +702,7 @@ export default function CompanyClientsPage() {
                 value={registryQuery}
                 onChange={(event) => setRegistryQuery(event.target.value)}
                 placeholder="Поиск по имени, email или uuid"
-                className="h-12 rounded-xl pl-11"
+                className="h-11 rounded-xl pl-11 sm:h-12"
               />
             </div>
             <label className="relative">
@@ -565,7 +712,7 @@ export default function CompanyClientsPage() {
                 onChange={(event) =>
                   loadRegistry({ sortBy: event.target.value as CompanyClientRegistrySortBy, page: 1 })
                 }
-                className="h-12 w-full appearance-none rounded-xl border border-white/10 bg-background pl-11 pr-4 text-sm"
+                className="h-11 w-full appearance-none rounded-xl border border-white/10 bg-background pl-11 pr-4 text-sm sm:h-12"
               >
                 {registrySortOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -578,23 +725,23 @@ export default function CompanyClientsPage() {
               type="button"
               variant="secondary"
               onClick={() => void loadRegistry({ sortDir: registrySortDir === "asc" ? "desc" : "asc", page: 1 })}
-              className="h-12 rounded-xl"
+              className="h-11 rounded-xl sm:h-12"
             >
               <ArrowUpDown /> {registrySortDir === "asc" ? "По возр." : "По убыв."}
             </Button>
-            <Button type="submit" disabled={registryLoading} className="h-12 rounded-xl px-6">
+            <Button type="submit" disabled={registryLoading} className="h-11 rounded-xl px-6 sm:h-12">
               {registryLoading ? <RefreshCw className="animate-spin" /> : <Search />} Найти
             </Button>
           </form>
 
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden">
             {registrySegments.map((segment) => (
               <button
                 key={segment.value}
                 type="button"
                 onClick={() => void loadRegistry({ segment: segment.value, page: 1 })}
                 className={cn(
-                  "shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition",
+                  "shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition sm:px-4 sm:text-sm",
                   registrySegment === segment.value
                     ? "border-cyan-200/60 bg-cyan-200/15 text-cyan-50"
                     : "border-white/10 bg-white/[0.035] text-muted-foreground hover:border-cyan-200/30 hover:text-foreground",
@@ -669,20 +816,23 @@ export default function CompanyClientsPage() {
                 </tbody>
               </table>
             </div>
-            <div className="grid gap-3 p-3 md:hidden">
+            <div className="grid gap-3 p-2 md:hidden">
               {(registry?.items ?? []).map((client) => (
                 <button
                   key={client.uuid}
                   type="button"
                   onClick={() => void openClient(client.uuid)}
-                  className="rounded-2xl border border-white/10 bg-white/[0.025] p-3 text-left"
+                  className="rounded-2xl border border-white/10 bg-white/[0.035] p-3 text-left transition active:scale-[0.99] active:border-cyan-200/40"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-semibold">{client.name}</p>
                       <p className="truncate text-xs text-muted-foreground">{client.email || shortUuid(client.uuid)}</p>
                     </div>
-                    <Badge variant="outline" className="shrink-0 text-[11px]">{client.balance} баллов</Badge>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge variant="outline" className="text-[11px]">{client.balance} баллов</Badge>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {segmentBadges(client).slice(0, 3).map((label) => (
@@ -690,10 +840,10 @@ export default function CompanyClientsPage() {
                     ))}
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                    <span>Покупки: <b className="text-foreground">{formatMoney(client.totalSpend)}</b></span>
-                    <span>Уровень: <b className="text-foreground">{client.level.name}</b></span>
-                    <span>Чеков: <b className="text-foreground">{client.purchaseCount}</b></span>
-                    <span>Активность: <b className="text-foreground">{registryDate(client.lastActivityAt)}</b></span>
+                    <span className="rounded-xl bg-black/20 p-2">Покупки<br /><b className="text-foreground">{formatMoney(client.totalSpend)}</b></span>
+                    <span className="rounded-xl bg-black/20 p-2">Уровень<br /><b className="text-foreground">{client.level.name}</b></span>
+                    <span className="rounded-xl bg-black/20 p-2">Чеков<br /><b className="text-foreground">{client.purchaseCount}</b></span>
+                    <span className="rounded-xl bg-black/20 p-2">Активность<br /><b className="text-foreground">{registryDate(client.lastActivityAt)}</b></span>
                   </div>
                 </button>
               ))}
@@ -735,8 +885,9 @@ export default function CompanyClientsPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {workspaceMode === "cashier" && (
+      {visibleWorkspaceMode === "cashier" && (
       <>
       {scannerOpen && (
         <Card className="overflow-hidden border-cyan-300/20 bg-cyan-300/[0.035] py-0">

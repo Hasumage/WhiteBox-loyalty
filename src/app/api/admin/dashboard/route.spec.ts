@@ -134,4 +134,69 @@ describe("admin dashboard route", () => {
       consoleSpy.mockRestore();
     }
   });
+
+  it("returns PR dashboard rows when a referral has a missing referrer relation", async () => {
+    const orphanReferral = {
+      uuid: "ref-1",
+      companyId: 12,
+      company: {
+        id: 12,
+        name: "Cafe",
+        slug: "cafe",
+        isActive: true,
+        billingInvoices: [],
+      },
+      status: "ACTIVE",
+      pipelineStatus: "CONNECTED",
+      referralPercent: 30,
+      source: "PUBLIC_REFERRAL",
+      referrerUserId: 77,
+      referrer: null,
+    };
+    mockedPrisma.companyReferral.findMany
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([orphanReferral] as never);
+
+    const response = await GET(new NextRequest("http://localhost/api/admin/dashboard"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.pr.companies[0].referrer).toMatchObject({
+      id: 77,
+      uuid: "missing-user-77",
+      name: "Deleted PR user #77",
+      email: "deleted-pr-user@deleted.nearloy.local",
+    });
+  });
+
+  it("returns PR dashboard rows when a referral has a missing company relation", async () => {
+    const orphanReferral = {
+      uuid: "ref-2",
+      companyId: 404,
+      company: null,
+      status: "ACTIVE",
+      pipelineStatus: "CONNECTED",
+      referralPercent: 30,
+      source: "PUBLIC_REFERRAL",
+      referrerUserId: 77,
+      referrer: { id: 77, uuid: "agent-77", name: "PR Agent", email: "agent@test.local", role: "MANAGER" },
+    };
+    mockedPrisma.companyReferral.findMany
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([orphanReferral] as never);
+
+    const response = await GET(new NextRequest("http://localhost/api/admin/dashboard"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.pr.totals.activeCompanies).toBe(0);
+    expect(body.pr.companies[0]).toMatchObject({
+      companyId: 404,
+      companyName: "Deleted company #404",
+      companySlug: "missing-company-404",
+      companyActive: false,
+    });
+  });
 });

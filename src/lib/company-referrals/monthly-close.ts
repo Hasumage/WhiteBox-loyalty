@@ -20,6 +20,24 @@ function referralMoney(value: number) {
   return Math.round(money(value) / 10) * 10;
 }
 
+function fallbackAgent(referrerUserId: number) {
+  return {
+    uuid: `missing-user-${referrerUserId}`,
+    name: `Deleted PR user #${referrerUserId}`,
+    email: "deleted-pr-user@deleted.nearloy.local",
+  };
+}
+
+function fallbackCompany(companyId: number) {
+  return {
+    id: companyId,
+    slug: `missing-company-${companyId}`,
+    name: `Deleted company #${companyId}`,
+    isActive: false,
+    billingInvoices: [],
+  };
+}
+
 function moscowParts(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Moscow",
@@ -161,12 +179,14 @@ export async function getCompanyReferralMonthlyReport(params: {
   );
 
   for (const referral of referrals) {
+    const company = referral.company ?? fallbackCompany(referral.companyId);
     if (!byAgent.has(referral.referrerUserId) && params.scope === "ALL") {
+      const referrer = referral.referrer ?? fallbackAgent(referral.referrerUserId);
       byAgent.set(referral.referrerUserId, {
         userId: referral.referrerUserId,
-        uuid: referral.referrer.uuid,
-        name: referral.referrer.name || referral.referrer.email,
-        email: referral.referrer.email,
+        uuid: referrer.uuid,
+        name: referrer.name || referrer.email,
+        email: referrer.email,
         referralCode: null,
         companies: 0,
         activeCompanies: 0,
@@ -181,10 +201,10 @@ export async function getCompanyReferralMonthlyReport(params: {
     const agent = byAgent.get(referral.referrerUserId);
     if (!agent) continue;
     agent.companies += 1;
-    if (referral.status === "ACTIVE" && referral.company.isActive) agent.activeCompanies += 1;
+    if (referral.status === "ACTIVE" && company.isActive) agent.activeCompanies += 1;
     if (!isCompanyReferralCommissionable(referral)) continue;
 
-    const gross = referral.company.billingInvoices.reduce((sum, invoice) => sum + Number(invoice.paidAmount), 0);
+    const gross = company.billingInvoices.reduce((sum, invoice) => sum + Number(invoice.paidAmount), 0);
     const commission = referralMoney(gross * 0.3);
     agent.monthlyGross = money(agent.monthlyGross + gross);
     agent.monthlyReferralCommission = money(agent.monthlyReferralCommission + commission);

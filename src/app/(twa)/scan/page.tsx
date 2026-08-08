@@ -42,15 +42,20 @@ export default function ScanPage() {
   }, [qr?.payload]);
 
   async function generateLookupCode() {
-    setCodeLoading(true);
-    setCodeError("");
-    const result = await createTwaLookupCode();
-    if (result.ok) {
-      setLookupCode(result.data);
-    } else {
+    try {
+      setCodeLoading(true);
+      setCodeError("");
+      const result = await createTwaLookupCode();
+      if (result.ok) {
+        setLookupCode(result.data);
+      } else {
+        setCodeError(t("client.scan.codeError"));
+      }
+    } catch {
       setCodeError(t("client.scan.codeError"));
+    } finally {
+      setCodeLoading(false);
     }
-    setCodeLoading(false);
   }
 
   return (
@@ -124,8 +129,11 @@ export default function ScanPage() {
           )}
           {codeError && <p className="rounded-xl border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">{codeError}</p>}
           <Button type="button" className="w-full rounded-xl" onClick={() => void generateLookupCode()} disabled={codeLoading}>
-            {lookupCode ? <RefreshCw /> : <Hash />}
-            {lookupCode ? t("client.scan.refreshCode") : t("client.scan.generateCode")}
+            <span className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+              <RefreshCw className={lookupCode ? "absolute h-4 w-4" : "absolute h-4 w-4 opacity-0"} />
+              <Hash className={lookupCode ? "absolute h-4 w-4 opacity-0" : "absolute h-4 w-4"} />
+            </span>
+            <span>{lookupCode ? t("client.scan.refreshCode") : t("client.scan.generateCode")}</span>
           </Button>
         </CardContent>
       </Card>

@@ -174,7 +174,9 @@ export function LoginForm({ deleted = false, frozen = false, requestedNext = nul
       : null;
 
   function enterSession(data: AuthTokensResponse) {
-    const destination = authenticatedDestination(data.user, requestedNext);
+    const destination = authenticatedDestination(data.user, requestedNext, {
+      preferClientApp: preferredMiniAppProvider === "max",
+    });
     setStoredSession(data);
     window.dispatchEvent(new Event("nearloy:auth-updated"));
 
@@ -287,7 +289,9 @@ export function LoginForm({ deleted = false, frozen = false, requestedNext = nul
         setError("message" in data ? data.message : t("client.auth.loginFailed"));
         return;
       }
-      const safe = authenticatedDestination(data.user, requestedNext);
+      const safe = authenticatedDestination(data.user, requestedNext, {
+        preferClientApp: preferredMiniAppProvider === "max",
+      });
 
       if (data.user.accountStatus === "FROZEN_PENDING_DELETION") {
         setStoredSession(data);

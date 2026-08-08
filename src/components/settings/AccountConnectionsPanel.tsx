@@ -173,7 +173,7 @@ export function AccountConnectionsPanel({
           </Button>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-3">
           {providers.map((provider) => {
             const status = connections?.providers[provider.key];
             const connected = Boolean(status?.connected);
@@ -181,7 +181,7 @@ export function AccountConnectionsPanel({
             return (
               <div
                 key={provider.key}
-                className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] gap-3 rounded-3xl border border-white/10 bg-white/[0.035] p-4 xl:grid-cols-1 xl:content-start xl:gap-4"
+                className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] gap-3 rounded-3xl border border-white/10 bg-white/[0.035] p-4"
               >
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/20 bg-cyan-300/10 text-cyan-100">
                   <Icon className="h-5 w-5" />
@@ -203,7 +203,7 @@ export function AccountConnectionsPanel({
 
                 <div
                   className={cn(
-                    "col-span-2 grid min-w-0 gap-2 pt-1 sm:max-w-md xl:col-span-1 xl:max-w-none xl:pt-0",
+                    "col-span-2 grid min-w-0 gap-2 pt-1 sm:max-w-md",
                     connected ? "grid-cols-2" : "grid-cols-1",
                   )}
                 >

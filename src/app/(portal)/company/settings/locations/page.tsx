@@ -421,59 +421,65 @@ export default function CompanyLocationMapPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-48px)] flex-col gap-3 overflow-hidden">
-      <section className="shrink-0 rounded-3xl border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(159,246,255,0.12),transparent_35%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-4 shadow-[0_24px_90px_rgba(0,0,0,0.28)]">
+    <div className="flex min-h-[calc(100vh-48px)] flex-col gap-3 overflow-visible pb-4 xl:overflow-hidden">
+      <section className="shrink-0 rounded-[1.5rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(159,246,255,0.12),transparent_35%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-3 shadow-[0_24px_90px_rgba(0,0,0,0.28)] sm:rounded-3xl sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <Button asChild variant="secondary">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+            <Button asChild variant="secondary" className="h-10 shrink-0 rounded-2xl px-3">
               <Link href="/company/settings">
                 <ArrowLeft className="h-4 w-4" />
-                {t("admin.companyMap.back")}
+                <span className="hidden sm:inline">{t("admin.companyMap.back")}</span>
               </Link>
             </Button>
-            <Badge variant="outline" className="border-cyan-200/30 bg-cyan-200/10 text-cyan-50">
+            <Badge variant="outline" className="shrink-0 border-cyan-200/30 bg-cyan-200/10 text-cyan-50">
               <MapPin className="h-3.5 w-3.5" />
               {t("admin.companyMap.badge")}
             </Badge>
-            <Badge variant="secondary" className="gap-2">
+            <Badge variant="secondary" className="min-w-0 gap-2">
               <Building2 className="h-3.5 w-3.5" />
-              {currentCompany?.name ?? t("admin.companyDetail.notSet")}
+              <span className="truncate">{currentCompany?.name ?? t("admin.companyDetail.notSet")}</span>
             </Badge>
-            <Badge variant="secondary" className="gap-2">
+            <Badge variant="secondary" className="hidden gap-2 sm:inline-flex">
               <Navigation className="h-3.5 w-3.5" />
               {locations.length} {t("admin.companyDetail.savedCount")}
             </Badge>
           </div>
-          <Button type="button" variant="secondary" onClick={() => void loadCompany()}>
+          <Button type="button" variant="secondary" onClick={() => void loadCompany()} className="h-10 shrink-0 rounded-2xl px-3">
             <RefreshCcw className="h-4 w-4" />
-            {t("admin.companyMap.refresh")}
+            <span className="hidden sm:inline">{t("admin.companyMap.refresh")}</span>
           </Button>
         </div>
-        <div className="mt-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{modeCopy.title}</h1>
-          <p className="mt-1 max-w-4xl text-sm text-muted-foreground">{modeCopy.description}</p>
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{modeCopy.title}</h1>
+            <p className="mt-1 line-clamp-2 max-w-4xl text-xs leading-5 text-muted-foreground sm:text-sm">{modeCopy.description}</p>
+          </div>
+          <Badge variant="secondary" className="shrink-0 gap-2 sm:hidden">
+            <Navigation className="h-3.5 w-3.5" />
+            {locations.length}
+          </Badge>
         </div>
-        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
           <button
             type="button"
             disabled={!canManage || modeSaving !== null}
             onClick={() => void saveWorkMode("PHYSICAL")}
             className={cn(
-              "group rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-200/35 hover:bg-cyan-200/[0.07]",
+              "group rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:border-cyan-200/35 hover:bg-cyan-200/[0.07] sm:rounded-3xl sm:p-4",
               workMode === "PHYSICAL" ? "border-cyan-200/35 bg-cyan-200/[0.09]" : "border-white/10 bg-black/20",
             )}
           >
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/25 bg-cyan-200/10 text-cyan-50">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/25 bg-cyan-200/10 text-cyan-50 sm:h-12 sm:w-12">
                 <Store className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-lg font-semibold">{modeCopy.physicalTitle}</p>
+                <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+                  <p className="text-sm font-semibold leading-tight sm:text-lg">{modeCopy.physicalTitle}</p>
                   {workMode === "PHYSICAL" && <Badge variant="outline">{modeCopy.active}</Badge>}
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">{modeCopy.physicalHint}</p>
-                <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-50">
+                <p className="mt-1 hidden text-sm text-muted-foreground sm:block">{modeCopy.physicalHint}</p>
+                <span className="mt-3 hidden items-center gap-2 text-sm font-semibold text-cyan-50 sm:inline-flex">
                   {modeSaving === "PHYSICAL" ? t("admin.companyMap.saving") : modeCopy.savePhysical}
                   <Navigation className="h-4 w-4 transition group-hover:translate-x-0.5" />
                 </span>
@@ -485,21 +491,21 @@ export default function CompanyLocationMapPage() {
             disabled={!canManage || modeSaving !== null}
             onClick={() => void saveWorkMode("ONLINE")}
             className={cn(
-              "group rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-200/35 hover:bg-cyan-200/[0.07]",
+              "group rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:border-cyan-200/35 hover:bg-cyan-200/[0.07] sm:rounded-3xl sm:p-4",
               workMode === "ONLINE" ? "border-emerald-300/35 bg-emerald-300/[0.08]" : "border-white/10 bg-black/20",
             )}
           >
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-200/25 bg-emerald-200/10 text-emerald-50">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-200/25 bg-emerald-200/10 text-emerald-50 sm:h-12 sm:w-12">
                 <Globe2 className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-lg font-semibold">{modeCopy.onlineTitle}</p>
+                <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+                  <p className="text-sm font-semibold leading-tight sm:text-lg">{modeCopy.onlineTitle}</p>
                   {workMode === "ONLINE" && <Badge variant="outline">{modeCopy.active}</Badge>}
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">{modeCopy.onlineHint}</p>
-                <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-50">
+                <p className="mt-1 hidden text-sm text-muted-foreground sm:block">{modeCopy.onlineHint}</p>
+                <span className="mt-3 hidden items-center gap-2 text-sm font-semibold text-emerald-50 sm:inline-flex">
                   {modeSaving === "ONLINE" ? t("admin.companyMap.saving") : modeCopy.saveOnline}
                   <Navigation className="h-4 w-4 transition group-hover:translate-x-0.5" />
                 </span>
@@ -509,22 +515,22 @@ export default function CompanyLocationMapPage() {
         </div>
         {workMode === "PHYSICAL" && (
         <div className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-3">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
+          <div className="mb-3 grid gap-2 sm:flex sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="text-sm font-semibold">{t("admin.companyMap.formTitle")}</p>
-              <p className="text-xs text-muted-foreground">{t("admin.companyMap.formHint")}</p>
+              <p className="line-clamp-2 text-xs text-muted-foreground">{t("admin.companyMap.formHint")}</p>
             </div>
-            <Button type="button" variant="secondary" onClick={useMyLocation}>
+            <Button type="button" variant="secondary" onClick={useMyLocation} className="h-11 w-full rounded-2xl sm:w-auto">
               <LocateFixed className="h-4 w-4" />
               {t("admin.companyMap.useMyLocation")}
             </Button>
           </div>
-          <div className="grid gap-3 lg:grid-cols-12">
-            <div className="space-y-1 lg:col-span-2">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-12">
+            <div className="col-span-2 space-y-1 sm:col-span-1 lg:col-span-2">
               <Label htmlFor="map-title">{t("admin.companyDetail.locationLabel")}</Label>
               <Input id="map-title" value={draft.title} maxLength={80} placeholder={t("admin.companyDetail.locationLabelPlaceholder")} onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))} />
             </div>
-            <div className="space-y-1 lg:col-span-5">
+            <div className="col-span-2 space-y-1 lg:col-span-5">
               <Label htmlFor="map-address">{t("admin.companyDetail.address")}</Label>
               <Input id="map-address" value={draft.address} maxLength={240} placeholder={t("admin.companyDetail.addressPlaceholder")} onChange={(event) => setDraft((prev) => ({ ...prev, address: event.target.value }))} />
             </div>
@@ -539,7 +545,7 @@ export default function CompanyLocationMapPage() {
                 <option value="yes">{t("admin.companyDetail.mainLocationSelected")}</option>
               </SelectField>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:col-span-3">
+            <div className="col-span-2 grid grid-cols-2 gap-2 lg:col-span-3">
               <div className="space-y-1">
                 <Label htmlFor="map-open" className="inline-flex items-center gap-1.5">
                   <Clock3 className="h-3.5 w-3.5 text-primary" />
@@ -555,7 +561,7 @@ export default function CompanyLocationMapPage() {
                 <Input id="map-close" type="time" value={draft.closeTime} onChange={(event) => setDraft((prev) => ({ ...prev, closeTime: event.target.value }))} />
               </div>
             </div>
-            <div className="space-y-1 lg:col-span-6">
+            <div className="col-span-2 space-y-1 lg:col-span-6">
               <Label>{t("admin.companyDetail.workingDays")}</Label>
               <div className="flex flex-wrap gap-1.5 rounded-2xl border border-white/10 bg-black/20 p-2">
                 {WEEKDAY_OPTIONS.map((day) => (
@@ -572,8 +578,8 @@ export default function CompanyLocationMapPage() {
                 ))}
               </div>
             </div>
-            <div className="flex items-end lg:col-span-3">
-              <Button type="button" className="w-full justify-center" disabled={saving || !draft.address.trim()} onClick={() => void saveLocation()}>
+            <div className="col-span-2 flex items-end lg:col-span-3">
+              <Button type="button" className="h-11 w-full justify-center rounded-2xl" disabled={saving || !draft.address.trim()} onClick={() => void saveLocation()}>
                 <Save className="h-4 w-4" />
                 {saving ? t("admin.companyMap.saving") : t("admin.companyMap.savePoint")}
               </Button>
@@ -586,18 +592,18 @@ export default function CompanyLocationMapPage() {
         )}
         {workMode === "ONLINE" && (
           <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="rounded-3xl border border-emerald-300/20 bg-[radial-gradient(circle_at_top_left,rgba(110,231,183,0.16),transparent_34%),rgba(16,185,129,0.05)] p-5">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-200/25 bg-emerald-200/10 text-emerald-50">
+            <div className="rounded-2xl border border-emerald-300/20 bg-[radial-gradient(circle_at_top_left,rgba(110,231,183,0.16),transparent_34%),rgba(16,185,129,0.05)] p-4 sm:rounded-3xl sm:p-5">
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-200/25 bg-emerald-200/10 text-emerald-50 sm:h-12 sm:w-12">
                   <Globe2 className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-lg font-semibold">{modeCopy.onlineStatusTitle}</p>
-                  <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{modeCopy.onlineStatusHint}</p>
+                  <p className="text-base font-semibold sm:text-lg">{modeCopy.onlineStatusTitle}</p>
+                  <p className="mt-1 max-w-3xl text-sm leading-5 text-muted-foreground">{modeCopy.onlineStatusHint}</p>
                 </div>
               </div>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4 sm:rounded-3xl sm:p-5">
               <p className="flex items-center gap-2 text-base font-semibold">
                 <MapPin className="h-5 w-5 text-primary" />
                 {modeCopy.savedAddresses}
@@ -623,17 +629,17 @@ export default function CompanyLocationMapPage() {
       </section>
 
       {workMode === "PHYSICAL" && (
-      <div className="grid min-h-0 flex-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Card className="relative min-h-0 overflow-hidden border-white/10 bg-muted/10">
-          <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-md rounded-2xl border border-black/10 bg-black/55 p-3 text-sm shadow-2xl backdrop-blur-xl">
+      <div className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
+        <Card className="relative min-h-0 overflow-hidden rounded-[1.5rem] border-white/10 bg-muted/10 sm:rounded-3xl">
+          <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 rounded-2xl border border-black/10 bg-black/55 p-3 text-sm shadow-2xl backdrop-blur-xl sm:left-4 sm:right-auto sm:max-w-md">
             <div className="flex items-center gap-2 font-semibold">
               <Crosshair className="h-4 w-4 text-primary" />
               {t("admin.companyMap.mapTitle")}
             </div>
-            <p className="mt-1 text-xs text-white/70">{t("admin.companyMap.mapHint")}</p>
+            <p className="mt-1 line-clamp-2 text-xs text-white/70">{t("admin.companyMap.mapHint")}</p>
           </div>
           <CardContent className="p-0">
-            <div ref={mapNodeRef} className="h-[calc(100vh-330px)] min-h-[560px] w-full bg-[radial-gradient(circle_at_center,rgba(159,246,255,0.12),transparent_35%),#080b10]" />
+            <div ref={mapNodeRef} className="h-[360px] min-h-[360px] w-full bg-[radial-gradient(circle_at_center,rgba(159,246,255,0.12),transparent_35%),#080b10] sm:h-[460px] sm:min-h-[460px] xl:h-[calc(100vh-330px)] xl:min-h-[560px]" />
             {mapStatus !== "ready" && (
               <div className="absolute bottom-4 left-4 right-4 z-10 rounded-2xl border border-white/10 bg-black/70 p-3 text-sm text-muted-foreground backdrop-blur-xl">
                 {mapStatus === "loading" ? t("admin.companyMap.loadingMap") : message || t("admin.companyMap.mapIdle")}
@@ -641,18 +647,18 @@ export default function CompanyLocationMapPage() {
             )}
           </CardContent>
           {pendingPoint && (
-            <div className="absolute bottom-4 left-4 right-4 z-20 rounded-3xl border border-cyan-200/25 bg-black/82 p-4 shadow-[0_24px_90px_rgba(0,0,0,0.5)] backdrop-blur-xl md:left-1/2 md:right-auto md:w-[520px] md:-translate-x-1/2">
+            <div className="absolute bottom-3 left-3 right-3 z-20 rounded-2xl border border-cyan-200/25 bg-black/82 p-3 shadow-[0_24px_90px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:bottom-4 sm:left-4 sm:right-4 sm:rounded-3xl sm:p-4 md:left-1/2 md:right-auto md:w-[520px] md:-translate-x-1/2">
               <p className="text-xs uppercase tracking-[0.24em] text-cyan-100/70">{t("admin.companyMap.selectedAddressLabel")}</p>
-              <p className="mt-2 text-lg font-semibold text-white">{pendingPoint.address || t("admin.companyMap.addressNotFound")}</p>
+              <p className="mt-2 line-clamp-2 text-base font-semibold text-white sm:text-lg">{pendingPoint.address || t("admin.companyMap.addressNotFound")}</p>
               <p className="mt-1 font-mono text-xs text-muted-foreground">
                 {pendingPoint.latitude.toFixed(6)}, {pendingPoint.longitude.toFixed(6)}
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button type="button" onClick={confirmPendingPoint} disabled={!pendingPoint.address}>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 sm:flex sm:flex-wrap">
+                <Button type="button" onClick={confirmPendingPoint} disabled={!pendingPoint.address} className="rounded-2xl">
                   <CheckCircle2 className="h-4 w-4" />
                   {t("admin.companyMap.confirmAddress")}
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => setPendingPoint(null)}>
+                <Button type="button" variant="secondary" onClick={() => setPendingPoint(null)} className="rounded-2xl">
                   {t("admin.companyMap.cancelAddress")}
                 </Button>
               </div>
@@ -664,16 +670,16 @@ export default function CompanyLocationMapPage() {
           <aside
             ref={panelRef}
             onScroll={updatePanelScrollHint}
-            className="map-picker-scroll h-full min-h-0 space-y-4 overflow-y-auto rounded-3xl border border-white/10 bg-black/20 p-3"
+            className="map-picker-scroll h-full min-h-0 space-y-3 overflow-visible rounded-[1.5rem] border border-white/10 bg-black/20 p-3 xl:space-y-4 xl:overflow-y-auto xl:rounded-3xl"
           >
-          <Card className="border-white/10 bg-muted/10 px-4 py-4">
-            <CardHeader className="px-3 pb-4 pt-1">
+          <Card className="rounded-2xl border-white/10 bg-muted/10 px-2 py-3 sm:px-4 sm:py-4">
+            <CardHeader className="px-3 pb-3 pt-1 sm:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <MapPin className="h-5 w-5 text-primary" />
                 {t("admin.companyMap.savedTitle")}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 px-3 pb-3 pt-0">
+            <CardContent className="space-y-2 px-3 pb-3 pt-0 sm:space-y-3">
               {locations.length === 0 && <p className="text-sm text-muted-foreground">{t("admin.companyDetail.noAddresses")}</p>}
               {locations.map((location) => {
                 const coords = locationCoords(location);
@@ -696,7 +702,7 @@ export default function CompanyLocationMapPage() {
           </Card>
           </aside>
           {panelHasMore && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center rounded-b-3xl bg-gradient-to-t from-black via-black/80 to-transparent px-4 pb-4 pt-16">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 hidden justify-center rounded-b-3xl bg-gradient-to-t from-black via-black/80 to-transparent px-4 pb-4 pt-16 xl:flex">
               <div className="rounded-full border border-cyan-200/20 bg-cyan-200/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-cyan-50 shadow-[0_0_40px_rgba(159,246,255,0.22)] backdrop-blur-xl">
                 {t("admin.companyMap.scrollHint")}
               </div>

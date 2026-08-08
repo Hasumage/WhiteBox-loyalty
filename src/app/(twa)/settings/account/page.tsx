@@ -1,9 +1,8 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Bell, CalendarDays, CheckCircle2, Copy, ExternalLink, Lock, LogOut, MapPin, RefreshCw, Send, Shield, ShieldCheck } from "lucide-react";
+import { Bell, CalendarDays, CheckCircle2, Copy, ExternalLink, Lock, MapPin, RefreshCw, Send, Shield, ShieldCheck } from "lucide-react";
 import { VkIdLinkButton } from "@/components/auth/VkIdLinkButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
 import { DeleteAccountDialog } from "@/components/settings/DeleteAccountDialog";
 import { AccountConnectionsPanel } from "@/components/settings/AccountConnectionsPanel";
-import { clearStoredSession, getStoredUser, type StoredUser } from "@/lib/api/auth-client";
+import { getStoredUser, type StoredUser } from "@/lib/api/auth-client";
 import {
   createUserTelegramLink,
   getTwaProfile,
@@ -64,7 +63,6 @@ function todayInputValue() {
 
 export default function SettingsAccountPage() {
   const { t } = useI18n("ru");
-  const router = useRouter();
   const [user, setUser] = useState<StoredUser | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -98,11 +96,6 @@ export default function SettingsAccountPage() {
       if (!telegram.ok) setTelegramMessage(telegram.message);
     })();
   }, []);
-
-  function handleLogout() {
-    clearStoredSession();
-    router.push("/login");
-  }
 
   async function updatePreference(input: Parameters<typeof updateTwaProfilePreferences>[0]) {
     setMessage(null);
@@ -507,26 +500,19 @@ export default function SettingsAccountPage() {
 
       <AccountConnectionsPanel next="/settings/account" className="mt-3" />
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <Button type="button" variant="secondary" className="glass border-white/10" onClick={() => setPasswordOpen(true)}>
-          <Lock className="mr-2 h-4 w-4" />
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Button type="button" variant="secondary" className="glass h-auto min-h-11 border-white/10 px-2 text-xs sm:text-sm" onClick={() => setPasswordOpen(true)}>
+          <Lock className="mr-1.5 h-4 w-4 shrink-0 sm:mr-2" />
           {t("client.account.changePassword")}
         </Button>
-        <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
-          {t("client.account.removeProfile")}
-        </Button>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" className="glass border-white/10" asChild>
+        <Button variant="outline" className="glass h-auto min-h-11 border-white/10 px-2 text-xs sm:text-sm" asChild>
           <Link href="/help/privacy?section=settings-account" scroll={false}>
-            <Shield className="mr-2 h-4 w-4" />
+            <Shield className="mr-1.5 h-4 w-4 shrink-0 sm:mr-2" />
             {t("client.account.privacyPolicy")}
           </Link>
         </Button>
-        <Button type="button" variant="secondary" size="sm" className="glass border-white/10" onClick={handleLogout}>
-          <LogOut className="mr-2 h-4 w-4" />
-          {t("client.account.logout")}
+        <Button type="button" variant="destructive" className="col-span-2" onClick={() => setDeleteOpen(true)}>
+          {t("client.account.removeProfile")}
         </Button>
       </div>
 

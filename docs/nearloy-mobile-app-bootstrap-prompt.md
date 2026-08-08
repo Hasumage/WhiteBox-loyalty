@@ -132,6 +132,7 @@ NearLoy
 - открыть `VITE_NEARLOY_WEB_URL`;
 - держать пользователя внутри домена `nearloy.ru`;
 - внешние ссылки открывать через системный браузер;
+- принимать OAuth/deep-link возврат `nearloy://...` и открывать его внутри WebView;
 - не хранить пароли;
 - не хардкодить секреты;
 - не добавлять backend в мобильный репозиторий.
@@ -143,6 +144,36 @@ const NEARLOY_WEB_URL = import.meta.env.VITE_NEARLOY_WEB_URL || 'https://nearloy
 const NEARLOY_SITE_URL = import.meta.env.VITE_NEARLOY_SITE_URL || 'https://nearloy.ru';
 const NEARLOY_API_URL = import.meta.env.VITE_NEARLOY_API_URL || 'https://nearloy.ru/backend-api';
 ```
+
+## VK ID / OAuth возврат в приложение
+
+Для входа через VK ID backend NearLoy возвращает мобильный callback в custom scheme:
+
+```txt
+nearloy://oauth/vkid/complete?ticket=...&app=capacitor
+```
+
+Нативный shell должен зарегистрировать URL scheme `nearloy` и на `appUrlOpen` загрузить соответствующий web-route внутри WebView:
+
+```ts
+import { App } from '@capacitor/app';
+
+const NEARLOY_SITE_URL = import.meta.env.VITE_NEARLOY_SITE_URL || 'https://nearloy.ru';
+
+App.addListener('appUrlOpen', ({ url }) => {
+  const incoming = new URL(url);
+  if (incoming.protocol !== 'nearloy:') return;
+
+  const path = `/${incoming.hostname}${incoming.pathname}`;
+  const webUrl = new URL(path, NEARLOY_SITE_URL);
+  webUrl.search = incoming.search;
+  webUrl.searchParams.set('app', 'capacitor');
+
+  window.location.assign(webUrl.toString());
+});
+```
+
+Важно: ticket должен обмениваться уже на странице `https://nearloy.ru/oauth/vkid/complete?...` внутри приложения, иначе сессия сохранится во внешнем браузере, а не в NearLoy app.
 
 ## Важное про автообновления
 

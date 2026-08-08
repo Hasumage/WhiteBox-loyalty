@@ -13,13 +13,13 @@ import { RegisteredService } from "./registered.service";
 
 /**
  * Client app API surface (same audience as Home / Map / History / Profile).
- * `JwtAuthMiddleware` + **CLIENT** role only.
+ * `JwtAuthMiddleware` + client-capable roles only.
  */
 @ApiTags("registered")
 @ApiBearerAuth("access-token")
 @Controller("registered")
 @UseGuards(RolesGuard)
-@Roles(UserRole.CLIENT)
+@Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
 export class RegisteredController {
   constructor(private readonly registeredService: RegisteredService) {}
 

@@ -1,8 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowRight, Banknote, BellRing, BookOpen, CheckCircle2, CircleAlert, Coins, ExternalLink, QrCode, ReceiptText, RefreshCw, Send, Sparkles, Users, WalletCards, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowRight, Banknote, BellRing, BookOpen, CheckCircle2, CircleAlert, Coins, ExternalLink, QrCode, ReceiptText, RefreshCw, Send, Sparkles, TrendingUp, Users, WalletCards, X } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +27,81 @@ function money(value: number) {
 }
 
 const roleNames = { OWNER: "Владелец", MANAGER: "Руководитель", CASHIER: "Кассир" } as const;
+
+type ChartTooltipPayload = {
+  color?: string;
+  name?: string;
+  value?: number | string;
+  dataKey?: string;
+};
+
+function compactNumber(value: number) {
+  return new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
+function chartDateLabel(value: string) {
+  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short" }).format(new Date(value));
+}
+
+function buildActivityChart(operations: CompanyDashboard["recentOperations"]) {
+  const buckets = new Map<string, { date: string; earned: number; spent: number; revenue: number; operations: number }>();
+  const today = new Date();
+  for (let index = 6; index >= 0; index -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - index);
+    const key = date.toISOString().slice(0, 10);
+    buckets.set(key, { date: key, earned: 0, spent: 0, revenue: 0, operations: 0 });
+  }
+
+  for (const operation of operations) {
+    const key = new Date(operation.createdAt).toISOString().slice(0, 10);
+    const bucket = buckets.get(key);
+    if (!bucket) continue;
+    bucket.operations += 1;
+    if (operation.kind === "SUBSCRIPTION") bucket.revenue += operation.amount ?? 0;
+    if (operation.kind === "POINTS" && operation.direction === "EARN") bucket.earned += operation.points ?? 0;
+    if (operation.kind === "POINTS" && operation.direction === "SPEND") bucket.spent += operation.points ?? 0;
+  }
+
+  return [...buckets.values()].map((item) => ({
+    ...item,
+    label: chartDateLabel(item.date),
+  }));
+}
+
+function buildPointsSplitChart(activity: ReturnType<typeof buildActivityChart>) {
+  const earned = activity.reduce((sum, item) => sum + item.earned, 0);
+  const spent = activity.reduce((sum, item) => sum + item.spent, 0);
+  return {
+    earned,
+    spent,
+    total: earned + spent,
+    data: [
+      { label: "Начислено", value: earned, fill: "#67e8f9" },
+      { label: "Списано", value: spent, fill: "#fcd34d" },
+    ].filter((item) => item.value > 0),
+  };
+}
+
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: ChartTooltipPayload[]; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#071018]/95 px-3 py-2 text-xs shadow-2xl shadow-black/40">
+      <p className="mb-1 font-semibold text-white">{label}</p>
+      <div className="space-y-1">
+        {payload.map((item) => (
+          <p key={item.dataKey ?? item.name} className="flex items-center justify-between gap-4 text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+              {item.name}
+            </span>
+            <span className="font-semibold text-white">{item.value}</span>
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function CompanyPortalPage() {
   const [dashboard, setDashboard] = useState<CompanyDashboard | null>(null);
@@ -50,6 +137,8 @@ export default function CompanyPortalPage() {
   const recentOperations = (dashboard?.recentOperations ?? []).filter(
     (operation) => SUBSCRIPTIONS_ENABLED || operation.kind !== "SUBSCRIPTION",
   );
+  const activityChart = useMemo(() => buildActivityChart(recentOperations), [recentOperations]);
+  const pointsSplit = useMemo(() => buildPointsSplitChart(activityChart), [activityChart]);
   const tutorial = [
     { title: "Найдите клиента", detail: "Отсканируйте QR или найдите клиента по имени и email на кассе.", icon: QrCode },
     { title: "Начислите баллы", detail: "Введите сумму покупки: уровень клиента сам определит размер кэшбэка.", icon: Coins },
@@ -211,6 +300,103 @@ export default function CompanyPortalPage() {
         ))}
       </section>
 
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <Card className="glass overflow-hidden border-white/10 py-0">
+          <CardContent className="p-4 sm:p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold">
+                  <TrendingUp className="h-5 w-5 text-cyan-100" /> Пульс операций
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">Баллы, списания и выручка за последние 7 дней</p>
+              </div>
+              <Badge variant="outline" className="shrink-0">{recentOperations.length}</Badge>
+            </div>
+            <div className="h-56 w-full sm:h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={activityChart} margin={{ left: -18, right: 4, top: 8, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="companyEarned" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#67e8f9" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#67e8f9" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="companySpent" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#fcd34d" stopOpacity={0.28} />
+                      <stop offset="95%" stopColor="#fcd34d" stopOpacity={0.01} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "rgba(255,255,255,0.48)", fontSize: 11 }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fill: "rgba(255,255,255,0.42)", fontSize: 11 }} tickFormatter={(value) => compactNumber(Number(value))} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Area type="monotone" dataKey="earned" name="Начислено" stroke="#67e8f9" fill="url(#companyEarned)" strokeWidth={2.5} />
+                  <Area type="monotone" dataKey="spent" name="Списано" stroke="#fcd34d" fill="url(#companySpent)" strokeWidth={2.5} />
+                  {SUBSCRIPTIONS_ENABLED && <Area type="monotone" dataKey="revenue" name="Выручка" stroke="#c4b5fd" fill="rgba(196,181,253,0.08)" strokeWidth={2.5} />}
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="glass overflow-hidden border-white/10 py-0">
+          <CardContent className="p-4 sm:p-5">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">Оборот баллов</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Что реально происходило с баллами за 7 дней</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center xl:grid-cols-1">
+              <div className="relative h-40 sm:h-44 xl:h-40">
+                {pointsSplit.total > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pointsSplit.data}
+                        dataKey="value"
+                        nameKey="label"
+                        innerRadius="62%"
+                        outerRadius="86%"
+                        paddingAngle={4}
+                        stroke="rgba(255,255,255,0.08)"
+                        strokeWidth={1}
+                      >
+                        {pointsSplit.data.map((entry) => (
+                          <Cell key={entry.label} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<ChartTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-white/10 text-center text-sm text-muted-foreground">
+                    Пока нет оборота
+                  </div>
+                )}
+                {pointsSplit.total > 0 && (
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <span className="text-3xl font-semibold tabular-nums">{pointsSplit.total}</span>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">баллов</span>
+                  </div>
+                )}
+              </div>
+              <div className="grid gap-2">
+                <div className="rounded-2xl border border-cyan-200/15 bg-cyan-300/[0.06] px-3 py-3">
+                  <p className="text-xs text-muted-foreground">Начислено клиентам</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-cyan-100">{pointsSplit.earned}</p>
+                </div>
+                <div className="rounded-2xl border border-amber-200/15 bg-amber-300/[0.06] px-3 py-3">
+                  <p className="text-xs text-muted-foreground">Списано на покупки</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-100">{pointsSplit.spent}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-3">
+                  <p className="text-xs text-muted-foreground">Активных операций</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums">{recentOperations.length}</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
       <div className="grid gap-4 xl:grid-cols-[1.35fr_0.8fr]">
         <Card className="glass border-white/10 py-0">
           <CardContent className="p-4 sm:p-6">
@@ -321,11 +507,21 @@ export default function CompanyPortalPage() {
                 </div>
               </>
             ) : (
-              <div className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.05] p-4">
-                <p className="text-sm font-semibold">Мы создаём кое-что потрясающее</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  В первой версии компании работают с клиентами, QR, баллами и уровнями. Новые инструменты появятся отдельным стабильным обновлением.
-                </p>
+              <div className="grid gap-3">
+                <Link href="/company/clients" className="flex items-center justify-between rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.05] p-4 transition hover:border-cyan-200/30 hover:bg-cyan-300/[0.08]">
+                  <span>
+                    <span className="block text-sm font-semibold">Касса и клиенты</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">Поиск, QR и быстрые начисления баллов.</span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-cyan-100" />
+                </Link>
+                <Link href="/company/loyalty" className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-white/20 hover:bg-white/[0.055]">
+                  <span>
+                    <span className="block text-sm font-semibold">Уровни и баллы</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">Пороги покупок и проценты начисления.</span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </Link>
               </div>
             )}
           </CardContent>

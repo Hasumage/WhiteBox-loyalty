@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Coins, Percent, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { companyProfile, updateCompanyLoyaltySettings } from "@/lib/api/company-client";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
@@ -37,6 +39,12 @@ function limitNumberInput(value: string, max: number): string {
     return String(max);
   }
   return normalized;
+}
+
+function formatRubInput(value: string) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "0 ₽";
+  return `${Math.round(amount).toLocaleString("ru-RU")} ₽`;
 }
 
 const policyOptions: Array<{ value: SubscriptionSpendPolicy; title: string; detail: string }> = [
@@ -111,8 +119,11 @@ export default function CompanyLoyaltyPage() {
     }
   }
 
+  const maxCashback = levels.reduce((max, level) => Math.max(max, Number(level.cashbackPercent) || 0), 0);
+  const highestThreshold = levels.reduce((max, level) => Math.max(max, Number(level.minTotalSpend) || 0), 0);
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 pb-28 lg:pb-0">
       <header>
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">Лояльность</p>
         <h1 className="text-3xl font-semibold">Уровни и баллы</h1>
@@ -126,7 +137,7 @@ export default function CompanyLoyaltyPage() {
         </div>
       )}
       <Card className="glass border-white/10 py-0">
-        <CardContent className="space-y-6 p-5">
+        <CardContent className="space-y-5 p-3 sm:space-y-6 sm:p-5">
           {/* #SubNearloyCode: влияние клиентских подписок на уровни скрыто до запуска модуля. */}
           {SUBSCRIPTIONS_ENABLED && (
             <>
@@ -150,29 +161,80 @@ export default function CompanyLoyaltyPage() {
               </div>
             </>
           )}
-          <div>
-            <h2 className="flex items-center gap-2 font-semibold"><Coins className="h-4 w-4 text-cyan-100" /> Уровни клиентов</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Чем выше уровень клиента, тем больше его сумма покупок и не меньше процент начисляемых баллов.</p>
-          </div>
-          <div className="overflow-hidden rounded-2xl border border-white/10">
-            <div className="hidden grid-cols-[minmax(220px,1fr)_240px_240px_44px] gap-3 border-b border-white/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:grid">
-              <span>Название уровня</span><span>Покупки от, ₽</span><span>Начислять баллов, %</span><span />
+          <div className="grid gap-3 sm:flex sm:items-end sm:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold"><Coins className="h-4 w-4 text-cyan-100" /> Уровни клиентов</h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">Чем выше уровень клиента, тем больше его сумма покупок и не меньше процент начисляемых баллов.</p>
             </div>
-            <div className="space-y-3 p-3">
-              {levels.map((level, index) => (
-                <div key={level.rowId} className="grid gap-3 rounded-xl bg-white/[0.02] p-3 sm:grid-cols-[minmax(220px,1fr)_240px_240px_44px] sm:items-start">
-                  <Input disabled={!canManage} value={level.levelName} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, levelName: event.target.value } : row))} placeholder="Например, Серебро" className="h-11 w-full rounded-xl" />
-                  <Input disabled={!canManage} type="number" min={0} max={MAX_LEVEL_MIN_TOTAL_SPEND} step={1} value={level.minTotalSpend} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, minTotalSpend: limitNumberInput(event.target.value, MAX_LEVEL_MIN_TOTAL_SPEND) } : row))} className="h-11 w-full rounded-xl" />
-                  <div className="space-y-2">
-                    <Input disabled={!canManage} type="number" min={0} max={MAX_LEVEL_CASHBACK_PERCENT} step={0.1} value={level.cashbackPercent} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, cashbackPercent: limitNumberInput(event.target.value, MAX_LEVEL_CASHBACK_PERCENT) } : row))} className="h-11 w-full rounded-xl" />
-                    {canManage && <div className="grid grid-cols-3 gap-1">{[1, 5, 10].map((value) => <button key={value} type="button" onClick={() => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, cashbackPercent: String(value) } : row))} className="rounded-lg border border-white/10 px-2 py-1 text-center text-[11px] leading-none text-muted-foreground transition hover:border-cyan-200/30 hover:text-foreground">{value}%</button>)}</div>}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                <p className="text-lg font-semibold leading-none">{levels.length}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">уровней</p>
+              </div>
+              <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.04] px-3 py-2">
+                <p className="text-lg font-semibold leading-none">{maxCashback}%</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">макс.</p>
+              </div>
+              <div className="rounded-xl border border-amber-300/15 bg-amber-300/[0.04] px-3 py-2">
+                <p className="truncate text-lg font-semibold leading-none">{formatRubInput(String(highestThreshold))}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">порог</p>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {levels.map((level, index) => {
+              const levelNameId = `${level.rowId}-name`;
+              const minSpendId = `${level.rowId}-min-spend`;
+              const cashbackId = `${level.rowId}-cashback`;
+              return (
+                <div key={level.rowId} className="rounded-2xl border border-white/10 bg-white/[0.025] p-3 sm:p-4">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="rounded-full">#{index + 1}</Badge>
+                        <p className="truncate font-semibold">{level.levelName || "Новый уровень"}</p>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        от {formatRubInput(level.minTotalSpend)} · {Number(level.cashbackPercent) || 0}% баллами
+                      </p>
+                    </div>
+                    {canManage && (
+                      <Button type="button" size="icon-sm" variant="ghost" onClick={() => setLevels((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} className="shrink-0 text-red-200 hover:bg-red-300/10 hover:text-red-100" aria-label="Удалить уровень">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
-                  {canManage && <Button type="button" size="icon" variant="ghost" onClick={() => setLevels((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} className="mt-1 self-start text-red-200 hover:bg-red-300/10 hover:text-red-100"><Trash2 className="h-4 w-4" /></Button>}
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(180px,1fr)_180px_180px]">
+                    <div className="col-span-2 space-y-2 sm:col-span-1">
+                      <Label htmlFor={levelNameId} className="text-xs text-muted-foreground">Название уровня</Label>
+                      <Input id={levelNameId} disabled={!canManage} value={level.levelName} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, levelName: event.target.value } : row))} placeholder="Например, Серебро" className="h-12 w-full rounded-xl" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={minSpendId} className="text-xs text-muted-foreground">Покупки от, ₽</Label>
+                      <Input id={minSpendId} disabled={!canManage} type="number" min={0} max={MAX_LEVEL_MIN_TOTAL_SPEND} step={1} value={level.minTotalSpend} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, minTotalSpend: limitNumberInput(event.target.value, MAX_LEVEL_MIN_TOTAL_SPEND) } : row))} placeholder="0" className="h-12 w-full rounded-xl" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={cashbackId} className="text-xs text-muted-foreground">Начислять баллов, %</Label>
+                      <Input id={cashbackId} disabled={!canManage} type="number" min={0} max={MAX_LEVEL_CASHBACK_PERCENT} step={0.1} value={level.cashbackPercent} onChange={(event) => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, cashbackPercent: limitNumberInput(event.target.value, MAX_LEVEL_CASHBACK_PERCENT) } : row))} placeholder="1" className="h-12 w-full rounded-xl" />
+                      {canManage && <div className="grid grid-cols-3 gap-1.5">{[1, 5, 10].map((value) => <button key={value} type="button" onClick={() => setLevels((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, cashbackPercent: String(value) } : row))} className="rounded-lg border border-white/10 px-2 py-1.5 text-center text-[11px] leading-none text-muted-foreground transition hover:border-cyan-200/30 hover:text-foreground">{value}%</button>)}</div>}
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-          {canManage && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setLevels((rows) => [...rows, createLevelRule({ levelName: `Уровень ${rows.length + 1}`, minTotalSpend: "0", cashbackPercent: "0" })])}><Plus /> Добавить уровень</Button><Button onClick={() => void save()}><Percent /> Сохранить уровни</Button></div>}
+          {canManage && (
+            <>
+              <div className="hidden flex-wrap gap-2 sm:flex">
+                <Button variant="secondary" onClick={() => setLevels((rows) => [...rows, createLevelRule({ levelName: `Уровень ${rows.length + 1}`, minTotalSpend: "0", cashbackPercent: "0" })])}><Plus /> Добавить уровень</Button>
+                <Button onClick={() => void save()}><Percent /> Сохранить уровни</Button>
+              </div>
+              <div className="fixed inset-x-3 bottom-[5.35rem] z-30 grid grid-cols-[1fr_1fr] gap-2 rounded-2xl border border-white/10 bg-background/95 p-2 shadow-[0_-16px_48px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:hidden">
+                <Button variant="secondary" onClick={() => setLevels((rows) => [...rows, createLevelRule({ levelName: `Уровень ${rows.length + 1}`, minTotalSpend: "0", cashbackPercent: "0" })])} className="h-11 rounded-xl px-2 text-xs"><Plus className="h-4 w-4" /> Добавить</Button>
+                <Button onClick={() => void save()} className="h-11 rounded-xl px-2 text-xs"><Percent className="h-4 w-4" /> Сохранить</Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

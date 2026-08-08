@@ -1,39 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
-  BriefcaseBusiness,
-  Compass,
-  Copy,
-  Flame,
   Gift,
   Handshake,
   Heart,
   LockKeyhole,
+  LogOut,
   MessageSquareText,
   PanelTop,
-  Settings,
+  Shield,
   ShieldCheck,
   Sparkles,
   Store,
-  Target,
   Ticket,
-  Trophy,
-  UsersRound,
   WalletCards,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
-import { getStoredUser, type StoredUser } from "@/lib/api/auth-client";
+import { clearStoredSession, getStoredUser, type StoredUser } from "@/lib/api/auth-client";
 import { getCachedFavoriteCategorySlugs, getCachedRegisteredCategories, getFavoriteCategorySlugs, getRegisteredCategories } from "@/lib/api/categories-client";
 import {
   getCachedTwaDashboard,
@@ -41,8 +33,6 @@ import {
   getTwaDashboard,
   getTwaProfile,
   getUserProfileStatuses,
-  redeemTwaPromoCode,
-  redeemTwaReferralCode,
   type UserProfileStatusState,
   type TwaProfile,
 } from "@/lib/api/twa-client";
@@ -90,13 +80,9 @@ const fallbackProfile: TwaProfile = {
 
 export default function SettingsPage() {
   const { locale, setLocale, t } = useI18n("ru");
-  const pathname = usePathname();
+  const router = useRouter();
   const [user, setUser] = useState<StoredUser | null>(null);
   const [profile, setProfile] = useState<TwaProfile>(fallbackProfile);
-  const [promoCode, setPromoCode] = useState("");
-  const [referralCode, setReferralCode] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profileStatusState, setProfileStatusState] = useState<UserProfileStatusState | null>(null);
 
@@ -164,99 +150,11 @@ export default function SettingsPage() {
     };
   }, []);
 
-  useEffect(() => {
-    function scrollToHash() {
-      const raw = window.location.hash.replace(/^#/, "");
-      if (!raw) return;
-      const id = decodeURIComponent(raw);
-      requestAnimationFrame(() => {
-        document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    }
-    scrollToHash();
-    window.addEventListener("hashchange", scrollToHash);
-    return () => window.removeEventListener("hashchange", scrollToHash);
-  }, [pathname]);
-
-  const activityLabel =
-    profile.stats.activityScore >= 75
-      ? t("client.profile.goldRhythm")
-      : profile.stats.activityScore >= 40
-        ? t("client.profile.silverRhythm")
-        : t("client.profile.starterRhythm");
-  const activityTone =
-    profile.stats.activityScore >= 75
-      ? t("client.profile.loyaltyPro")
-      : profile.stats.activityScore >= 40
-        ? t("client.profile.momentum")
-        : t("client.profile.firstSteps");
-  const scoreProgress = Math.max(4, Math.min(100, profile.stats.activityScore));
-  const nextActions = useMemo(() => {
-    const actions: Array<{ href: string; label: string; detail: string; icon: typeof Heart; done: boolean }> = [
-      {
-        href: "/settings/favorites",
-        label: t("client.profile.chooseFavorites"),
-        detail: t("client.profile.tuneRecommendations"),
-        icon: Heart,
-        done: profile.stats.favoriteCategories > 0,
-      },
-      {
-        href: "/companies",
-        label: t("client.profile.visitPartners"),
-        detail: t("client.profile.startEarning"),
-        icon: Store,
-        done: profile.stats.partnerCount > 0,
-      },
-      // #SubNearloyCode: быстрый сценарий клиентских подписок скрыт до запуска.
-      ...(SUBSCRIPTIONS_ENABLED
-        ? [{
-            href: "/marketplace",
-            label: t("client.profile.trySubscriptions"),
-            detail: t("client.profile.unlockPerks"),
-            icon: Ticket,
-            done: profile.stats.activeSubscriptions > 0,
-          }]
-        : []),
-    ];
-    return actions.sort((a, b) => Number(a.done) - Number(b.done));
-  }, [profile.stats.activeSubscriptions, profile.stats.favoriteCategories, profile.stats.partnerCount, t]);
-  const primaryAction = nextActions.find((action) => !action.done) ?? nextActions[0];
-
-  async function redeemPromo() {
-    if (!promoCode.trim()) return;
-    setBusy(true);
-    setMessage(null);
-    const res = await redeemTwaPromoCode(promoCode);
-    setBusy(false);
-    if (!res.ok) {
-      setMessage(res.message);
-      return;
-    }
-    setPromoCode("");
-    setMessage(res.data.message);
-    setProfile(await getTwaProfile());
+  function handleLogout() {
+    clearStoredSession();
+    router.push("/login");
   }
 
-  async function redeemReferral() {
-    if (!referralCode.trim()) return;
-    setBusy(true);
-    setMessage(null);
-    const res = await redeemTwaReferralCode(referralCode);
-    setBusy(false);
-    if (!res.ok) {
-      setMessage(res.message);
-      return;
-    }
-    setReferralCode("");
-    setMessage(res.data.message);
-    setProfile(await getTwaProfile());
-  }
-
-  async function copyReferralCode() {
-    if (!profile.referral.code) return;
-    await navigator.clipboard?.writeText(profile.referral.code).catch(() => undefined);
-    setMessage(t("client.profile.referralCopied"));
-  }
 
   if (loading) {
     return <TwaLoadingScreen title={t("client.profile.loadingTitle")} subtitle={t("client.profile.loadingSubtitle")} />;
@@ -266,7 +164,7 @@ export default function SettingsPage() {
   const newStatusCount = profileStatusState?.summary.new ?? 0;
   const metrics = [
     { label: t("client.profile.partners"), value: profile.stats.partnerCount, icon: Store },
-    // #SubNearloyCode: метрика клиентских подписок скрыта до запуска.
+    // #SubNearloyCode: client subscription metrics are hidden until launch.
     ...(SUBSCRIPTIONS_ENABLED ? [{ label: t("client.profile.subs"), value: profile.stats.activeSubscriptions, icon: WalletCards }] : []),
     { label: t("client.profile.favorites"), value: profile.stats.favoriteCategories, icon: Heart },
   ];
@@ -303,7 +201,7 @@ export default function SettingsPage() {
       line: "from-transparent via-emerald-200/70 to-transparent",
     },
     {
-      href: "#section-payments",
+      href: "/settings/rewards",
       label: t("client.profile.rewardsCenter"),
       detail: t("client.profile.rewardsCenterSubtitle"),
       icon: Gift,
@@ -316,9 +214,9 @@ export default function SettingsPage() {
   const moreLinks = [
     ...(SHOW_LAUNCH_REVIEWS ? [["/settings/reviews", MessageSquareText, t("client.profile.myReviews"), t("client.profile.myReviewsSubtitle")] as const] : []),
     ["/settings/partnership", ShieldCheck, t("client.profile.partnership"), t("client.profile.partnershipSubtitle")],
-    ["/settings/business", BriefcaseBusiness, t("client.profile.forBusiness"), t("client.profile.forBusinessSubtitle")],
+    ["/help/privacy?section=settings-access", Shield, t("client.account.privacyPolicy"), t("client.profile.accountSettingsSubtitle")],
     ...(SHOW_LAUNCH_REFERRALS ? [["/settings/company-referrals", Handshake, t("client.profile.companyReferrals"), t("client.profile.companyReferralsSubtitle")] as const] : []),
-    // #SubNearloyCode: ссылка на marketplace скрыта до запуска клиентских подписок.
+    // #SubNearloyCode: marketplace link is hidden until client subscriptions launch.
     ...(SUBSCRIPTIONS_ENABLED ? [["/marketplace", Ticket, t("client.profile.trySubscriptions"), t("client.profile.unlockPerks")] as const] : []),
   ] as const;
 
@@ -342,9 +240,6 @@ export default function SettingsPage() {
                 {t("client.profile.profileControls")}
               </Badge>
               <h1 className="text-3xl font-semibold tracking-tight">{t("client.profile.settingsHub")}</h1>
-              <p className="mt-2 max-w-[22rem] text-sm leading-relaxed text-muted-foreground">
-                {t("client.profile.settingsHubSubtitle")}
-              </p>
             </div>
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border border-cyan-200/20 bg-cyan-300/10 text-xl font-bold text-cyan-50 shadow-[0_0_35px_rgba(103,232,249,0.12)]">
               {user?.name ? initials(user.name) : "?"}
@@ -374,12 +269,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
-
-      {message && (
-        <div className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">
-          {message}
-        </div>
-      )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -429,158 +318,13 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <Card className="glass overflow-hidden border-white/10 bg-slate-950/70 p-0">
-        <CardContent className="space-y-4 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-                <Flame className="h-3.5 w-3.5" />
-                {t("client.profile.nearloyPulse")}
-              </p>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight">{activityTone}</h2>
-              <p className="mt-1 max-w-[15rem] text-xs leading-relaxed text-muted-foreground">
-                {profile.stats.activityScore > 0 ? t("client.profile.nextStepsSubtitle") : t("client.profile.chooseCategories")}
-              </p>
-            </div>
-            <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-primary/10 blur-xl" />
-              <div
-                className="relative flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-[conic-gradient(var(--primary)_var(--score),rgba(255,255,255,0.1)_0)] p-1 shadow-[0_18px_42px_rgba(0,0,0,0.35)]"
-                style={{ "--score": `${scoreProgress}%` } as React.CSSProperties}
-              >
-                <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-slate-950 text-center">
-                  <span className="text-2xl font-bold tabular-nums">{profile.stats.activityScore}</span>
-                  <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{t("client.profile.pulse")}</span>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-3">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold">{t("client.profile.nextSteps")}</p>
-                <p className="text-xs text-muted-foreground">{t("client.profile.nextStepsSubtitle")}</p>
-              </div>
-              <Badge variant="secondary" className="shrink-0 gap-1 bg-primary/15 text-primary">
-                <Trophy className="h-3 w-3" />
-                {activityLabel}
-              </Badge>
-            </div>
-            <div className="grid gap-2">
-              {nextActions.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <Link
-                    key={action.href}
-                    href={action.href}
-                    className={cn(
-                      "group flex items-center gap-3 rounded-2xl border px-3 py-2.5 transition-colors",
-                      action.done
-                        ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
-                        : "border-white/10 bg-slate-950/40 hover:border-white/20 hover:bg-white/[0.06]",
-                    )}
-                  >
-                    <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", action.done ? "bg-emerald-400/15 text-emerald-200" : "bg-primary/15 text-primary")}>
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">{action.label}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{action.done ? t("client.profile.done") : action.detail}</span>
-                    </span>
-                    {action.done ? <Target className="h-4 w-4 shrink-0 text-emerald-200" /> : <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-
-          <Button asChild className="w-full rounded-2xl">
-            <Link href={primaryAction.href}>
-              <Compass className="mr-2 h-4 w-4" />
-              {t("client.profile.boostProfile")}
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-
-      <section id="section-payments" className="space-y-3 scroll-mt-6">
-        <div>
-          <h2 className="text-lg font-semibold">{t("client.profile.rewardsCenter")}</h2>
-          <p className="text-xs text-muted-foreground">{t("client.profile.rewardsCenterSubtitle")}</p>
-        </div>
-        <div className="grid gap-3">
-          <Card className="glass border-white/10">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Gift className="h-4 w-4 text-primary" />
-                {t("client.profile.promoCodes")}
-              </CardTitle>
-              <CardDescription>{t("client.profile.promoCodesSubtitle")}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 pb-4">
-              <Input className="glass h-11 min-w-0 border-white/10 uppercase" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder={t("client.profile.promoPlaceholder")} />
-              <Button type="button" className="h-11 w-full" disabled={busy || !promoCode.trim()} onClick={redeemPromo}>
-                {t("client.profile.apply")}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {SHOW_LAUNCH_REFERRALS ? (
-          <Card className="glass border-white/10">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <UsersRound className="h-4 w-4 text-primary" />
-                {t("client.profile.inviteFriends")}
-              </CardTitle>
-              <CardDescription>
-                {profile.referral.isActive
-                  ? interpolate(t("client.profile.referralActive"), {
-                      inviter: profile.referral.inviterBonusPoints,
-                      invited: profile.referral.invitedBonusPoints,
-                    })
-                  : t("client.profile.inviteFriendsSubtitle")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 pb-4">
-              <button type="button" onClick={copyReferralCode} className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-muted/10 px-3 py-3 text-left">
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("client.profile.yourReferralCode")}</p>
-                  <p className="break-all font-semibold tracking-[0.18em]">{profile.referral.code || "..."}</p>
-                </div>
-                <Copy className="h-4 w-4 shrink-0 text-primary" />
-              </button>
-              <div className="grid gap-2">
-                <Input className="glass h-11 min-w-0 border-white/10 uppercase" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder={t("client.profile.referralPlaceholder")} />
-                <Button type="button" variant="secondary" className="glass h-11 w-full border-white/10" disabled={busy || !referralCode.trim()} onClick={redeemReferral}>
-                  {t("client.profile.redeem")}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="space-y-3">
+      <section id="settings-access" className="space-y-3 scroll-mt-6">
         <div>
           <h2 className="text-lg font-semibold">{t("client.profile.accountAndMore")}</h2>
           <p className="text-xs text-muted-foreground">{t("client.profile.accountAndMoreSubtitle")}</p>
         </div>
         <div className="grid gap-2">
-          <Link href="/settings/account" className="flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-card px-4 py-3 transition-colors hover:bg-muted/10">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-primary">
-                <Settings className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{t("client.profile.accountSettings")}</p>
-                <p className="truncate text-xs text-muted-foreground">{t("client.profile.openAccountPreferences")}</p>
-              </div>
-            </div>
-            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-          </Link>
-
           {moreLinks.map(([href, Icon, title, description]) => (
             <Link key={href} href={href} className="flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-card px-4 py-3 transition-colors hover:bg-muted/10">
               <div className="flex min-w-0 items-center gap-3">
@@ -595,6 +339,22 @@ export default function SettingsPage() {
               <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </Link>
           ))}
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-auto justify-between rounded-[1.5rem] border border-rose-200/15 bg-rose-300/[0.07] px-4 py-3 text-left text-rose-50 hover:border-rose-200/25 hover:bg-rose-300/[0.11]"
+            onClick={handleLogout}
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-rose-200/20 bg-rose-200/10 text-rose-100">
+                <LogOut className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">{t("client.account.logout")}</span>
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-rose-100/55" />
+          </Button>
         </div>
       </section>
     </motion.div>

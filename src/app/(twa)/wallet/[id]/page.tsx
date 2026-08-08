@@ -1172,11 +1172,11 @@ export default function WalletPage() {
           </div>
         </motion.section>
 
-        {hasActionButtons && (
-          <motion.section
-            initial={{ y: 12, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.08 }}
+	        {hasActionButtons && (
+	          <motion.section
+	            initial={{ y: 12, opacity: 0 }}
+	            animate={{ y: 0, opacity: 1 }}
+	            transition={{ delay: 0.08 }}
             className={cn("grid gap-3", actionGridClass)}
           >
             {hasRouteLocations && (
@@ -1220,11 +1220,40 @@ export default function WalletPage() {
                   </Button>
                 </motion.div>
               )}
-            </AnimatePresence>
-          </motion.section>
-        )}
+	            </AnimatePresence>
+	          </motion.section>
+	        )}
 
-        <Dialog open={levelsOpen} onOpenChange={setLevelsOpen}>
+	        {Boolean(publicMedia?.socialLinks?.length) && (
+	          <motion.section
+	            initial={{ y: 12, opacity: 0 }}
+	            animate={{ y: 0, opacity: 1 }}
+	            transition={{ delay: 0.09 }}
+	            className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.88),rgba(3,7,18,0.86))] p-4"
+	          >
+	            <h2 className="text-lg font-black tracking-[-0.04em]">Где ещё найти компанию</h2>
+	            <div className="mt-3 flex flex-wrap gap-2">
+	              {publicMedia?.socialLinks.map((link) => (
+	                <a
+	                  key={link.id}
+	                  href={link.url}
+	                  target="_blank"
+	                  rel="noreferrer"
+	                  className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-bold text-white shadow-[0_12px_28px_rgba(0,0,0,0.22)] transition hover:border-cyan-200/30 hover:bg-cyan-300/10"
+	                >
+	                  {link.kind !== "OTHER" && (
+	                    <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-cyan-200/18 bg-cyan-300/10 text-cyan-100">
+	                      <PublicSocialIcon kind={link.kind} />
+	                    </span>
+	                  )}
+	                  <span className="max-w-[150px] truncate">{link.title}</span>
+	                </a>
+	              ))}
+	            </div>
+	          </motion.section>
+	        )}
+	
+	        <Dialog open={levelsOpen} onOpenChange={setLevelsOpen}>
           <DialogContent className="max-h-[82vh] overflow-hidden border-white/10 bg-[#070b12] p-0 text-white">
             <DialogHeader className="border-b border-white/8 px-5 py-4 text-left">
               <DialogTitle className="flex items-center gap-2 text-xl font-black tracking-[-0.04em]">
