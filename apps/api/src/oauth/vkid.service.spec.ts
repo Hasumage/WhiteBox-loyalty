@@ -168,6 +168,43 @@ describe("VkIdService", () => {
     });
   });
 
+  it("returns native app callback for VK ID login started from Capacitor", async () => {
+    const startUrl = await service.createAuthorizationRedirect({ next: "/app?app=capacitor" });
+    const state = new URL(startUrl).searchParams.get("state")!;
+    const codeVerifier = prisma.oAuthState.create.mock.calls[0][0].data.codeVerifier;
+    prisma.oAuthState.findUnique.mockResolvedValue({
+      id: "state-mobile",
+      provider: "vkid",
+      consumedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      codeVerifier,
+      redirectAfter: "/app?app=capacitor",
+      linkUserId: null,
+    });
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ access_token: "vk-access", refresh_token: "vk-refresh", expires_in: 3600 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ user: { user_id: 308859679, email: "maxim@example.com" } }),
+      });
+    tx.oAuthAccount.findUnique.mockResolvedValue(null);
+    tx.user.findUnique.mockResolvedValue({ id: 77, email: "maxim@example.com", name: "Maxim", role: UserRole.CLIENT });
+    tx.oAuthAccount.upsert.mockResolvedValue({});
+
+    const completeUrl = await service.handleCallback({ code: "vk-code", state });
+
+    expect(completeUrl).toMatch(/^nearloy:\/\/oauth\/vkid\/complete\?ticket=/);
+    expect(completeUrl).toContain("app=capacitor");
+    expect(prisma.oAuthLoginTicket.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        redirectAfter: "/app?app=capacitor",
+      }),
+    });
+  });
+
   it("links VK ID to the current user and blocks links already owned by another account", async () => {
     const startUrl = await service.createAuthorizationRedirect({ next: "/settings/account", linkUserId: 5 });
     const state = new URL(startUrl).searchParams.get("state")!;

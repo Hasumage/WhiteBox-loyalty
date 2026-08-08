@@ -66,16 +66,30 @@ export type AuthTokensResponse = {
 };
 
 const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN", "MANAGER", "SUPPORT"]);
+const CLIENT_APP_ROLES = new Set(["CLIENT", "ADMIN", "SUPER_ADMIN", "MANAGER"]);
 
-export function authenticatedDestination(user: Pick<StoredUser, "role">, requestedNext: string | null) {
-  if (ADMIN_ROLES.has(user.role)) {
-    return user.role === "SUPPORT" ? "/admin/support" : "/admin";
-  }
-  if (user.role === "COMPANY") return "/company";
+function safeRequestedNext(requestedNext: string | null) {
   if (requestedNext && requestedNext.startsWith("/") && !requestedNext.startsWith("//")) {
     const nextPath = requestedNext.split(/[?#]/, 1)[0] || "/";
     if (!PUBLIC_AUTH_ROUTES.has(nextPath)) return requestedNext;
   }
+  return null;
+}
+
+export function authenticatedDestination(
+  user: Pick<StoredUser, "role">,
+  requestedNext: string | null,
+  options: { preferClientApp?: boolean } = {},
+) {
+  const safeNext = safeRequestedNext(requestedNext);
+  if (options.preferClientApp && safeNext && CLIENT_APP_ROLES.has(user.role)) {
+    return safeNext;
+  }
+  if (ADMIN_ROLES.has(user.role)) {
+    return user.role === "SUPPORT" ? "/admin/support" : "/admin";
+  }
+  if (user.role === "COMPANY") return "/company";
+  if (safeNext) return safeNext;
   return CLIENT_HOME;
 }
 

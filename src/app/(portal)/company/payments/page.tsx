@@ -59,11 +59,11 @@ export default function CompanyPaymentsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <header>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">Расчёты</p>
-        <h1 className="text-3xl font-semibold">Финансы компании</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Запросы на выплаты, сохранённые способы оплаты и прозрачная история согласований.</p>
+    <div className="space-y-4 sm:space-y-5">
+      <header className="rounded-[1.75rem] border border-white/10 bg-[radial-gradient(circle_at_0%_0%,rgba(103,232,249,0.14),transparent_34%),rgba(255,255,255,0.035)] p-4 sm:p-5">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-100 sm:text-xs">Расчёты</p>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Финансы компании</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Запросы на выплаты, сохранённые способы оплаты и прозрачная история согласований.</p>
       </header>
 
       {(message || error) && (
@@ -72,27 +72,27 @@ export default function CompanyPaymentsPage() {
         </div>
       )}
 
-      <section className={`grid gap-3 sm:grid-cols-2 ${SUBSCRIPTIONS_ENABLED ? "xl:grid-cols-5" : "xl:grid-cols-3"}`}>
+      <section className={`grid grid-cols-2 gap-2 sm:gap-3 ${SUBSCRIPTIONS_ENABLED ? "xl:grid-cols-5" : "xl:grid-cols-3"}`}>
         {/* #SubNearloyCode: метрики дохода клиентских подписок скрыты до запуска модуля. */}
         {SUBSCRIPTIONS_ENABLED && (
           <Card className="overflow-hidden border-cyan-300/20 bg-[linear-gradient(140deg,rgba(103,232,249,0.085),rgba(255,255,255,0.025))] py-0">
-            <CardContent className="relative p-5">
-              <span className="mb-4 inline-flex rounded-xl border border-cyan-200/15 bg-cyan-200/[0.06] p-2.5 text-cyan-100">
+            <CardContent className="relative min-h-36 p-4 sm:p-5">
+              <span className="mb-3 inline-flex rounded-xl border border-cyan-200/15 bg-cyan-200/[0.06] p-2.5 text-cyan-100 sm:mb-4">
                 <Wallet className="h-5 w-5" />
               </span>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">Текущий доход</p>
-              <p className="mt-2 text-3xl font-semibold">{data ? money(data.recognizedSubscriptionRevenue) : "-"}</p>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">Уже заработано по прошедшим дням подписок</p>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground sm:text-xs">Текущий доход</p>
+              <p className="mt-2 break-words text-2xl font-semibold leading-tight sm:text-3xl">{data ? money(data.recognizedSubscriptionRevenue) : "-"}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">Заработано по прошедшим дням</p>
             </CardContent>
           </Card>
         )}
-        <Card className="overflow-hidden border-emerald-300/25 bg-[linear-gradient(140deg,rgba(52,211,153,0.12),rgba(255,255,255,0.025))] py-0">
-          <CardContent className="relative p-5">
-            <span className="mb-4 inline-flex rounded-xl border border-emerald-200/20 bg-emerald-200/[0.08] p-2.5 text-emerald-100">
+        <Card className="col-span-2 overflow-hidden border-emerald-300/25 bg-[linear-gradient(140deg,rgba(52,211,153,0.12),rgba(255,255,255,0.025))] py-0 sm:col-span-1">
+          <CardContent className="relative min-h-36 p-4 sm:p-5">
+            <span className="mb-3 inline-flex rounded-xl border border-emerald-200/20 bg-emerald-200/[0.08] p-2.5 text-emerald-100 sm:mb-4">
               <ArrowUpRight className="h-5 w-5" />
             </span>
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">Доступно к выводу</p>
-            <p className="mt-2 text-3xl font-semibold text-emerald-50">{data ? money(data.availableForPayout) : "-"}</p>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground sm:text-xs">Доступно к выводу</p>
+            <p className="mt-2 break-words text-3xl font-semibold leading-tight text-emerald-50">{data ? money(data.availableForPayout) : "-"}</p>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
               После выплат и заявок в резерве
             </p>
@@ -102,32 +102,32 @@ export default function CompanyPaymentsPage() {
         {SUBSCRIPTIONS_ENABLED && (
           <>
             <Card className="overflow-hidden border-cyan-300/20 bg-[linear-gradient(140deg,rgba(103,232,249,0.085),rgba(255,255,255,0.025))] py-0">
-              <CardContent className="p-5">
-                <span className="mb-4 inline-flex rounded-xl border border-cyan-200/15 bg-cyan-200/[0.06] p-2.5 text-cyan-100">
+              <CardContent className="min-h-36 p-4 sm:p-5">
+                <span className="mb-3 inline-flex rounded-xl border border-cyan-200/15 bg-cyan-200/[0.06] p-2.5 text-cyan-100 sm:mb-4">
                   <TrendingUp className="h-5 w-5" />
                 </span>
-                <p className="text-xs uppercase tracking-widest text-muted-foreground">Потенциальный доход</p>
-                <p className="mt-2 text-3xl font-semibold">{data ? money(data.potentialSubscriptionRevenue) : "-"}</p>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground sm:text-xs">Потенциал</p>
+                <p className="mt-2 break-words text-2xl font-semibold leading-tight sm:text-3xl">{data ? money(data.potentialSubscriptionRevenue) : "-"}</p>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
                   Остаток активных сроков{data ? ` · +${money(data.dailySubscriptionRevenue)} в день` : ""}
                 </p>
               </CardContent>
             </Card>
             <Card className="glass border-white/10 py-0">
-              <CardContent className="p-5">
-                <ReceiptText className="mb-4 h-5 w-5 text-cyan-100" />
-                <p className="text-xs uppercase tracking-widest text-muted-foreground">Подписчиков</p>
-                <p className="mt-2 text-3xl font-semibold">{data?.activeSubscribers ?? "-"}</p>
+              <CardContent className="min-h-36 p-4 sm:p-5">
+                <ReceiptText className="mb-3 h-5 w-5 text-cyan-100 sm:mb-4" />
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground sm:text-xs">Подписчиков</p>
+                <p className="mt-2 text-2xl font-semibold sm:text-3xl">{data?.activeSubscribers ?? "-"}</p>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">Активные клиенты подписок</p>
               </CardContent>
             </Card>
           </>
         )}
         <Card className="glass border-white/10 py-0">
-          <CardContent className="p-5">
-            <Clock3 className="mb-4 h-5 w-5 text-cyan-100" />
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">В резерве</p>
-            <p className="mt-2 text-3xl font-semibold">{data ? money(data.reservedPayouts) : "-"}</p>
+          <CardContent className="min-h-36 p-4 sm:p-5">
+            <Clock3 className="mb-3 h-5 w-5 text-cyan-100 sm:mb-4" />
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground sm:text-xs">В резерве</p>
+            <p className="mt-2 break-words text-2xl font-semibold leading-tight sm:text-3xl">{data ? money(data.reservedPayouts) : "-"}</p>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">Заявки на рассмотрении или одобрены</p>
           </CardContent>
         </Card>
@@ -141,15 +141,15 @@ export default function CompanyPaymentsPage() {
       )}
 
       <Card className="border-cyan-300/15 bg-cyan-300/[0.035] py-0">
-        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-3">
+        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex min-w-0 gap-3">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/20 bg-cyan-200/[0.07] text-cyan-100">
               <CreditCard className="h-5 w-5" />
             </span>
-            <div>
+            <div className="min-w-0">
               <h2 className="font-semibold">Сохранённые способы оплаты</h2>
               {data?.savedPaymentMethod ? (
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 break-words text-sm text-muted-foreground">
                   {data.savedPaymentMethod.title}
                   {data.savedPaymentMethod.cardLast4 ? ` · •••• ${data.savedPaymentMethod.cardLast4}` : ""}
                   {data.savedPaymentMethod.cardType ? ` · ${data.savedPaymentMethod.cardType}` : ""}
@@ -159,7 +159,7 @@ export default function CompanyPaymentsPage() {
               )}
             </div>
           </div>
-          <p className="max-w-xl text-sm leading-5 text-muted-foreground">
+          <p className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2 text-xs leading-5 text-muted-foreground sm:max-w-xl sm:border-0 sm:bg-transparent sm:p-0 sm:text-sm">
             NearLoy не хранит данные карт. Способ оплаты безопасно хранится на стороне YooKassa.
           </p>
         </CardContent>
@@ -167,20 +167,31 @@ export default function CompanyPaymentsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[430px_minmax(0,1fr)]">
         <Card className="border-cyan-300/15 bg-cyan-300/[0.035] py-0">
-          <CardContent className="space-y-4 p-5">
-            <h2 className="flex items-center gap-2 font-semibold"><ArrowUpRight className="h-4 w-4" /> Запросить вывод</h2>
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <h2 className="flex items-center gap-2 text-lg font-semibold sm:text-base"><ArrowUpRight className="h-4 w-4" /> Запросить вывод</h2>
             <p className="text-sm text-muted-foreground">Сервер зарезервирует только доступную заработанную сумму. Минимальный вывод - {money(MINIMUM_PAYOUT_RUB)}.</p>
-            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/10 px-3 py-2 text-sm">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/10 px-3 py-3 text-sm">
               <span className="text-muted-foreground">Можно запросить</span>
               <button
                 type="button"
                 onClick={() => setAmount(String(data?.availableForPayout ?? ""))}
-                className="font-semibold text-emerald-100 transition hover:text-white"
+                className="text-right font-semibold text-emerald-100 transition hover:text-white"
               >
                 {data ? money(data.availableForPayout) : "-"}
               </button>
             </div>
-            <Input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min={MINIMUM_PAYOUT_RUB} max={data?.availableForPayout} placeholder="Сумма от 5 000 ₽" className="h-12 rounded-xl" />
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="secondary" className="glass h-10 rounded-xl border-white/10 text-xs" onClick={() => setAmount(String(MINIMUM_PAYOUT_RUB))}>
+                Минимум
+              </Button>
+              <Button type="button" variant="secondary" className="glass h-10 rounded-xl border-white/10 text-xs" onClick={() => setAmount(String(data?.availableForPayout ?? ""))}>
+                Всё доступное
+              </Button>
+            </div>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground">Сумма вывода</span>
+              <Input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min={MINIMUM_PAYOUT_RUB} max={data?.availableForPayout} placeholder="Сумма от 5 000 ₽" className="h-12 rounded-xl" />
+            </label>
             {belowMinimum && (
               <p className="flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-300/[0.08] px-3 py-2 text-xs text-amber-100">
                 <CircleAlert className="h-4 w-4 shrink-0" /> Для заявки нужно минимум {money(MINIMUM_PAYOUT_RUB)}.
@@ -191,35 +202,41 @@ export default function CompanyPaymentsPage() {
                 <CircleAlert className="h-4 w-4 shrink-0" /> Сумма выше доступного остатка.
               </p>
             )}
-            <textarea
-              value={details}
-              onChange={(event) => setDetails(event.target.value)}
-              placeholder="Комментарий к выплате (необязательно)"
-              className="min-h-24 w-full resize-y rounded-xl border border-input bg-transparent p-3 text-sm outline-none focus:border-cyan-200/40"
-            />
+            <label className="grid gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground">Комментарий</span>
+              <textarea
+                value={details}
+                onChange={(event) => setDetails(event.target.value)}
+                placeholder="Реквизиты, назначение или пометка для команды"
+                className="min-h-24 w-full resize-y rounded-xl border border-input bg-transparent p-3 text-sm outline-none focus:border-cyan-200/40"
+              />
+            </label>
             <Button onClick={() => void requestPayout()} disabled={!canRequestPayout} className="h-12 w-full rounded-xl"><CreditCard /> Создать заявку</Button>
-            <p className="flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="h-4 w-4 text-cyan-100" /> Выплаты доступны только подтверждённой компании.</p>
+            <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-cyan-100" /> Выплаты доступны только подтверждённой компании.</p>
           </CardContent>
         </Card>
 
         <Card className="glass border-white/10 py-0">
-          <CardContent className="p-5">
-            <h2 className="mb-4 font-semibold">История операций</h2>
+          <CardContent className="p-4 sm:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="font-semibold">История операций</h2>
+              <Badge variant="outline">{data?.operations.length ?? 0}</Badge>
+            </div>
             <div className="space-y-2">
               {data?.operations.map((operation) => (
-                <div key={operation.uuid} className="flex flex-col justify-between gap-3 rounded-2xl border border-white/10 p-4 sm:flex-row sm:items-center">
-                  <div>
-                    <p className="font-semibold">{operation.title}</p>
+                <div key={operation.uuid} className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.025] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{operation.title}</p>
                     <p className="text-xs text-muted-foreground">{new Date(operation.createdAt).toLocaleString("ru-RU")}</p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <p className="font-semibold">{money(operation.amount)}</p>
+                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <p className="font-semibold tabular-nums">{money(operation.amount)}</p>
                     <Badge variant="outline">{operation.status}</Badge>
                   </div>
                 </div>
               ))}
               {data && data.operations.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-muted-foreground">Финансовых операций пока нет.</div>
+                <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm leading-6 text-muted-foreground sm:p-8">Финансовых операций пока нет.</div>
               )}
             </div>
           </CardContent>

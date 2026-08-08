@@ -45,6 +45,14 @@ describe("auth client session restoration", () => {
     expect(authenticatedDestination({ role: "CLIENT" }, "/")).toBe("/app");
   });
 
+  it("keeps MAX mini-app admin sessions on client routes", () => {
+    expect(authenticatedDestination({ role: "SUPER_ADMIN" }, "/app", { preferClientApp: true })).toBe("/app");
+    expect(authenticatedDestination({ role: "ADMIN" }, "/map", { preferClientApp: true })).toBe("/map");
+    expect(authenticatedDestination({ role: "MANAGER" }, "/app", { preferClientApp: true })).toBe("/app");
+    expect(authenticatedDestination({ role: "SUPPORT" }, "/app", { preferClientApp: true })).toBe("/admin/support");
+    expect(authenticatedDestination({ role: "COMPANY" }, "/app", { preferClientApp: true })).toBe("/company");
+  });
+
   it("rotates a stored refresh token and restores the browser session", async () => {
     const values = mockBrowserStorage();
     values.set("wb_refresh_token", "saved-refresh-token");

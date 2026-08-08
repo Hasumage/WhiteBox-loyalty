@@ -71,6 +71,15 @@ function safeNext(value: string | undefined | null) {
   return blocked.has(path) ? "/app" : next;
 }
 
+function isCapacitorRedirect(value: string | null | undefined) {
+  if (!value) return false;
+  try {
+    return new URL(value, "https://nearloy.local").searchParams.get("app") === "capacitor";
+  } catch {
+    return value.includes("app=capacitor");
+  }
+}
+
 function decodeJwtPayload(token: string | undefined) {
   if (!token) return null;
   const [, payload] = token.split(".");
@@ -104,6 +113,12 @@ export class VkIdService {
 
   trustedRedirectUrl() {
     return this.config.get<string>("VKID_REDIRECT_URI")?.trim() || `${this.publicWebUrl()}/backend-api/oauth/vkid/callback`;
+  }
+
+  private mobileAppUrl(path: string) {
+    const scheme = this.config.get<string>("NEARLOY_MOBILE_APP_SCHEME")?.trim() || "nearloy";
+    const normalized = path.startsWith("/") ? path : `/${path}`;
+    return `${scheme}://${normalized.replace(/^\//, "")}`;
   }
 
   async status(userId: number) {
@@ -194,6 +209,9 @@ export class VkIdService {
       await this.linkProfileToUser(storedState.linkUserId, profile, token);
       const redirectUrl = new URL(storedState.redirectAfter ?? "/settings/account", this.publicWebUrl());
       redirectUrl.searchParams.set("vkid", "linked");
+      if (isCapacitorRedirect(storedState.redirectAfter)) {
+        return this.mobileAppUrl(`${redirectUrl.pathname}${redirectUrl.search}${redirectUrl.hash}`);
+      }
       return redirectUrl.toString();
     }
 
@@ -216,6 +234,10 @@ export class VkIdService {
 
     const completeUrl = new URL("/oauth/vkid/complete", this.publicWebUrl());
     completeUrl.searchParams.set("ticket", ticket);
+    if (isCapacitorRedirect(storedState.redirectAfter)) {
+      completeUrl.searchParams.set("app", "capacitor");
+      return this.mobileAppUrl(`${completeUrl.pathname}${completeUrl.search}${completeUrl.hash}`);
+    }
     return completeUrl.toString();
   }
 

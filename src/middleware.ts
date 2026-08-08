@@ -6,6 +6,7 @@ import { detectPreferredLocale, LOCALE_COOKIE } from "@/lib/i18n/shared";
 const ACCESS_COOKIE = "wb_access_token";
 const LOCALE_MAX_AGE = 60 * 60 * 24 * 365;
 const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN", "MANAGER", "SUPPORT"]);
+const CLIENT_APP_ROLES = new Set(["CLIENT", "ADMIN", "SUPER_ADMIN", "MANAGER"]);
 const ROLES = new Set(["CLIENT", "ADMIN", "SUPER_ADMIN", "MANAGER", "SUPPORT", "COMPANY"]);
 
 function destinationForRole(role: string) {
@@ -15,9 +16,9 @@ function destinationForRole(role: string) {
   return "/app";
 }
 
-function responseWithLocale(request: NextRequest, response = NextResponse.next(), forceLocale?: "ru" | "en") {
-  if (forceLocale || !request.cookies.get(LOCALE_COOKIE)?.value) {
-    const locale = forceLocale ?? detectPreferredLocale({
+function responseWithLocale(request: NextRequest, response = NextResponse.next(), defaultLocale?: "ru" | "en") {
+  if (!request.cookies.get(LOCALE_COOKIE)?.value) {
+    const locale = defaultLocale ?? detectPreferredLocale({
       countryCode:
         request.headers.get("x-vercel-ip-country") ??
         request.headers.get("cf-ipcountry") ??
@@ -127,7 +128,7 @@ export async function middleware(request: NextRequest) {
       return responseWithLocale(request);
     }
 
-    if (role === "CLIENT") {
+    if (CLIENT_APP_ROLES.has(role)) {
       return responseWithLocale(request);
     }
     if (ADMIN_ROLES.has(role)) {

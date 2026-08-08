@@ -12,7 +12,6 @@ import {
   Clock3,
   CreditCard,
   ExternalLink,
-  Gift,
   Loader2,
   RefreshCw,
   ReceiptText,
@@ -292,122 +291,123 @@ function CompanyBillingContent() {
   }
 
   return (
-    <main className="space-y-8 p-8 text-foreground">
-      <section className="rounded-[2rem] border border-cyan-300/20 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),rgba(10,10,10,0.92)_42%)] p-8 shadow-[0_0_80px_rgba(34,211,238,0.08)]">
-        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.24em] text-cyan-100">
-          <ReceiptText className="h-4 w-4" /> Ближайшая оплата
+    <main className="space-y-4 p-4 text-foreground sm:space-y-6 sm:p-8">
+      <header className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-100">Биллинг</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Подписка NearLoy</h1>
         </div>
-        <h1 className="mt-6 text-4xl font-semibold tracking-tight">Подписка NearLoy</h1>
-        <p className="mt-3 max-w-3xl text-lg text-muted-foreground">
-          Оплачивайте доступ компании к NearLoy через YooKassa или с баланса компании. Промокоды, зачёт комиссии и история оплат собраны в одном месте.
-        </p>
-      </section>
+        <ReceiptText className="h-5 w-5 shrink-0 text-cyan-100" />
+      </header>
 
       {message ? <StatusMessage tone={messageTone}>{message}</StatusMessage> : null}
       {syncingPayment ? <StatusMessage tone="info">Проверяю оплату YooKassa...</StatusMessage> : null}
 
       {loading ? (
-        <div className="rounded-[2rem] border border-border bg-card p-8">
+        <div className="rounded-[1.75rem] border border-border bg-card p-5 sm:rounded-[2rem] sm:p-8">
           <Loader2 className="h-6 w-6 animate-spin text-cyan-100" />
           <p className="mt-4 text-muted-foreground">Загружаю данные подписки...</p>
         </div>
       ) : data ? (
         <>
-          {isTrialActive ? (
-            <section className="rounded-[2rem] border border-cyan-300/25 bg-cyan-300/10 p-6">
-              <h2 className="flex items-center gap-2 text-xl font-semibold">
-                <Gift className="h-5 w-5" /> Тестовый период активен
-              </h2>
-              <p className="mt-2 text-muted-foreground">Бесплатный период действует до {trialEndsAt}.</p>
-            </section>
-          ) : null}
-
-          <section className="grid gap-4 md:grid-cols-4">
-            <Metric icon={ReceiptText} label="Базовая цена" value={money(invoice?.baseFee ?? 4990)} />
-            <Metric icon={BadgePercent} label="Скидка" value={`-${money(invoice?.promoDiscountAmount ?? 0)}`} />
-            <Metric icon={CheckCircle2} label="Зачёт комиссии" value={`-${money(invoice?.commissionCreditAmount ?? 0)}`} />
-            <Metric icon={CreditCard} label="К оплате" value={money(amountDue)} accent />
-          </section>
-
-          {amountDue <= 0 ? (
-            <StatusMessage tone="success">Счёт закрыт. Подписка NearLoy уже оплачена.</StatusMessage>
-          ) : null}
-
-          {activePayment?.confirmationUrl ? (
-            <section className="rounded-[2rem] border border-amber-300/30 bg-amber-300/10 p-6">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-2">
-                  <h2 className="flex items-center gap-2 text-xl font-semibold">
-                    <Clock3 className="h-5 w-5 text-amber-100" /> Платёж зарезервирован
-                  </h2>
-                  <p className="max-w-3xl text-muted-foreground">
-                    Продолжите оплату по этой ссылке. Если вы уже оплатили, статус может обновляться до 15 минут — проверьте его кнопкой ниже.
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Сумма: {money(activePayment.amount)} · статус: {activePayment.status}
-                    {activePayment.expiresAt ? ` · оплатить можно до ${formatDate(activePayment.expiresAt)}` : ""}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row lg:shrink-0">
-                  <Button asChild type="button">
-                    <a href={activePayment.confirmationUrl} target="_blank" rel="noreferrer">
-                      <ExternalLink /> Открыть оплату
-                    </a>
-                  </Button>
-                  <Button type="button" variant="secondary" disabled={syncingPayment || checkBlocked} onClick={checkReservedPayment}>
-                    <ActionIcon loading={syncingPayment} icon={RefreshCw} />
-                    {checkBlocked ? `Проверить можно через ${cooldownLeftMinutes} мин.` : "Проверить статус"}
-                  </Button>
-                </div>
+          <section className="overflow-hidden rounded-[1.75rem] border border-cyan-300/25 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.18),transparent_36%),rgba(8,12,18,0.94)] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.32)] sm:rounded-[2rem] sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.18em] text-cyan-100/80">Статус подписки</p>
+                <p className="mt-2 break-words text-4xl font-semibold leading-none text-cyan-50 sm:text-5xl">
+                  {amountDue > 0 ? money(amountDue) : "Оплачено"}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {amountDue > 0
+                    ? `Баланс компании: ${money(data.availableBalance)}`
+                    : isTrialActive
+                      ? `Тестовый период до ${trialEndsAt}`
+                      : "Доступ компании активен."}
+                </p>
               </div>
-            </section>
-          ) : null}
-
-          <section className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-[2rem] border border-border bg-card p-6">
-              <h2 className="flex items-center gap-2 text-xl font-semibold">
-                <BadgePercent className="h-5 w-5 text-cyan-100" /> Промокод
-              </h2>
-              <p className="mt-2 text-muted-foreground">Если менеджер выдал скидку, примените её до оплаты.</p>
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                <Input value={promo} onChange={(event) => setPromo(event.target.value.toUpperCase())} placeholder="Введите промокод" />
-                <Button type="button" onClick={applyPromo} disabled={!promo.trim()}>Применить</Button>
-              </div>
+              <span className={`rounded-2xl border p-3 ${amountDue > 0 ? "border-cyan-200/20 bg-cyan-300/10 text-cyan-100" : "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"}`}>
+                {amountDue > 0 ? <CreditCard className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+              </span>
             </div>
 
-            <div className="rounded-[2rem] border border-cyan-300/20 bg-cyan-300/10 p-6">
-              <h2 className="flex items-center gap-2 text-xl font-semibold">
-                <Wallet className="h-5 w-5 text-cyan-100" /> Оплата подписки
-              </h2>
-              <p className="mt-2 text-muted-foreground">Баланс компании: {money(data.availableBalance)}</p>
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <Button type="button" disabled={amountDue <= 0 || checkoutPaying} onClick={payViaYooKassa}>
-                  <ActionIcon loading={checkoutPaying} icon={ExternalLink} />
-                  Оплатить через YooKassa
-                </Button>
-                <Button type="button" disabled={!canPayFromBalance || balancePaying} onClick={payFromBalance} variant="secondary">
-                  <ActionIcon loading={balancePaying} icon={CreditCard} />
-                  Оплатить с баланса
-                </Button>
+            {activePayment?.confirmationUrl ? (
+              <div className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-3">
+                <p className="flex items-center gap-2 text-sm font-semibold text-amber-100">
+                  <Clock3 className="h-4 w-4" /> Платёж зарезервирован
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Сумма: {money(activePayment.amount)} · статус: {activePayment.status}
+                  {activePayment.expiresAt ? ` · до ${formatDate(activePayment.expiresAt)}` : ""}
+                </p>
               </div>
-              <label className="mt-4 flex items-start gap-3 rounded-2xl border border-cyan-300/20 bg-background/45 p-4 text-sm text-muted-foreground">
+            ) : null}
+
+            {amountDue > 0 ? (
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <Button type="button" disabled={checkoutPaying} onClick={payViaYooKassa} className="h-12 rounded-xl">
+                  <ActionIcon loading={checkoutPaying} icon={activePayment?.confirmationUrl ? ExternalLink : CreditCard} />
+                  {activePayment?.confirmationUrl ? "Открыть оплату" : "Оплатить YooKassa"}
+                </Button>
+                {activePayment?.confirmationUrl ? (
+                  <Button type="button" variant="secondary" disabled={syncingPayment || checkBlocked} onClick={checkReservedPayment} className="h-12 rounded-xl">
+                    <ActionIcon loading={syncingPayment} icon={RefreshCw} />
+                    {checkBlocked ? `${cooldownLeftMinutes} мин.` : "Проверить"}
+                  </Button>
+                ) : (
+                  <Button type="button" disabled={!canPayFromBalance || balancePaying} onClick={payFromBalance} variant="secondary" className="h-12 rounded-xl">
+                    <ActionIcon loading={balancePaying} icon={Wallet} />
+                    С баланса
+                  </Button>
+                )}
+              </div>
+            ) : null}
+            {amountDue > 0 && !activePayment?.confirmationUrl ? (
+              <label className="mt-3 flex items-start gap-3 rounded-2xl border border-cyan-300/15 bg-black/20 p-3 text-xs leading-5 text-muted-foreground">
                 <input
                   type="checkbox"
                   checked={savePaymentMethod}
                   onChange={(event) => setSavePaymentMethod(event.target.checked)}
-                  className="mt-1 h-4 w-4 accent-cyan-300"
-                  disabled={amountDue <= 0 || checkoutPaying}
+                  className="mt-0.5 h-4 w-4 accent-cyan-300"
+                  disabled={checkoutPaying}
                 />
                 <span>
-                  <span className="block font-semibold text-foreground">Сохранить способ оплаты для автоплатежей</span>
-                  NearLoy не хранит данные карт. Способ оплаты безопасно хранится на стороне YooKassa.
+                  <span className="block font-semibold text-foreground">Сохранить карту для следующих оплат</span>
+                  NearLoy не хранит данные карт.
                 </span>
               </label>
+            ) : null}
+          </section>
+
+          {amountDue > 0 ? (
+            <section className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
+              <Metric icon={ReceiptText} label="Базовая цена" value={money(invoice?.baseFee ?? 4990)} />
+              <Metric icon={BadgePercent} label="Скидка" value={`-${money(invoice?.promoDiscountAmount ?? 0)}`} />
+              <Metric icon={CheckCircle2} label="Зачёт комиссии" value={`-${money(invoice?.commissionCreditAmount ?? 0)}`} />
+              <Metric icon={CreditCard} label="К оплате" value={money(amountDue)} accent />
+            </section>
+          ) : null}
+
+          <section className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-[1.75rem] border border-border bg-card p-4 sm:rounded-[2rem] sm:p-6">
+              <h2 className="flex items-center gap-2 text-lg font-semibold sm:text-xl">
+                <BadgePercent className="h-5 w-5 text-cyan-100" /> Промокод
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">Если менеджер выдал скидку, примените её до оплаты.</p>
+              <div className="mt-4 grid gap-2 sm:mt-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3">
+                <Input value={promo} onChange={(event) => setPromo(event.target.value.toUpperCase())} placeholder="Введите промокод" className="h-12 rounded-xl" />
+                <Button type="button" onClick={applyPromo} disabled={!promo.trim()} className="h-12 rounded-xl">Применить</Button>
+              </div>
+            </div>
+
+            <div className="rounded-[1.75rem] border border-cyan-300/20 bg-cyan-300/10 p-4 sm:rounded-[2rem] sm:p-6">
+              <h2 className="flex items-center gap-2 text-lg font-semibold sm:text-xl">
+                <ShieldCheck className="h-5 w-5 text-cyan-100" /> Способ оплаты
+              </h2>
               {data.savedPaymentMethod ? (
-                <div className="mt-4 rounded-2xl border border-cyan-300/25 bg-background/55 p-4">
+                <div className="mt-4 rounded-2xl border border-cyan-300/25 bg-background/55 p-3 sm:p-4">
                   <div className="space-y-4">
                     <div className="flex min-w-0 gap-3">
-                      <ShieldCheck className="mt-1 h-5 w-5 shrink-0 text-cyan-100" />
+                      <CreditCard className="mt-1 h-5 w-5 shrink-0 text-cyan-100" />
                       <div className="min-w-0">
                         <p className="font-semibold">Сохранённый способ оплаты</p>
                         <p className="truncate text-sm text-muted-foreground">
@@ -418,36 +418,40 @@ function CompanyBillingContent() {
                       </div>
                     </div>
                     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                      <Button type="button" disabled={amountDue <= 0 || savedMethodPaying} onClick={payWithSavedMethod} variant="secondary" className="w-full">
+                      <Button type="button" disabled={amountDue <= 0 || savedMethodPaying} onClick={payWithSavedMethod} variant="secondary" className="h-11 w-full rounded-xl">
                         <ActionIcon loading={savedMethodPaying} icon={CreditCard} />
                         Оплатить сохранённым
                       </Button>
-                      <Button type="button" disabled={deletingPaymentMethod} onClick={deleteSavedMethod} variant="secondary" className="w-full sm:w-auto">
+                      <Button type="button" disabled={deletingPaymentMethod} onClick={deleteSavedMethod} variant="secondary" className="h-11 w-full rounded-xl sm:w-auto">
                         <ActionIcon loading={deletingPaymentMethod} icon={Trash2} />
                         Удалить
                       </Button>
                     </div>
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-background/45 p-4 text-sm leading-6 text-muted-foreground">
+                  Сохранённой карты пока нет. Её можно добавить при оплате через YooKassa в верхнем блоке.
+                </div>
+              )}
               {!canPayFromBalance && amountDue > 0 ? (
                 <p className="mt-3 text-sm text-muted-foreground">Для оплаты с баланса не хватает средств. Используйте YooKassa.</p>
               ) : null}
             </div>
           </section>
 
-          <section className="rounded-[2rem] border border-border bg-card p-6">
-            <h2 className="flex items-center gap-2 text-xl font-semibold">
+          <section className="rounded-[1.75rem] border border-border bg-card p-4 sm:rounded-[2rem] sm:p-6">
+            <h2 className="flex items-center gap-2 text-lg font-semibold sm:text-xl">
               <CalendarClock className="h-5 w-5 text-cyan-100" /> История оплат
             </h2>
-            <div className="mt-5 space-y-3">
+            <div className="mt-4 space-y-2 sm:mt-5 sm:space-y-3">
               {billingHistory.length ? billingHistory.map((row) => (
-                <div key={row.uuid} className="flex flex-col gap-2 rounded-2xl border border-border bg-background/60 p-4 md:flex-row md:items-center md:justify-between">
+                <div key={row.uuid} className="grid gap-2 rounded-2xl border border-border bg-background/60 p-3 sm:p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                   <div>
                     <p className="font-semibold">{money(row.paidAmount ?? row.amountDue)}</p>
                     <p className="text-sm text-muted-foreground">Статус: {row.status}</p>
                   </div>
-                  <p className="text-sm text-muted-foreground">{formatDate(row.createdAt)}</p>
+                  <p className="text-sm text-muted-foreground md:text-right">{formatDate(row.createdAt)}</p>
                 </div>
               )) : <p className="text-muted-foreground">История оплат пока пустая.</p>}
             </div>
@@ -464,7 +468,7 @@ function StatusMessage({ tone, children }: { tone: "info" | "error" | "success";
     : tone === "success"
       ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
       : "border-cyan-300/25 bg-cyan-300/10 text-cyan-50";
-  return <div className={`rounded-[1.5rem] border px-5 py-4 ${toneClass}`}>{children}</div>;
+  return <div className={`rounded-[1.5rem] border px-4 py-3 text-sm leading-6 sm:px-5 sm:py-4 sm:text-base ${toneClass}`}>{children}</div>;
 }
 
 function ActionIcon({ loading, icon: Icon }: { loading: boolean; icon: LucideIcon }) {
@@ -478,10 +482,10 @@ function ActionIcon({ loading, icon: Icon }: { loading: boolean; icon: LucideIco
 
 function Metric({ icon: Icon, label, value, accent }: { icon: LucideIcon; label: string; value: string; accent?: boolean }) {
   return (
-    <div className={`rounded-[1.5rem] border p-6 ${accent ? "border-cyan-300/30 bg-cyan-300/10" : "border-border bg-card"}`}>
-      <Icon className="h-5 w-5 text-cyan-100" />
-      <p className="mt-5 text-xs uppercase tracking-[0.28em] text-muted-foreground">{label}</p>
-      <p className="mt-3 text-3xl font-semibold">{value}</p>
+    <div className={`rounded-[1.35rem] border p-3 sm:rounded-[1.5rem] sm:p-6 ${accent ? "border-cyan-300/30 bg-cyan-300/10" : "border-border bg-card"}`}>
+      <Icon className="h-4 w-4 text-cyan-100 sm:h-5 sm:w-5" />
+      <p className="mt-3 line-clamp-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground sm:mt-5 sm:text-xs sm:tracking-[0.28em]">{label}</p>
+      <p className="mt-2 break-words text-xl font-semibold leading-tight sm:mt-3 sm:text-3xl">{value}</p>
     </div>
   );
 }
