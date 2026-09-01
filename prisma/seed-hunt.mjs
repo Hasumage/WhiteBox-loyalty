@@ -334,6 +334,12 @@ function hoursAgo(hours) {
   return new Date(Date.now() - hours * 60 * 60 * 1000);
 }
 
+function shouldSeedDemoData() {
+  if (process.env.HUNT_SEED_DEMO_DATA === "true") return true;
+  if (process.env.HUNT_SEED_DEMO_DATA === "false") return false;
+  return process.env.NODE_ENV !== "production";
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
@@ -412,6 +418,11 @@ async function main() {
         update: seed,
         create: seed,
       });
+    }
+
+    if (!shouldSeedDemoData()) {
+      console.log("Nearloy Hunt catalog seed completed. Demo Hunt users, places and posts were skipped.");
+      return;
     }
 
     const demoUser = await prisma.user.findFirst({ where: { role: "CLIENT" }, orderBy: { id: "asc" } });

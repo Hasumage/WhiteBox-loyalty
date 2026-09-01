@@ -29,6 +29,7 @@ The first local foundation is implemented:
 - [Economy And Balancing](./economy-and-balancing.md) - NearCoin, rewards, boxes, rarity and anti-farm constraints.
 - [Battle System](./battle-system.md) - detailed Russian design document for combat, matchmaking, rewards, API and server rules.
 - [Local Development](./local-development.md) - local DB, migrations, seeds, dev servers and smoke checks.
+- [Railway Migration](./railway-migration.md) - production database switch, variables, first Hunt seed and rollback notes.
 - [UI Guidelines](./ui-guidelines.md) - how NH should feel inside Nearloy.
 - [Roadmap](./roadmap.md) - next product, backend, moderation, legal and NFT phases.
 
