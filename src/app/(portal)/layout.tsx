@@ -91,6 +91,15 @@ const adminMenu: AdminMenuSection[] = [
     ],
   },
   {
+    groupKey: "admin.nav.hunt",
+    items: [
+      { href: "/admin/hunt", labelKey: "admin.nav.huntDashboard", icon: LayoutDashboard, scope: "HUNT" },
+      { href: "/admin/hunt/characters", labelKey: "admin.nav.huntCharacters", icon: Sparkles, scope: "HUNT" },
+      { href: "/admin/hunt/players", labelKey: "admin.nav.huntPlayers", icon: Users, scope: "HUNT" },
+      { href: "/admin/hunt/tournament", labelKey: "admin.nav.huntTournament", icon: Trophy, scope: "HUNT" },
+    ],
+  },
+  {
     groupKey: "admin.nav.usersPartners",
     items: [
       { href: "/admin/users", labelKey: "admin.nav.users", icon: Users, scope: "USERS" },
@@ -729,7 +738,7 @@ export default function PortalLayout({
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[86dvh] overflow-y-auto rounded-t-[2rem] border border-white/10 bg-background p-4 shadow-[0_-24px_80px_rgba(0,0,0,0.55)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="absolute inset-y-0 left-0 w-[min(28rem,calc(100vw-1rem))] overflow-y-auto rounded-r-[2rem] border-r border-white/10 bg-background p-4 shadow-[24px_0_80px_rgba(0,0,0,0.55)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <NearLoyLogo className="h-10 w-10" />

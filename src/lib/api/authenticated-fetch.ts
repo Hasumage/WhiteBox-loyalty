@@ -17,6 +17,7 @@ export type AuthRecoveryEventDetail = {
 type FetchRecoveryOptions = {
   retry?: boolean;
   redirectOnFailure?: boolean;
+  emitRecoveryEvents?: boolean;
   timeoutMs?: number;
 };
 
@@ -43,22 +44,22 @@ function withFreshAuthorization(init: RequestInit = {}) {
   };
 }
 
-async function recoverSession() {
+async function recoverSession(emitEvents = true) {
   if (recoveryPromise) return recoveryPromise;
 
   recoveryPromise = (async () => {
-    emitAuthRecovery("checking");
+    if (emitEvents) emitAuthRecovery("checking");
 
     try {
       const restored = await refreshStoredSession();
       if (restored?.accessToken) {
-        emitAuthRecovery("restored");
+        if (emitEvents) emitAuthRecovery("restored");
         return true;
       }
-      emitAuthRecovery("failed");
+      if (emitEvents) emitAuthRecovery("failed");
       return false;
     } catch {
-      emitAuthRecovery("failed");
+      if (emitEvents) emitAuthRecovery("failed");
       return false;
     } finally {
       const clearPromise = () => {
@@ -94,14 +95,14 @@ export async function fetchWithAuthRecovery(
   init: RequestInit = {},
   options: FetchRecoveryOptions = {},
 ) {
-  const { retry = true, redirectOnFailure = true, timeoutMs } = options;
+  const { retry = true, redirectOnFailure = true, emitRecoveryEvents = true, timeoutMs } = options;
   const firstResponse = await fetchWithTimeout(input, withFreshAuthorization(init), timeoutMs);
 
   if (!retry || firstResponse.status !== 401) {
     return firstResponse;
   }
 
-  const restored = await recoverSession();
+  const restored = await recoverSession(emitRecoveryEvents);
   if (!restored) {
     if (redirectOnFailure && !getRefreshToken()) redirectToLogin();
     return firstResponse;
@@ -111,7 +112,7 @@ export async function fetchWithAuthRecovery(
   const retryResponse = await fetchWithTimeout(input, withFreshAuthorization(init), timeoutMs);
   if (retryResponse.status === 401) {
     clearStoredSessionIfAccessToken(retryAccessToken);
-    emitAuthRecovery("failed");
+    if (emitRecoveryEvents) emitAuthRecovery("failed");
     if (redirectOnFailure && !getRefreshToken()) redirectToLogin();
   }
 

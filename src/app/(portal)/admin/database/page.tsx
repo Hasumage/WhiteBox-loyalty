@@ -5,6 +5,7 @@ import {
   BadgeDollarSign,
   Bell,
   Building2,
+  Camera,
   CheckSquare,
   ChevronDown,
   ClipboardList,
@@ -12,8 +13,10 @@ import {
   Eye,
   EyeOff,
   FileCheck,
+  Flag,
   Gift,
   GitMerge,
+  Heart,
   KeyRound,
   LayoutGrid,
   Link2,
@@ -30,6 +33,7 @@ import {
   Ticket,
   User as UserIcon,
   UsersRound,
+  PackageOpen,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,7 +41,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
 
-type GroupId = "core" | "company" | "subscriptions" | "links" | "growth" | "security" | "operations";
+type GroupId = "core" | "company" | "subscriptions" | "links" | "growth" | "security" | "operations" | "hunt";
 type Icon = React.ComponentType<{ className?: string }>;
 
 type ModelDefinition = {
@@ -51,7 +55,7 @@ type ModelDefinition = {
 
 type Node = ModelDefinition & { x: number; y: number };
 type Edge = { from: string; to: string; label: string };
-type PresetId = "all" | "company-flow" | "security" | "loyalty" | "growth" | "operations" | "map";
+type PresetId = "all" | "company-flow" | "security" | "loyalty" | "growth" | "operations" | "map" | "hunt";
 type SchemaPreset = { id: PresetId; icon: Icon; visibleGroups: GroupId[] };
 
 const NODE_W = 250;
@@ -69,6 +73,7 @@ const COLORS: Record<GroupId, string> = {
   growth: "rgba(250,204,21,0.22)",
   security: "rgba(251,113,133,0.22)",
   operations: "rgba(148,163,184,0.24)",
+  hunt: "rgba(103,232,249,0.22)",
 };
 
 const define = (
@@ -135,6 +140,18 @@ const modelDefinitions: ModelDefinition[] = [
   define("AdminTask", "operations", "admin task queue", ["id", "type", "status", "assigneeUserId?", "auditEventId?"], CheckSquare),
   define("NotificationDelivery", "operations", "notification history", ["id", "channel", "recipient", "status", "sentAt?"], Bell),
   define("TelegramMessageQueue", "operations", "Telegram queue", ["id", "chatId", "status", "attempts", "nextAttemptAt?"], Bell),
+
+  define("HuntPlayerProfile", "hunt", "player progress", ["id", "userId", "influenceBalance", "xp", "level"], Sparkles),
+  define("HuntPlace", "hunt", "game place", ["id", "slug", "categoryId?", "companyId?", "source"], MapPin),
+  define("HuntPost", "hunt", "UGC post", ["id", "userId", "placeId", "status", "score"], Camera),
+  define("HuntPostReaction", "hunt", "Nearloy like", ["id", "postId", "userId", "type"], Heart),
+  define("HuntPostReport", "hunt", "content report", ["id", "postId", "reporterId", "reason", "status"], Flag),
+  define("HuntCurrencyLedger", "hunt", "NearCoin ledger", ["id", "userId", "amount", "reason", "balanceAfter"], Wallet),
+  define("HuntCreatureSpecies", "hunt", "creature template", ["id", "slug", "element", "baseRarity"], Sparkles),
+  define("HuntBox", "hunt", "reward box", ["id", "userId", "type", "rarity", "status"], PackageOpen),
+  define("HuntCard", "hunt", "collectible card", ["id", "ownerId", "speciesId", "rarity", "level"], Gift),
+  define("HuntMission", "hunt", "mission template", ["id", "slug", "kind", "targetAction", "reward"], CheckSquare),
+  define("HuntMissionProgress", "hunt", "mission progress", ["id", "userId", "missionId", "progress", "claimedAt?"], CheckSquare),
 ];
 
 const nodes: Node[] = modelDefinitions.map((model, index) => ({
@@ -194,16 +211,35 @@ const edges: Edge[] = [
   { from: "Company", to: "LoyaltyTransaction", label: "1:N" },
   { from: "User", to: "AuditEvent", label: "1:N actor" },
   { from: "AuditEvent", to: "AdminTask", label: "1:N" },
+  { from: "User", to: "HuntPlayerProfile", label: "1:1" },
+  { from: "User", to: "HuntPost", label: "1:N" },
+  { from: "User", to: "HuntPostReaction", label: "1:N" },
+  { from: "User", to: "HuntCurrencyLedger", label: "1:N" },
+  { from: "User", to: "HuntBox", label: "1:N" },
+  { from: "User", to: "HuntCard", label: "1:N" },
+  { from: "User", to: "HuntMissionProgress", label: "1:N" },
+  { from: "HuntPlace", to: "HuntPost", label: "1:N" },
+  { from: "HuntPost", to: "HuntPostReaction", label: "1:N" },
+  { from: "HuntPost", to: "HuntPostReport", label: "1:N" },
+  { from: "HuntPost", to: "HuntBox", label: "1:N source" },
+  { from: "HuntBox", to: "HuntCard", label: "1:1 reward" },
+  { from: "HuntCreatureSpecies", to: "HuntCard", label: "1:N" },
+  { from: "HuntMission", to: "HuntMissionProgress", label: "1:N" },
+  { from: "Category", to: "HuntPlace", label: "1:N" },
+  { from: "Category", to: "HuntPost", label: "1:N" },
+  { from: "Company", to: "HuntPlace", label: "1:N optional" },
+  { from: "Company", to: "HuntPost", label: "1:N optional" },
 ];
 
 const presets: SchemaPreset[] = [
-  { id: "all", icon: LayoutGrid, visibleGroups: ["core", "company", "subscriptions", "links", "growth", "security", "operations"] },
+  { id: "all", icon: LayoutGrid, visibleGroups: ["core", "company", "subscriptions", "links", "growth", "security", "operations", "hunt"] },
   { id: "company-flow", icon: Building2, visibleGroups: ["company", "subscriptions", "links"] },
   { id: "security", icon: Shield, visibleGroups: ["core", "security", "operations"] },
   { id: "loyalty", icon: Sparkles, visibleGroups: ["core", "subscriptions", "links", "operations"] },
   { id: "growth", icon: Megaphone, visibleGroups: ["company", "growth"] },
   { id: "operations", icon: Wallet, visibleGroups: ["company", "operations"] },
   { id: "map", icon: MapPin, visibleGroups: ["core", "company", "links"] },
+  { id: "hunt", icon: Sparkles, visibleGroups: ["core", "company", "hunt"] },
 ];
 
 const nodeGroups: { id: GroupId; icon: Icon }[] = [
@@ -214,6 +250,7 @@ const nodeGroups: { id: GroupId; icon: Icon }[] = [
   { id: "growth", icon: Megaphone },
   { id: "security", icon: Shield },
   { id: "operations", icon: Wallet },
+  { id: "hunt", icon: Sparkles },
 ];
 
 function nodeHeight(node: Node) {
@@ -252,6 +289,7 @@ export default function AdminDatabasePage() {
     growth: { label: t("admin.database.growth"), description: t("admin.database.growthDescription") },
     operations: { label: t("admin.database.operations"), description: t("admin.database.operationsDescription") },
     map: { label: t("admin.database.mapBranches"), description: t("admin.database.mapBranchesDescription") },
+    hunt: { label: "Nearloy Hunt", description: "Posts, likes, NearCoin, boxes, creature cards and missions" },
   };
   const groupLabels: Record<GroupId, string> = {
     core: t("admin.database.groupCore"),
@@ -261,6 +299,7 @@ export default function AdminDatabasePage() {
     growth: t("admin.database.groupGrowth"),
     security: t("admin.database.groupSecurity"),
     operations: t("admin.database.groupOperations"),
+    hunt: "Nearloy Hunt",
   };
 
   useEffect(() => {

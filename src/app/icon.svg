@@ -1,16 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="NearLoy">
   <defs>
+    <linearGradient id="bg" x1="72" y1="64" x2="448" y2="456" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EFFFFF"/>
+      <stop offset="0.48" stop-color="#D7FBFF"/>
+      <stop offset="1" stop-color="#9AF2FF"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="92" y1="82" x2="430" y2="432" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#06101A"/>
+      <stop offset="1" stop-color="#102434"/>
+    </linearGradient>
     <filter id="mark-shadow" x="-8%" y="-8%" width="116%" height="116%">
-      <feDropShadow dx="8" dy="8" stdDeviation="1.5" flood-color="#6f8080" flood-opacity="0.5"/>
-      <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#ecfeff" flood-opacity="0.12"/>
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#0891b2" flood-opacity="0.24"/>
     </filter>
   </defs>
-  <rect x="8" y="8" width="496" height="496" rx="98" fill="#000000"/>
-  <g fill="none" stroke="#ecfeff" stroke-linecap="round" stroke-linejoin="round" filter="url(#mark-shadow)">
-    <path d="M88 176V88H176" stroke-width="28"/>
-    <path d="M336 88H424V176" stroke-width="28"/>
-    <path d="M424 336V424H336" stroke-width="28"/>
-    <path d="M176 424H88V336" stroke-width="28"/>
+  <rect x="18" y="18" width="476" height="476" rx="112" fill="url(#bg)"/>
+  <rect x="42" y="42" width="428" height="428" rx="88" fill="none" stroke="#0E7490" stroke-opacity="0.22" stroke-width="16"/>
+  <g fill="none" stroke="url(#stroke)" stroke-linecap="round" stroke-linejoin="round" filter="url(#mark-shadow)">
+    <path d="M92 176V92H176" stroke-width="30"/>
+    <path d="M336 92H420V176" stroke-width="30"/>
+    <path d="M420 336V420H336" stroke-width="30"/>
+    <path d="M176 420H92V336" stroke-width="30"/>
     <path
       d="M256 32
          L318 190
@@ -20,7 +29,7 @@
          L194 322
          L22 256
          L194 190Z"
-      stroke-width="52"
+      stroke-width="54"
     />
   </g>
 </svg>

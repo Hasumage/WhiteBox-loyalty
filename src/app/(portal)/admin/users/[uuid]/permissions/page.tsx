@@ -56,6 +56,7 @@ const scopeIcons: Record<AdminPermissionScope, typeof Users> = {
   DATABASE: Database,
   TELEGRAM: Send,
   PROMOTION: TrendingUp,
+  HUNT: Sparkles,
   SETTINGS: Settings,
 };
 

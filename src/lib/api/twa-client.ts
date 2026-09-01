@@ -224,6 +224,197 @@ export type TwaLookupCode = {
   expiresAt: string;
 };
 
+export type HuntRarity = "COMMON" | "UNCOMMON" | "RARE" | "EPIC" | "LEGENDARY";
+export type HuntElement = "FLAME" | "WATER" | "NATURE" | "WIND" | "MUSIC" | "LIGHT" | "SHADOW";
+export type HuntBoxType = "DAILY" | "POST" | "TRENDING" | "CATEGORY" | "DISTRICT" | "FOUNDER" | "PARTNER";
+export type HuntCardStatKey = "health" | "attack" | "luck" | "evasion";
+export type HuntReportReason = "SPAM" | "OFFENSIVE" | "FALSE_PLACE" | "DUPLICATE" | "PRIVATE_DATA" | "COPYRIGHT" | "OTHER";
+
+export type HuntProfile = {
+  influenceBalance: number;
+  lifetimeInfluence: number;
+  xp: number;
+  level: number;
+  postsCount: number;
+  likesReceivedCount: number;
+  boxesOpenedCount: number;
+  cardsOwnedCount: number;
+  tutorialCompletedAt: string | null;
+};
+
+export type HuntMission = {
+  slug: string;
+  title: string;
+  description: string;
+  kind: "DAILY" | "WEEKLY" | "SEASONAL" | "ONBOARDING";
+  targetAction: string;
+  targetCount: number;
+  rewardInfluence: number;
+  rewardXp: number;
+  rewardBoxType: string | null;
+  progress: number;
+  completedAt: string | null;
+  claimedAt: string | null;
+};
+
+export type HuntBox = {
+  uuid: string;
+  type: HuntBoxType;
+  rarity: HuntRarity;
+  status: "GRANTED" | "OPENED" | "EXPIRED";
+  influenceCost: number;
+  createdAt: string;
+};
+
+export type HuntCard = {
+  uuid: string;
+  rarity: HuntRarity;
+  element: HuntElement;
+  level: number;
+  xp: number;
+  stats: Record<string, number>;
+  trait: string;
+  visualSeed: string;
+  createdAt: string;
+  species: {
+    slug: string;
+    name: string;
+    description: string;
+    element: HuntElement;
+    baseRarity?: HuntRarity;
+    baseStats?: Record<string, number>;
+    visualPrompt: string;
+    imageUrl?: string | null;
+  };
+};
+
+export type HuntCardUpgrade = {
+  uuid: string;
+  baseDeltas: Record<string, number>;
+  statsBefore: Record<string, number>;
+  statsAfterBase: Record<string, number>;
+  bonusStat?: HuntCardStatKey | null;
+  bonusDelta?: number | null;
+  statsAfterBonus?: Record<string, number> | null;
+  status: "PENDING_BONUS" | "COMPLETED";
+};
+
+export type HuntCatalogSpecies = {
+  uuid: string;
+  slug: string;
+  name: string;
+  description: string;
+  element: HuntElement;
+  baseRarity: HuntRarity;
+  category: ApiCategory | null;
+  baseStats: Record<string, number>;
+  visualPrompt: string;
+  imageUrl: string | null;
+  ownedCount: number;
+};
+
+export type HuntPost = {
+  uuid: string;
+  caption: string;
+  photoUrl: string | null;
+  mediaUrls: string[];
+  tags: string[];
+  rating: number | null;
+  visitPriceBand: string | null;
+  moodTags: string[];
+  gpsConfidence: number;
+  latitude: number | null;
+  longitude: number | null;
+  moderationStatus: "CLEAR" | "FLAGGED" | "REVIEWING" | "ACTIONED";
+  likeCount: number;
+  score: number;
+  likedByMe: boolean;
+  createdAt: string;
+  author: { uuid: string; name: string };
+  place: {
+    uuid: string;
+    slug: string;
+    name: string;
+    address: string | null;
+    city: string | null;
+    district: string | null;
+    tags: string[];
+    source: "USER_SUGGESTED" | "COMPANY" | "SYSTEM_SEEDED";
+    category: ApiCategory | null;
+    company: { slug: string; name: string } | null;
+  };
+};
+
+export type HuntPlace = HuntPost["place"] & {
+  postCount: number;
+  likeCount: number;
+  wantedCount: number;
+  isClaimable: boolean;
+};
+
+export type HuntOverview = {
+  profile: HuntProfile;
+  missions: HuntMission[];
+  boxes: HuntBox[];
+  cards: HuntCard[];
+  recentPosts: Array<{
+    uuid: string;
+    caption: string;
+    likeCount: number;
+    score: number;
+    createdAt: string;
+    place: { name: string; city: string | null; district: string | null };
+  }>;
+  economy: {
+    postCreateReward: number;
+    likeAuthorReward: number;
+    postBoxCost: number;
+    dailyPostLimit: number;
+    dailyPostRewardCap: number;
+    dailyLikeRewardCap: number;
+  };
+};
+
+export type HuntSharePost = {
+  kind: "post";
+  post: HuntPost;
+  cta: { title: string; subtitle: string };
+};
+
+export type HuntShareCard = {
+  kind: "card";
+  card: HuntCard;
+  owner: { uuid: string; name: string };
+  cta: { title: string; subtitle: string };
+};
+
+export type HuntBattleRandom = {
+  success: true;
+  mode: "RANDOM";
+  battleSeed: string;
+  expiresAt: string;
+  playerCard: HuntCard;
+  opponent: HuntCatalogSpecies;
+};
+
+export type HuntBattleCode = {
+  success: true;
+  mode: "PRIVATE_CODE";
+  code: string;
+  expiresAt: string;
+  playerCard: HuntCard;
+};
+
+export type HuntGrowthPlace = HuntPlace & {
+  storedPostCount: number;
+  storedLikeCount: number;
+  uniqueAuthors: number;
+  uniqueReactors: number;
+  demandScore: number;
+  lastPostAt: string | null;
+  acquisitionHint: "already_claimed" | "priority_outreach" | "warm_lead" | "watch";
+};
+
 export type TwaProfile = {
   user: {
     uuid: string;
@@ -385,6 +576,29 @@ async function getJson<T>(path: string, fallback: T, ttlMs = TWA_CACHE_TTL_MS, f
     const res = await fetchWithAuthRecovery(`${apiBase()}${path}`, {
       method: "GET",
       headers: authHeaders(),
+      cache: "no-store",
+    }, {
+      redirectOnFailure: false,
+      emitRecoveryEvents: false,
+      timeoutMs: 10000,
+    });
+    if (!res.ok) return cached.hit ? cached.data : fallback;
+    const data = (await res.json()) as T;
+    writeTwaCache(cacheKey(path), data, ttlMs);
+    return data;
+  } catch {
+    return cached.hit ? cached.data : fallback;
+  }
+}
+
+async function getPublicJson<T>(path: string, fallback: T, ttlMs = TWA_CACHE_TTL_MS, force = false): Promise<T> {
+  const cached = readTwaCache<T>(cacheKey(path), fallback, TWA_CACHE_STALE_MS);
+  if (!force && cached.hit && !cached.expired) return cached.data;
+
+  try {
+    const res = await fetch(`${apiBase()}${path}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
       cache: "no-store",
     });
     if (!res.ok) return cached.hit ? cached.data : fallback;
@@ -632,6 +846,188 @@ export function getTwaQr() {
 
 export function createTwaLookupCode() {
   return postJson<TwaLookupCode>("/registered/lookup-code", {}, "Failed to generate cashier code");
+}
+
+const huntOverviewFallback: HuntOverview = {
+  profile: {
+    influenceBalance: 0,
+    lifetimeInfluence: 0,
+    xp: 0,
+    level: 1,
+    postsCount: 0,
+    likesReceivedCount: 0,
+    boxesOpenedCount: 0,
+    cardsOwnedCount: 0,
+    tutorialCompletedAt: null,
+  },
+  missions: [],
+  boxes: [],
+  cards: [],
+  recentPosts: [],
+  economy: {
+    postCreateReward: 35,
+    likeAuthorReward: 8,
+    postBoxCost: 120,
+    dailyPostLimit: 8,
+    dailyPostRewardCap: 175,
+    dailyLikeRewardCap: 800,
+  },
+};
+
+export function getCachedHuntOverview() {
+  return readCachedJson<HuntOverview>("/hunt/overview", huntOverviewFallback);
+}
+
+export function getHuntOverview(force = false) {
+  return getJson<HuntOverview>("/hunt/overview", huntOverviewFallback, TWA_CACHE_TTL_MS, force);
+}
+
+export function getHuntFeed(force = false) {
+  return getJson<HuntPost[]>("/hunt/feed", [], TWA_CACHE_TTL_MS, force);
+}
+
+export function getPublicHuntFeed(force = false) {
+  return getPublicJson<HuntPost[]>("/hunt/public/feed", [], TWA_CACHE_TTL_MS, force);
+}
+
+export function getPublicHuntSharePost(uuid: string) {
+  return getJson<HuntSharePost | null>(`/hunt/share/posts/${encodeURIComponent(uuid)}`, null, TWA_CACHE_TTL_MS, true);
+}
+
+export function getPublicHuntShareCard(uuid: string) {
+  return getJson<HuntShareCard | null>(`/hunt/share/cards/${encodeURIComponent(uuid)}`, null, TWA_CACHE_TTL_MS, true);
+}
+
+export function getHuntCardCatalog(force = false) {
+  return getJson<HuntCatalogSpecies[]>("/hunt/cards/catalog", [], TWA_CACHE_TTL_MS, force);
+}
+
+export async function getHuntCardCatalogResult(force = false) {
+  const path = "/hunt/cards/catalog";
+  const cached = readTwaCache<HuntCatalogSpecies[]>(cacheKey(path), [], TWA_CACHE_STALE_MS);
+  if (!force && cached.hit && !cached.expired) return { ok: true as const, data: cached.data };
+
+  try {
+    const res = await fetchWithAuthRecovery(`${apiBase()}${path}`, {
+      method: "GET",
+      headers: authHeaders(),
+      cache: "no-store",
+    }, {
+      redirectOnFailure: false,
+      emitRecoveryEvents: false,
+      timeoutMs: 10000,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const message = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+      return cached.hit
+        ? { ok: true as const, data: cached.data }
+        : { ok: false as const, message: message ?? "Failed to load Hunt card catalog." };
+    }
+    const data = (await res.json()) as HuntCatalogSpecies[];
+    writeTwaCache(cacheKey(path), data, TWA_CACHE_TTL_MS);
+    return { ok: true as const, data };
+  } catch (error) {
+    return cached.hit
+      ? { ok: true as const, data: cached.data }
+      : { ok: false as const, message: error instanceof Error ? error.message : "Failed to load Hunt card catalog." };
+  }
+}
+
+export function getHuntPlaces(query?: string, force = false) {
+  const suffix = query ? `?q=${encodeURIComponent(query)}` : "";
+  return getJson<HuntPlace[]>(`/hunt/places${suffix}`, [], TWA_CACHE_TTL_MS, force);
+}
+
+export async function completeHuntTutorial() {
+  const result = await postJson<{ success: true; profile: HuntProfile }>("/hunt/tutorial/complete", {}, "Failed to complete Hunt tutorial");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function createHuntPost(input: {
+  placeName?: string;
+  address?: string;
+  city?: string;
+  district?: string;
+  categorySlug?: string;
+  caption: string;
+  photoUrl?: string;
+  tags?: string[];
+  mediaUrls?: string[];
+  rating?: number;
+  visitPriceBand?: string;
+  moodTags?: string[];
+  latitude?: number;
+  longitude?: number;
+  locationAccuracy?: number;
+}) {
+  const result = await postJson<HuntPost>("/hunt/posts", input, "Failed to create Hunt post");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function geocodeHuntAddress(input: { address: string }) {
+  return postJson<{ address: string; latitude: number; longitude: number; precision: string | null; name: string | null; description: string | null }>(
+    "/hunt/geocode",
+    input,
+    "Failed to geocode Hunt address",
+  );
+}
+
+export async function createHuntPlace(input: {
+  name: string;
+  address?: string;
+  city?: string;
+  district?: string;
+  categorySlug?: string;
+  latitude?: number;
+  longitude?: number;
+  tags?: string[];
+}) {
+  const result = await postJson<HuntPlace>("/hunt/places", input, "Failed to create Hunt place");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function uploadHuntMedia(input: { fileName: string; contentType: string; dataBase64: string }) {
+  return postJson<{ url: string; fileName: string; contentType: string; size: number }>("/hunt/media", input, "Failed to upload Hunt media");
+}
+
+export async function likeHuntPost(uuid: string) {
+  const result = await postJson<{ success: true }>(`/hunt/posts/${uuid}/like`, {}, "Failed to like Hunt post");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function reportHuntPost(uuid: string, input: { reason: HuntReportReason; details?: string }) {
+  return postJson<{ success: true }>(`/hunt/posts/${uuid}/report`, input, "Failed to report Hunt post");
+}
+
+export async function openHuntBox(boxUuid?: string, boxType?: HuntBoxType) {
+  const result = await postJson<{ box: HuntBox; card: HuntCard }>("/hunt/boxes/open", { boxUuid, boxType }, "Failed to open Hunt box");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function upgradeHuntCard(cardUuid?: string, focusStat?: HuntCardStatKey) {
+  const result = await postJson<{ success: true; cost: number; card: HuntCard; upgrade?: HuntCardUpgrade }>("/hunt/cards/upgrade", { cardUuid, focusStat }, "Failed to upgrade Hunt card");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function applyHuntCardUpgradeBonus(upgradeUuid: string, focusStat: HuntCardStatKey) {
+  const result = await postJson<{ success: true; card: HuntCard; upgrade: HuntCardUpgrade }>("/hunt/cards/upgrade/bonus", { upgradeUuid, focusStat }, "Failed to apply Hunt card upgrade bonus");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function findRandomHuntBattle(cardUuid?: string) {
+  return postJson<HuntBattleRandom>("/hunt/battle/random", { cardUuid }, "Failed to find Hunt battle opponent");
+}
+
+export async function createHuntBattleCode(cardUuid?: string) {
+  return postJson<HuntBattleCode>("/hunt/battle/code", { cardUuid }, "Failed to create Hunt battle code");
 }
 
 const profileFallback: TwaProfile = {

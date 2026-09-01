@@ -83,6 +83,11 @@ async function runMigrationsIfConfigured() {
 
   console.log("Applying database migrations before service start.");
   await npmRunOnce("db:migrate", ["run", "db:migrate"]);
+
+  if (process.env.HUNT_SEED_ON_START === "true") {
+    console.log("Seeding Nearloy Hunt catalog before service start.");
+    await npmRunOnce("db:seed:hunt", ["run", "db:seed:hunt"]);
+  }
 }
 
 try {

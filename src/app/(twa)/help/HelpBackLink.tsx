@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
-const DEFAULT_SECTION = "section-payments";
+const DEFAULT_SECTION = "settings-access";
 
 export function HelpBackLink() {
   const { t } = useI18n("ru");

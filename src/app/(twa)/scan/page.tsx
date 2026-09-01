@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import QRCode from "qrcode";
-import { Clock3, Hash, QrCode, RefreshCw, ShieldCheck } from "lucide-react";
+import { Clock3, Hash, QrCode, RefreshCw } from "lucide-react";
 import { createTwaLookupCode, getTwaQr, type TwaLookupCode, type TwaQr } from "@/lib/api/twa-client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
@@ -42,15 +42,20 @@ export default function ScanPage() {
   }, [qr?.payload]);
 
   async function generateLookupCode() {
-    setCodeLoading(true);
-    setCodeError("");
-    const result = await createTwaLookupCode();
-    if (result.ok) {
-      setLookupCode(result.data);
-    } else {
+    try {
+      setCodeLoading(true);
+      setCodeError("");
+      const result = await createTwaLookupCode();
+      if (result.ok) {
+        setLookupCode(result.data);
+      } else {
+        setCodeError(t("client.scan.codeError"));
+      }
+    } catch {
       setCodeError(t("client.scan.codeError"));
+    } finally {
+      setCodeLoading(false);
     }
-    setCodeLoading(false);
   }
 
   return (
@@ -76,12 +81,6 @@ export default function ScanPage() {
       </motion.header>
 
       <Card className="glass mx-auto w-full max-w-sm overflow-hidden border-white/10">
-        <CardHeader className="border-b border-white/10 bg-white/[0.03] pb-3">
-          <CardTitle className="flex items-center justify-center gap-2 text-base">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            {t("client.scan.yourQr")}
-          </CardTitle>
-        </CardHeader>
         <CardContent className="p-5">
           <div className="mx-auto flex aspect-square max-w-[240px] items-center justify-center rounded-2xl border border-white/10 bg-slate-50 p-3 shadow-lg shadow-black/20">
             {qr?.payload ? (
@@ -124,8 +123,11 @@ export default function ScanPage() {
           )}
           {codeError && <p className="rounded-xl border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">{codeError}</p>}
           <Button type="button" className="w-full rounded-xl" onClick={() => void generateLookupCode()} disabled={codeLoading}>
-            {lookupCode ? <RefreshCw /> : <Hash />}
-            {lookupCode ? t("client.scan.refreshCode") : t("client.scan.generateCode")}
+            <span className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+              <RefreshCw className={lookupCode ? "absolute h-4 w-4" : "absolute h-4 w-4 opacity-0"} />
+              <Hash className={lookupCode ? "absolute h-4 w-4 opacity-0" : "absolute h-4 w-4"} />
+            </span>
+            <span>{lookupCode ? t("client.scan.refreshCode") : t("client.scan.generateCode")}</span>
           </Button>
         </CardContent>
       </Card>

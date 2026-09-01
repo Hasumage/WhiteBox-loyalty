@@ -12,6 +12,142 @@ export type AdminUserRow = {
   createdAt: string;
 };
 
+export type AdminHuntGrowthPlace = {
+  uuid: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  district: string | null;
+  source: "USER_SUGGESTED" | "COMPANY" | "SYSTEM_SEEDED";
+  tags: string[];
+  category: { slug: string; name: string; icon: string } | null;
+  company: { slug: string; name: string } | null;
+  postCount: number;
+  storedPostCount: number;
+  likeCount: number;
+  storedLikeCount: number;
+  wantedCount: number;
+  uniqueAuthors: number;
+  uniqueReactors: number;
+  demandScore: number;
+  lastPostAt: string | null;
+  acquisitionHint: "already_claimed" | "priority_outreach" | "warm_lead" | "watch";
+};
+
+export type AdminHuntReportReason = "SPAM" | "OFFENSIVE" | "FALSE_PLACE" | "DUPLICATE" | "PRIVATE_DATA" | "COPYRIGHT" | "OTHER";
+export type AdminHuntReportStatus = "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED";
+export type AdminHuntPostStatus = "DRAFT" | "PUBLISHED" | "HIDDEN" | "REMOVED";
+export type AdminHuntModerationStatus = "CLEAR" | "FLAGGED" | "REVIEWING" | "ACTIONED";
+
+export type AdminHuntModerationPlace = {
+  uuid: string;
+  slug: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  district: string | null;
+  source: "USER_SUGGESTED" | "COMPANY" | "SYSTEM_SEEDED";
+  tags: string[];
+  category: { slug: string; name: string; icon: string } | null;
+  company: { slug: string; name: string } | null;
+};
+
+export type AdminHuntModerationPost = {
+  uuid: string;
+  caption: string;
+  photoUrl: string | null;
+  mediaUrls: string[];
+  tags: string[];
+  rating: number | null;
+  moodTags: string[];
+  gpsConfidence: number;
+  latitude: string | number | null;
+  longitude: string | number | null;
+  status: AdminHuntPostStatus;
+  moderationStatus: AdminHuntModerationStatus;
+  likeCount: number;
+  score: number;
+  influenceAwarded: number;
+  createdAt: string;
+  updatedAt: string;
+  user: { uuid: string; name: string; email: string };
+  place: AdminHuntModerationPlace;
+  reports: Array<{
+    uuid: string;
+    reason: AdminHuntReportReason;
+    details: string | null;
+    status: AdminHuntReportStatus;
+    createdAt: string;
+    resolvedAt: string | null;
+    reporter: { uuid: string; name: string; email: string };
+  }>;
+};
+
+export type AdminHuntDashboardResponse = {
+  summary: {
+    players: number;
+    activePlayers: number;
+    posts: number;
+    publishedPosts: number;
+    likes: number;
+    cards: number;
+    boxesOpened: number;
+    nearCoinIssued: number;
+    openReports: number;
+  };
+  postsByDay: Array<{ date: string; posts: number; likes: number }>;
+  rarityDistribution: Array<{ rarity: string; count: number }>;
+  topCharacters: Array<{ uuid: string; name: string; rarity: string; element: string; imageUrl: string | null; ownedCount: number }>;
+  topPlayers: Array<{ uuid: string; name: string; email: string; level: number; cardsOwnedCount: number; postsCount: number; lifetimeInfluence: number }>;
+  moderation: { flagged: number; reviewing: number; actioned: number };
+};
+
+export type AdminHuntCharacter = {
+  uuid: string;
+  slug: string;
+  name: string;
+  description: string;
+  element: string;
+  baseRarity: string;
+  baseStats: Record<string, number>;
+  traitPool: unknown;
+  visualPrompt: string;
+  imageUrl: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  cardsCount: number;
+  category: { slug: string; name: string; icon: string } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminHuntPlayersResponse = {
+  summary: {
+    players: number;
+    avgLevel: number;
+    avgCards: number;
+    totalNearCoin: number;
+    totalPosts: number;
+    totalLikes: number;
+  };
+  levelBuckets: Array<{ label: string; count: number }>;
+  players: Array<{
+    uuid: string;
+    name: string;
+    email: string;
+    level: number;
+    xp: number;
+    influenceBalance: number;
+    lifetimeInfluence: number;
+    postsCount: number;
+    likesReceivedCount: number;
+    boxesOpenedCount: number;
+    cardsOwnedCount: number;
+    tutorialCompletedAt: string | null;
+    updatedAt: string;
+  }>;
+};
+
 export type AdminUsersResponse = {
   items: AdminUserRow[];
   total: number;
@@ -591,6 +727,7 @@ export type AdminPermissionScope =
   | "DATABASE"
   | "TELEGRAM"
   | "PROMOTION"
+  | "HUNT"
   | "SETTINGS";
 
 export type AdminUserPermissionRow = {
@@ -1489,6 +1626,81 @@ export async function adminListUsers(options?: {
     const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users${suffix}`, { headers: authHeaders() });
     if (!res.ok) return null;
     return (await res.json()) as AdminUsersResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function adminGetHuntGrowthPlaces(): Promise<AdminHuntGrowthPlace[]> {
+  try {
+    const res = await fetchWithAuthRecovery(`${apiBase()}/hunt/growth/places`, { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return [];
+    return (await res.json()) as AdminHuntGrowthPlace[];
+  } catch {
+    return [];
+  }
+}
+
+export async function adminGetHuntModerationPosts(): Promise<AdminHuntModerationPost[]> {
+  try {
+    const res = await fetchWithAuthRecovery(`${apiBase()}/hunt/moderation/posts`, { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return [];
+    return (await res.json()) as AdminHuntModerationPost[];
+  } catch {
+    return [];
+  }
+}
+
+export async function adminModerateHuntPost(
+  uuid: string,
+  input: { status?: AdminHuntPostStatus; moderationStatus?: AdminHuntModerationStatus; note?: string },
+) {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/hunt/moderation/posts/${encodeURIComponent(uuid)}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to moderate Hunt post" };
+  return { ok: true as const, data: data as { success: true; reversedInfluence: number } };
+}
+
+export async function adminGetHuntDashboard(): Promise<AdminHuntDashboardResponse | null> {
+  try {
+    const res = await fetchWithAuthRecovery("/api/admin/hunt/dashboard", { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as AdminHuntDashboardResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function adminListHuntCharacters(): Promise<AdminHuntCharacter[]> {
+  try {
+    const res = await fetchWithAuthRecovery("/api/admin/hunt/characters", { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return [];
+    return (await res.json()) as AdminHuntCharacter[];
+  } catch {
+    return [];
+  }
+}
+
+export async function adminUpdateHuntCharacter(uuid: string, input: Partial<Pick<AdminHuntCharacter, "name" | "description" | "element" | "baseRarity" | "baseStats" | "visualPrompt" | "imageUrl" | "isActive" | "sortOrder">>) {
+  const res = await fetchWithAuthRecovery(`/api/admin/hunt/characters/${encodeURIComponent(uuid)}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to update Hunt character" };
+  return { ok: true as const, data: data as AdminHuntCharacter };
+}
+
+export async function adminGetHuntPlayers(): Promise<AdminHuntPlayersResponse | null> {
+  try {
+    const res = await fetchWithAuthRecovery("/api/admin/hunt/players", { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as AdminHuntPlayersResponse;
   } catch {
     return null;
   }

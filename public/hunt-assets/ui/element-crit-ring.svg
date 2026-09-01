@@ -1,0 +1,129 @@
+<svg width="1200" height="760" viewBox="0 0 1200 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(596 372) rotate(90) scale(477 736)">
+      <stop stop-color="#122C33"/>
+      <stop offset="0.45" stop-color="#07111E"/>
+      <stop offset="1" stop-color="#03060A"/>
+    </radialGradient>
+    <linearGradient id="card" x1="72" y1="40" x2="1110" y2="704" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17232F"/>
+      <stop offset="0.52" stop-color="#070B14"/>
+      <stop offset="1" stop-color="#101827"/>
+    </linearGradient>
+    <linearGradient id="cyanLine" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <linearGradient id="yinYang" x1="800" y1="272" x2="1058" y2="522" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFC"/>
+      <stop offset="0.48" stop-color="#67E8F9"/>
+      <stop offset="0.52" stop-color="#1E1B4B"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.407 0 0 0 0 0.91 0 0 0 0 0.976 0 0 0 0.55 0"/>
+      <feBlend in="SourceGraphic"/>
+    </filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="22" stdDeviation="22" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="10" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M2 2L11 7L2 12" stroke="#9BF6FF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="14" markerHeight="14" refX="10" refY="7" orient="auto" markerUnits="strokeWidth">
+      <path d="M2 2L11 7L2 12" stroke="#E9D5FF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="760" rx="46" fill="url(#bg)"/>
+  <rect x="28" y="28" width="1144" height="704" rx="42" fill="url(#card)" stroke="#67E8F9" stroke-opacity="0.18"/>
+  <rect x="50" y="50" width="1100" height="660" rx="34" fill="#020617" fill-opacity="0.3" stroke="white" stroke-opacity="0.07"/>
+
+  <g filter="url(#glow)">
+    <text x="82" y="104" fill="#E5FBFF" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="800">Кольцо критов стихий</text>
+    <text x="84" y="140" fill="#9CA3AF" font-family="Inter, Arial, sans-serif" font-size="18">Стрелка показывает, кого стихия бьёт. Преимущество даёт крит-модификатор в бою.</text>
+  </g>
+
+  <g transform="translate(60 174)">
+    <rect x="0" y="0" width="670" height="500" rx="34" fill="#050A14" fill-opacity="0.78" stroke="#67E8F9" stroke-opacity="0.12"/>
+    <text x="34" y="50" fill="#E5FBFF" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="800">Основные связи</text>
+    <text x="34" y="80" fill="#94A3B8" font-family="Inter, Arial, sans-serif" font-size="15">Огонь, вода и природа идут кольцом.</text>
+    <text x="34" y="104" fill="#94A3B8" font-family="Inter, Arial, sans-serif" font-size="15">Ветер и музыка бьют друг друга.</text>
+
+    <path d="M335 92C419 92 488 135 527 198" stroke="url(#cyanLine)" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)" opacity="0.9"/>
+    <path d="M544 260C533 337 479 399 407 425" stroke="url(#cyanLine)" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)" opacity="0.9"/>
+    <path d="M287 424C215 399 162 337 150 260" stroke="url(#cyanLine)" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)" opacity="0.9"/>
+    <path d="M167 198C206 135 275 92 335 92" stroke="url(#cyanLine)" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)" opacity="0.9"/>
+    <path d="M390 120C338 206 327 294 344 398" stroke="url(#cyanLine)" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)" opacity="0.72"/>
+
+    <g filter="url(#shadow)">
+      <g transform="translate(262 78)">
+        <rect width="146" height="82" rx="24" fill="#25110A" stroke="#FDBA74" stroke-opacity="0.5"/>
+        <text x="73" y="36" text-anchor="middle" fill="#FED7AA" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Огонь</text>
+        <text x="73" y="62" text-anchor="middle" fill="#FB923C" font-family="Inter, Arial, sans-serif" font-size="24">♨</text>
+      </g>
+      <g transform="translate(476 198)">
+        <rect width="146" height="82" rx="24" fill="#082F49" stroke="#67E8F9" stroke-opacity="0.5"/>
+        <text x="73" y="36" text-anchor="middle" fill="#CFFAFE" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Вода</text>
+        <text x="73" y="62" text-anchor="middle" fill="#67E8F9" font-family="Inter, Arial, sans-serif" font-size="24">≈</text>
+      </g>
+      <g transform="translate(395 386)">
+        <rect width="146" height="82" rx="24" fill="#052E16" stroke="#86EFAC" stroke-opacity="0.5"/>
+        <text x="73" y="36" text-anchor="middle" fill="#DCFCE7" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Природа</text>
+        <text x="73" y="62" text-anchor="middle" fill="#86EFAC" font-family="Inter, Arial, sans-serif" font-size="24">✦</text>
+      </g>
+      <g transform="translate(128 386)">
+        <rect width="146" height="82" rx="24" fill="#042F2E" stroke="#99F6E4" stroke-opacity="0.5"/>
+        <text x="73" y="36" text-anchor="middle" fill="#CCFBF1" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Ветер</text>
+        <text x="73" y="62" text-anchor="middle" fill="#99F6E4" font-family="Inter, Arial, sans-serif" font-size="24">≋</text>
+      </g>
+      <g transform="translate(47 198)">
+        <rect width="146" height="82" rx="24" fill="#3B0A36" stroke="#F0ABFC" stroke-opacity="0.5"/>
+        <text x="73" y="36" text-anchor="middle" fill="#FAE8FF" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Музыка</text>
+        <text x="73" y="62" text-anchor="middle" fill="#F0ABFC" font-family="Inter, Arial, sans-serif" font-size="24">♪</text>
+      </g>
+    </g>
+
+    <g font-family="Inter, Arial, sans-serif" font-size="15" fill="#CBD5E1">
+      <text x="438" y="152">Огонь бьёт природу</text>
+      <text x="462" y="346">Природа бьёт воду</text>
+      <text x="70" y="346">Ветер бьёт музыку</text>
+      <text x="190" y="152">Вода бьёт огонь</text>
+      <text x="272" y="304">Музыка бьёт ветер</text>
+    </g>
+  </g>
+
+  <g transform="translate(760 174)">
+    <rect x="0" y="0" width="380" height="500" rx="34" fill="#050A14" fill-opacity="0.82" stroke="#A78BFA" stroke-opacity="0.22"/>
+    <text x="34" y="50" fill="#EDE9FE" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="800">Инь / Янь</text>
+    <text x="34" y="80" fill="#A1A1AA" font-family="Inter, Arial, sans-serif" font-size="15">Свет и тьма стоят отдельно.</text>
+
+    <circle cx="190" cy="244" r="122" fill="url(#yinYang)" opacity="0.18"/>
+    <path d="M103 244C103 196 142 157 190 157C238 157 277 196 277 244C277 292 238 331 190 331C142 331 103 292 103 244Z" stroke="url(#cyanLine)" stroke-width="3" opacity="0.8"/>
+    <path d="M154 204C183 174 224 176 250 204" stroke="#F8FAFC" stroke-width="4" stroke-linecap="round" marker-end="url(#arrowPurple)"/>
+    <path d="M226 284C197 314 156 312 130 284" stroke="#A78BFA" stroke-width="4" stroke-linecap="round" marker-end="url(#arrowPurple)"/>
+
+    <g filter="url(#shadow)">
+      <g transform="translate(56 164)">
+        <rect width="124" height="112" rx="28" fill="#1F2937" stroke="#FDE68A" stroke-opacity="0.54"/>
+        <text x="62" y="42" text-anchor="middle" fill="#FEF3C7" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="800">Свет</text>
+        <text x="62" y="78" text-anchor="middle" fill="#FEF08A" font-family="Inter, Arial, sans-serif" font-size="30">✹</text>
+      </g>
+      <g transform="translate(200 164)">
+        <rect width="124" height="112" rx="28" fill="#09090B" stroke="#C4B5FD" stroke-opacity="0.5"/>
+        <text x="62" y="42" text-anchor="middle" fill="#EDE9FE" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="800">Тьма</text>
+        <text x="62" y="78" text-anchor="middle" fill="#C4B5FD" font-family="Inter, Arial, sans-serif" font-size="30">●</text>
+      </g>
+    </g>
+
+    <rect x="34" y="374" width="312" height="78" rx="24" fill="#0F172A" stroke="#C4B5FD" stroke-opacity="0.18"/>
+    <text x="190" y="408" text-anchor="middle" fill="#F8FAFC" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="800">Взаимокрит</text>
+    <text x="190" y="434" text-anchor="middle" fill="#C4B5FD" font-family="Inter, Arial, sans-serif" font-size="15">Свет бьёт тьму, тьма бьёт свет</text>
+  </g>
+
+  <g transform="translate(82 660)">
+    <rect width="1036" height="36" rx="18" fill="#67E8F9" fill-opacity="0.08" stroke="#67E8F9" stroke-opacity="0.16"/>
+    <text x="518" y="24" text-anchor="middle" fill="#CFFAFE" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">Преимущество стихии даёт крит-модификатор, но не должно быть сильнее уровня, редкости и статов карточки.</text>
+  </g>
+</svg>

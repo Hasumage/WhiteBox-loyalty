@@ -10,6 +10,7 @@ import { JwtAuthMiddleware } from "./auth/middleware/jwt-auth.middleware";
 import { CompanyController } from "./company/company.controller";
 import { CompanyModule } from "./company/company.module";
 import { HealthModule } from "./health/health.module";
+import { HuntModule } from "./hunt/hunt.module";
 import { MaintenanceGuard } from "./maintenance/maintenance.guard";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { OAuthModule } from "./oauth/oauth.module";
@@ -38,6 +39,7 @@ import { RegisteredModule } from "./registered/registered.module";
     PaymentsModule,
     OAuthModule,
     HealthModule,
+    HuntModule,
     MaintenanceModule,
   ],
   providers: [

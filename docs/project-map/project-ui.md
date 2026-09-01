@@ -4,24 +4,30 @@
 
 | Path | Purpose | Access |
 |---|---|---|
-| `/` | Client dashboard | CLIENT |
+| `/` | Public product entry page | Public |
+| `/app` | Client dashboard | CLIENT |
 | `/login` | Login | Public |
 | `/register` | Registration | Public |
 | `/forgot-password` | Password reset by email code | Public |
 | `/email-change/confirm` | Email change confirmation | Public |
+| `/mobile-entry`, `/mobile-language`, `/mobile-login`, `/mobile-register`, `/mobile-forgot-password` | Capacitor/mobile auth and language flow | Public |
+| `/oauth/vkid/complete` | VK ID OAuth browser handoff completion | Public |
 | `/onboarding` | First-run tutorial with skip | CLIENT |
 | `/companies` | All partners | CLIENT |
+| `/categories/[slug]` | Category-specific company listing | CLIENT |
 | `/loyalty-cards` | Companies where the user has points/activity | CLIENT |
+| `/hunt` | Nearloy Hunt tutorial, creator post loop, Influence, boxes, creature cards and feed | CLIENT |
 | `/marketplace` | Subscription catalog | CLIENT |
 | `/marketplace/[id]` | Subscription detail | CLIENT |
 | `/wallet/[slug]` | Company loyalty card detail and public read-only showcase | CLIENT/Public |
-| `/map` | Yandex partner map | CLIENT |
+| `/map`, `/map/full` | Yandex partner map and full-screen map | CLIENT |
 | `/history` | Activity and subscription archive | CLIENT |
 | `/scan` | User QR | CLIENT |
 | `/settings` | Profile, stats, favorites, promo/referral | CLIENT |
 | `/settings/account` | Privacy/account actions | CLIENT |
 | `/settings/favorites` | Favorite categories | CLIENT |
-| `/settings/business`, `/settings/partnership`, `/settings/reviews` | Profile subpages/placeholders | CLIENT |
+| `/settings/statuses`, `/settings/rewards`, `/settings/reviews`, `/settings/personalization`, `/settings/partnership`, `/settings/company-referrals` | Profile and loyalty/growth subpages | CLIENT |
+| `/payment/success`, `/payment/success/[...rest]` | Provider return/success handling for paid client subscriptions | CLIENT |
 | `/help/*` | FAQ/contact/privacy | Public |
 | `/landing` | Marketing landing and Telegram-backed lead form | Public |
 | `/faq` | Public FAQ hub linking client and business FAQ pages | Public |
@@ -30,6 +36,9 @@
 | `/business/giveaway` | 100 000 RUB business giveaway page with active-company progress vessel | Public |
 | `/business/giveaway/rules` | Dedicated giveaway participation rules | Public |
 | `/mobile-app` | Mobile app landing with generated visuals and Android APK download CTA | Public |
+| `/mobile-map` | Public/mobile map teaser surface | Public |
+| `/max` | Max messenger entry page | Public |
+| `/requisites` | PR payout requisites helper page | Public |
 | `/careers` | Localized careers hub with role cards and SEO job metadata | Public |
 | `/careers/[slug]` | Generic vacancy detail page | Public |
 | `/careers/b2b-manager` | Detailed B2B acquisition manager vacancy with PR account registration | Public |
@@ -46,12 +55,15 @@
 | `/company/settings` | Company profile/settings hub | COMPANY owner/manager |
 | `/company/settings/locations` | Company addresses and map data | COMPANY owner/manager |
 | `/company/settings/media` | Public logo, hero, gallery and special offers | COMPANY owner/manager |
+| `/company/settings/offers` | Special offers settings entry | COMPANY owner/manager |
+| `/company/settings/socials` | Public social links management | COMPANY owner/manager |
 | `/admin` | Live operations dashboard and priority task queue | ADMIN/MANAGER by permission |
 | `/admin/ai` | Permission-scoped admin AI assistant with safe confirmed actions | ADMIN/MANAGER by permission |
 | `/admin/tasks` | Full operations Kanban with filters, assignment and archive | ADMIN/MANAGER by source permission |
 | `/admin/tasks/[uuid]` | Task resolution workspace and source handoff | ADMIN/MANAGER by source permission |
 | `/admin/users`, `/admin/users/[uuid]` | User operations | ADMIN |
 | `/admin/users/[uuid]/permissions` | Granular user permissions | SUPER_ADMIN |
+| `/admin/users/[uuid]/relations`, `/admin/users/[uuid]/security`, `/admin/users/[uuid]/activity` | User relationship, security and activity detail views | ADMIN |
 | `/admin/categories` | Category CRUD | ADMIN |
 | `/admin/companies`, `/admin/companies/[uuid]` | Company accounts/profile/locations/subscriptions | ADMIN |
 | `/admin/companies/[uuid]/clients` | Company client analytics | ADMIN |
@@ -65,6 +77,7 @@
 | `/admin/support` | Support-only workspace | SUPPORT |
 | `/admin/subscriptions` | Subscription analytics | ADMIN |
 | `/admin/growth` | Promo/referral management | ADMIN |
+| `/admin/pr`, `/admin/pr/funnel`, `/admin/pr/companies`, `/admin/pr/payouts`, `/admin/pr/settings` | PR funnel, company attribution, payouts and settings | ADMIN/MANAGER by PR permission |
 | `/admin/database` | Prisma schema visualizer | ADMIN |
 | `/admin/audit`, `/admin/audit/new`, `/admin/audit/backups` | Audit and backups | ADMIN |
 | `/admin/payments` | YooKassa payment ledger, statuses and provider identifiers | ADMIN |
@@ -90,6 +103,7 @@
 ## Client UX state
 
 - QR element is only on `/scan`; it was removed from global/profile surfaces.
+- `/app` is the authenticated mobile dashboard; `/` is treated as public entry/marketing surface.
 - Bottom nav labels use `Profile` instead of old `Settings` naming where applicable.
 - Favorite categories can be selected in onboarding/settings and are capped at 10 in UI/API validation.
 - Marketplace and partner filters use compact quick chips and extended filter panels.
@@ -97,6 +111,10 @@
 - Client API reads use a short-lived TTL cache for dashboard, marketplace, partners, history, map and profile data. Pages hydrate from the cached snapshot first, then refresh from API when needed, so users do not see zero balances or empty cards during navigation.
 - First-load states use `TwaLoadingScreen` skeletons instead of raw empty/fallback values.
 - `TwaStaleDataNudge` appears after 10 minutes on one client route and gently suggests a refresh.
+- Mobile auth has separate Capacitor-friendly entry, language, login, registration and password-reset screens.
+- Settings now includes status, reward, personalization and company-referral surfaces in addition to account/favorites/reviews.
+- `/hunt` keeps the first screen usable: tutorial, player stats, post composer, box opening, mission preview, card collection and feed all live in one mobile surface.
+- Hunt visuals should use the Nearloy dark/glass/cyan shell, but creature cards should be cute, stylized and varied by element rather than realistic people or one repeated mascot body.
 - Company cards support slug sharing. Authenticated users can favorite/share/route; unauthenticated visitors see a read-only public card with levels, gallery, offers and NearLoy CTA.
 - The route button hides when a company has no active address and should handle multiple addresses as a route-selection case.
 - The big favorite CTA animates into the header heart; removing favorite does not resurrect the big CTA until reload.
@@ -112,6 +130,7 @@
 - `/business/giveaway` visualizes progress toward 50 active companies with a liquid-vessel meter and vertical scenario cards using lightweight themed images.
 - `/business/giveaway/rules` is the authoritative public rule page for the giveaway. It is reachable from the giveaway flow, not from the global footer.
 - `/mobile-app` presents the Android APK download with generated NearLoy mobile app visuals and feature blocks for QR, map, notifications and loyalty cards.
+- `/max` is localized to Russian by default and supports Max Mini App entry/linking flows through API routes.
 - `/careers` is a public SEO surface for NearLoy jobs; role cards link to individual detail pages and the hero intentionally avoids heavy CTA buttons.
 - `/careers/b2b-manager` is the detailed launch-role page for B2B acquisition, including conditions, expectations, public PR account registration and Telegram onboarding.
 - `MarketingFooter` is shared by marketing pages and keeps the footer light: careers plus user/company terms links only.
@@ -140,6 +159,7 @@
 - Backups UI supports snapshot creation, download, restore confirmation, deletion and live restore statuses.
 - Mobile admin uses a compact top bar, bottom primary navigation and drawer-based full navigation while preserving the desktop sidebar.
 - Admin menu badges show unresolved company verification counters with `20+` cap.
+- Admin navigation also has a lightweight `/api/admin/navigation` route and permission-filtered menu counters.
 - Telegram page shows linked state and reconnect flow instead of asking for a link when already connected.
 - Dashboard figures are DB-backed; its priority queue combines system alerts, company verification requests and finance approvals without duplicated cards.
 - Each task opens a focused resolution screen. Alert tasks can be closed there, while workflow tasks close from their authoritative verification or finance decision.
@@ -151,6 +171,7 @@
 - `/admin/ai` is a full-height chat surface, not a quick-command panel. It uses plain-language prompts, optional image paste/upload and permission-scoped context.
 - Admin AI output should read like an operational assistant: concise greeting, concrete findings, tables for finance/PR debt when useful, and explicit confirmation before supported safe actions.
 - `/admin/finance` stays dense: the operator sees the queue immediately, selects a payout, then uses the side inspector for checklist, payout/company details, YooKassa test payout or manual close. Long company/payout names are truncated with full values in tooltips.
+- `/admin/pr/*` splits acquisition operations into overview, funnel, attributed companies, payouts and settings instead of burying PR work inside growth.
 - Finance scrollbars are styled to the dark UI; raw browser-white scrollbars should not appear in the payout workspace.
 
 ## Company UX
@@ -162,6 +183,7 @@
 - Billing uses the word "subscription", not "subscription fee"/"abonent fee" wording. The page explains active/past-due state, pending payment links, status checks and saved YooKassa method controls.
 - Company AI is a draft-only helper. UI keeps prompts short, shows compact JSON-backed results and reminds users that AI cannot change passwords, access, roles, payouts, payment methods or infrastructure.
 - Media settings define fixed standards: logo `512x512`, hero `960x420`, gallery `900x675`, offer image `900x506`. UI should crop/preview/delete before upload.
+- Company settings has separate media, offers and socials routes. Social links use the controlled `CompanySocialLinkKind` set (`WEBSITE`, `VK`, `MAX`, `OTHER`).
 - NearLoy does not store card data. Saved payment method UI must say that YooKassa stores the method and NearLoy stores only an encrypted identifier.
 
 ## Key components
@@ -185,8 +207,10 @@
 - Client map shows branch marker and route button.
 - Activate marketplace subscription -> dashboard active subscriptions updates.
 - Earn points for company -> `/loyalty-cards` and `/wallet/[slug]` update.
+- Generate a lookup code in the client app -> cashier opens it through company customer lookup without exposing unrelated users.
 - Open `/wallet/[slug]` signed out -> public card shows gallery/offers/levels and no interactive app-only actions.
 - Upload company logo/hero/gallery/offer -> public card media updates and old assets can be deleted.
+- Add/edit company social links -> public company surfaces show only active sanitized links.
 - Company billing checkout -> pending payment is reused for 15 minutes and status sync activates billing after provider success.
 - Admin tasks -> create manual task, assign user, move to work/archive and verify dashboard counters.
 - Create points promo -> redeem in the client app -> loyalty transaction appears.

@@ -56,6 +56,74 @@ describe("company referral monthly close", () => {
     expect(report.agents[0]).toMatchObject({ userId: 10, availableToClose: 1000 });
   });
 
+  it("keeps monthly report available when a referral points to a missing user", async () => {
+    const db = createMockDb();
+    db.user.findMany.mockResolvedValue([]);
+    db.companyReferral.findMany.mockResolvedValue([
+      {
+        referrerUserId: 77,
+        status: "ACTIVE",
+        source: "PUBLIC_REFERRAL",
+        referrer: null,
+        company: {
+          id: 101,
+          slug: "coffee",
+          name: "Coffee",
+          isActive: true,
+          billingInvoices: [{ paidAmount: 1000 }],
+        },
+      },
+    ]);
+    db.financeOperation.findMany.mockResolvedValue([]);
+
+    const report = await getCompanyReferralMonthlyReport({
+      scope: "ALL",
+      period: getMoscowMonthPeriod(2026, 8),
+      db: db as never,
+    });
+
+    expect(report.agents[0]).toMatchObject({
+      userId: 77,
+      uuid: "missing-user-77",
+      name: "Deleted PR user #77",
+      email: "deleted-pr-user@deleted.nearloy.local",
+      monthlyGross: 1000,
+      monthlyReferralCommission: 300,
+    });
+  });
+
+  it("keeps monthly report available when a referral points to a missing company", async () => {
+    const db = createMockDb();
+    db.user.findMany.mockResolvedValue([
+      { id: 10, uuid: "agent-10", name: "Anna PR", email: "anna@test.local", companyReferralCode: "ANNA" },
+    ]);
+    db.companyReferral.findMany.mockResolvedValue([
+      {
+        companyId: 404,
+        referrerUserId: 10,
+        status: "ACTIVE",
+        source: "PUBLIC_REFERRAL",
+        referrer: { id: 10, uuid: "agent-10", name: "Anna PR", email: "anna@test.local", role: "MANAGER" },
+        company: null,
+      },
+    ]);
+    db.financeOperation.findMany.mockResolvedValue([]);
+
+    const report = await getCompanyReferralMonthlyReport({
+      scope: "ALL",
+      period: getMoscowMonthPeriod(2026, 8),
+      db: db as never,
+    });
+
+    expect(report.agents[0]).toMatchObject({
+      userId: 10,
+      companies: 1,
+      activeCompanies: 0,
+      monthlyGross: 0,
+      monthlyReferralCommission: 0,
+    });
+  });
+
   it("creates finance operations for the previous Moscow month on close", async () => {
     const db = createMockDb();
     db.user.findMany.mockResolvedValue([

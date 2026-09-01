@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, MapPin, History, User, QrCode } from "lucide-react";
+import { Home, MapPin, History, User, QrCode, Sparkles, Swords, WalletCards } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ import { getAccessToken } from "@/lib/api/auth-client";
 const navItems = [
   { href: "/app", labelKey: "client.nav.home", icon: Home },
   { href: "/map", labelKey: "client.nav.map", icon: MapPin },
+  { href: "/hunt", labelKey: "client.nav.hunt", icon: Sparkles },
   { href: "/scan", labelKey: "client.nav.scan", icon: QrCode, isFab: true },
   { href: "/history", labelKey: "client.nav.history", icon: History },
   { href: "/settings", labelKey: "client.nav.profile", icon: User },
@@ -24,18 +25,24 @@ const navLabels: Record<Locale, Partial<Record<TranslationKey, string>>> = {
   ru: {
     "client.nav.home": "Главная",
     "client.nav.map": "Карта",
+    "client.nav.hunt": "НХ",
     "client.nav.scan": "Скан",
     "client.nav.history": "История",
     "client.nav.profile": "Профиль",
     "client.nav.scanQr": "Сканировать QR",
+    "client.hunt.collection": "Коллекция",
+    "client.hunt.battle.nav": "Бой",
   },
   en: {
     "client.nav.home": "Home",
     "client.nav.map": "Map",
+    "client.nav.hunt": "Hunt",
     "client.nav.scan": "Scan",
     "client.nav.history": "History",
     "client.nav.profile": "Profile",
     "client.nav.scanQr": "Scan QR",
+    "client.hunt.collection": "Collection",
+    "client.hunt.battle.nav": "Battle",
   },
 };
 
@@ -51,9 +58,18 @@ export function BottomNav() {
   }, []);
   const isSubscriptionDetail = pathname.startsWith("/marketplace/") && pathname !== "/marketplace";
   const isFullMap = pathname === "/map/full";
+  const isHuntSurface = pathname === "/hunt" || pathname.startsWith("/hunt/");
+  const effectiveNavItems = isHuntSurface
+    ? navItems.map((item) => {
+        if (item.href === "/map") return { ...item, href: "/hunt/cards", labelKey: "client.hunt.collection" as TranslationKey, icon: WalletCards };
+        if (item.href === "/history") return { ...item, href: "/hunt/battle", labelKey: "client.hunt.battle.nav" as TranslationKey, icon: Swords };
+        return item;
+      })
+    : navItems;
   const hideNav = isSubscriptionDetail || isFullMap || (pathname.startsWith("/wallet/") && !hasSession);
   const hideFab =
     pathname.startsWith("/wallet/") ||
+    pathname.startsWith("/hunt/create") ||
     pathname === "/scan" ||
     pathname === "/onboarding" ||
     pathname === "/settings" ||
@@ -87,13 +103,15 @@ export function BottomNav() {
           "glass fixed bottom-0 left-0 right-0 z-50 mx-auto flex max-w-[430px] items-center justify-around border-t border-white/10 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-3"
         )}
       >
-        {navItems
+        {effectiveNavItems
           .filter((item) => !item.isFab)
           .map(({ href, labelKey, icon: Icon }) => {
             const isMapItem = href === "/map";
             const isActive =
               href === "/app"
                 ? pathname === "/app"
+                : href === "/hunt"
+                  ? pathname === "/hunt"
                 : href === "/settings"
                   ? pathname === "/settings" || pathname.startsWith("/settings/")
                   : pathname === href || pathname.startsWith(href + "/");

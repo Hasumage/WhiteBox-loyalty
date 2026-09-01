@@ -24,6 +24,11 @@ DATABASE_URL=postgresql://...
 DIRECT_URL=postgresql://...
 ```
 
+Nearloy Hunt uses the same Prisma schema and the same production `DATABASE_URL`. If you create a fresh Railway
+PostgreSQL database for the migration, point both the API and Web services at that new database URL before the first
+deploy. Do not configure a separate `HUNT_DATABASE_URL` on Railway unless the application code is later split into a
+separate Prisma client.
+
 Production migrations are applied by GitHub Actions after `main` is green. Manual migration is only for emergency operations:
 
 ```bash
@@ -66,12 +71,15 @@ JWT_REFRESH_EXPIRES_DAYS=7
 FRONTEND_ORIGIN=https://<web-domain>
 FRONTEND_ORIGINS=https://nearloy.ru,https://www.nearloy.ru,https://nearloy.up.railway.app
 API_PORT=3001
+HUNT_SEED_ON_START=true
+HUNT_SEED_DEMO_DATA=false
 ```
 
 Optional variables:
 
 ```env
 YANDEX_GEOCODER_API_KEY=<key>
+HUNT_MEDIA_DIR=/app/apps/api/storage/hunt-media
 EMAIL_PROVIDER=auto
 MAIL_FROM=NearLoy <no-reply@nearloy.ru>
 RESEND_API_KEY=<resend-api-key>
@@ -171,7 +179,11 @@ Required variables:
 
 ```env
 NEXT_PUBLIC_API_URL=https://<api-domain>/api
+NEXT_PUBLIC_SITE_URL=https://nearloy.ru
+NEXT_PUBLIC_HUNT_ENABLED=true
 NEXT_PUBLIC_YANDEX_MAPS_API_KEY=<key>
+NEXT_PUBLIC_YANDEX_RSYA_ENABLED=false
+NEXT_PUBLIC_YANDEX_RSYA_HUNT_FEED_BLOCK_ID=<block-id-after-moderation>
 DATABASE_URL=postgresql://...
 DIRECT_URL=postgresql://...
 ```
@@ -183,6 +195,22 @@ Set the generated web domain in `YOOKASSA_RETURN_URL` and `YOOKASSA_COMPANY_RETU
 ## Runtime storage
 
 Company media currently writes to runtime storage for logo, hero, gallery and offer images. This is fine for local/demo use. For production with real company uploads, configure persistent storage or move `src/lib/company-media-storage.ts` to an object-storage backend before relying on Railway ephemeral disk.
+
+Hunt post media currently uses `HUNT_MEDIA_DIR` and defaults to `apps/api/storage/hunt-media`. Railway disk is
+ephemeral unless a volume is attached, so either attach persistent storage to the API service and point
+`HUNT_MEDIA_DIR` there, or move Hunt media to object storage before accepting real user uploads at scale.
+
+## Nearloy Hunt first deploy
+
+For the first Railway deploy against a fresh database:
+
+1. Set `DATABASE_URL` and `DIRECT_URL` on both API and Web services to the new Railway PostgreSQL database.
+2. Set `HUNT_SEED_ON_START=true` only on the API service.
+3. Keep `HUNT_SEED_DEMO_DATA=false` on production. The seed will update the Hunt catalog, missions and species only.
+4. Deploy the API service and wait for migrations plus the Hunt seed to finish.
+5. Deploy the Web service.
+6. After the catalog is confirmed in `/admin/hunt/characters`, set `HUNT_SEED_ON_START=false` again to keep future
+   starts lean. It is safe to re-enable it later when the catalog changes because the seed is idempotent.
 
 ## CI/CD handoff
 

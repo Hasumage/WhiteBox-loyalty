@@ -17,10 +17,12 @@ Important principles:
 - `src/lib/api/auth-client.ts` - login/register/session/account actions.
 - `src/lib/api/categories-client.ts` - categories and favorite categories.
 - `src/lib/api/admin-client.ts` - admin users, companies, payments, tasks, system health, categories, subscriptions, growth, audit and backups.
-- `src/lib/api/company-client.ts` - company dashboard, billing, media, cashier, team, plans, entitlements, redemptions and payouts.
-- `src/lib/api/twa-client.ts` - client profile, dashboard, marketplace, companies, wallet/public card, map/history/subscriptions, QR, promo/referral.
+- `src/lib/api/company-client.ts` - company dashboard, billing, media/offers/social links, cashier, team, plans, entitlements, redemptions and payouts.
+- `src/lib/api/twa-client.ts` - client profile, dashboard, recommendations, marketplace, companies, wallet/public card, map/history/subscriptions, QR, lookup codes, promo/referral.
+- `src/lib/api/twa-client.ts` also exposes typed Nearloy Hunt calls for overview, feed, post creation, likes, tutorial completion and box opening.
 - `src/lib/i18n/*` - locale detection, persistence and portable dictionaries.
 - `src/lib/telegram/*` - Telegram Bot API delivery, proxy support, webhook parsing and admin account linking.
+- `src/lib/max/*` - Max Mini App auth/linking and bot webhook support.
 - `src/lib/admin/admin-tasks.ts` - signal-to-task routing, source deduplication and automatic workflow task closure.
 - `src/lib/company-media-storage.ts` - local/runtime file storage for company public media.
 
@@ -40,12 +42,16 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/users/:uuid/email-change-request` | POST | Create secure email-change token/link |
 | `/api/admin/users/:uuid/force-logout` | POST | Revoke active refresh sessions |
 | `/api/admin/users/:uuid/reactivate-account` | POST | Clear frozen deletion status |
+| `/api/admin/users/:uuid/block` | POST | Block/reactivate account access state |
+| `/api/admin/email/send` | POST | Send/admin-log an operational email |
 | `/api/admin/users/:uuid/company-assignment` | POST | Create or attach company membership when role/account ownership changes |
 | `/api/admin/dashboard` | GET | Live operating metrics and permission-filtered priority queue |
 | `/api/admin/tasks` | GET/POST | Kanban tasks; list, filter and create manual operational tasks |
 | `/api/admin/tasks/:uuid` | GET/PATCH | Read/take/resolve a work item and route to its source |
 | `/api/admin/system-health` | GET/POST | System incident cockpit; open/resolve task-linked alerts |
 | `/api/admin/subscriptions/stats` | GET | KPI/SLA/forecast stats payload |
+| `/api/admin/subscriptions/bundles` | GET/POST | List/create paired subscription bundles |
+| `/api/admin/subscriptions/search` | GET | Search subscriptions for admin selectors |
 | `/api/admin/subscriptions/:uuid` | GET | Subscription lookup by UUID |
 | `/api/admin/promo-codes` | GET | Promo inventory with redemption counts |
 | `/api/admin/promo-codes` | POST | Create points/subscription promo |
@@ -61,6 +67,7 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/company-users/:uuid/payments` | GET | Company payment ledger |
 | `/api/admin/company-users/:uuid/security` | GET | Staff, roles and security summary |
 | `/api/admin/company-users/:uuid/billing-extension` | POST | Extend company NearLoy access without payment and optionally notify company owners in Telegram |
+| `/api/admin/company-users/:uuid/recommendation` | GET/PATCH | Company recommendation boost and recommend-for-everyone settings |
 | `/api/admin/company-users/:uuid/referral` | GET/PUT/DELETE | Company PR/referral attribution |
 | `/api/admin/company-users/:uuid/company-profile` | PUT | Upsert company profile |
 | `/api/admin/company-users/:uuid/locations` | POST | Create geocoded company address |
@@ -75,6 +82,11 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/ai/apply` | POST | Apply an explicit safe admin AI action after confirmation |
 | `/api/admin/company-billing-promos` | GET/POST | List/create company billing promo codes |
 | `/api/admin/company-billing-promos/:uuid` | PATCH | Edit/pause company billing promo code |
+| `/api/admin/pr/settings` | GET/PATCH | PR payout and funnel settings |
+| `/api/admin/pr/funnel` | GET/POST/PATCH/DELETE | PR acquisition pipeline companies |
+| `/api/admin/pr/companies` | GET/PATCH | Attributed PR companies and ownership/recommendation metadata |
+| `/api/admin/pr/payouts` | GET/POST/PATCH | PR payout request and processing surface |
+| `/api/admin/pr/monthly-close` | POST | Close monthly PR referral revenue accounting |
 | `/api/admin/audit` | GET/POST | Audit feed and manual audit events |
 | `/api/admin/backups` | GET/POST | List/create DB snapshots |
 | `/api/admin/backups/:backupId/file` | GET | Download snapshot JSON |
@@ -85,6 +97,8 @@ All `/api/admin/*` routes require `ADMIN`.
 | `/api/admin/company-verifications/:uuid` | GET/PATCH | Review and update a verification request |
 | `/api/admin/company-verifications/:uuid/approve` | POST | Approve verified company access |
 | `/api/admin/company-verifications/:uuid/reject` | POST | Reject request and cleanup verification files |
+| `/api/admin/company-verifications/:uuid/kyc/reveal` | POST | Audit and reveal protected KYC fields |
+| `/api/admin/company-verifications/:uuid/kyc/passport-photo` | DELETE | Delete protected KYC passport photo |
 | `/api/admin/company-verifications/passport-storage/sync` | POST | Reconcile encrypted passport files with DB records |
 | `/api/admin/leads` | GET | Search/paginate landing leads |
 | `/api/admin/leads/:uuid` | GET/PATCH | Lead detail and processing notes |
@@ -102,10 +116,19 @@ All `/api/company/*` routes require an active company membership. Platform role 
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/api/company/profile` | GET | Company member and verified partner profile |
+| `/api/company/profile` | PATCH | Update editable company profile fields |
+| `/api/company/categories` | GET | List categories available to company settings |
+| `/api/company/locations` | GET/POST | List/create company-managed locations |
+| `/api/company/locations/:uuid` | PATCH/DELETE | Update/delete a company-managed location |
 | `/api/company/dashboard` | GET | Customer, subscription, purchase and payout metrics |
 | `/api/company/clients` | GET | Search existing customers scoped to this company |
+| `/api/company/clients/registry` | GET | Customer registry listing for the company workspace |
 | `/api/company/clients/:uuid` | GET | Customer operation card opened from QR |
+| `/api/company/clients/:uuid/comment` | PATCH | Update company-private customer note |
+| `/api/company/clients/lookup-code` | POST | Resolve a short client lookup code for cashier workflows |
 | `/api/company/loyalty/award` | POST | Award manual points or cashback from a purchase |
+| `/api/company/loyalty/spend` | POST | Spend company-scoped points |
+| `/api/company/loyalty/settings` | PATCH | Update loyalty/cashback settings |
 | `/api/company/team` | GET/POST | List staff or invite a member |
 | `/api/company/team/:uuid/role` | PATCH | Update a local membership role |
 | `/api/company/team/:uuid/status` | PATCH | Enable/disable staff access |
@@ -120,7 +143,9 @@ All `/api/company/*` routes require an active company membership. Platform role 
 | `/api/company/billing/payments/:uuid` | GET | Sync/read company billing payment status |
 | `/api/company/ai/assist` | POST | Generate safe company AI drafts for launch, promotions, finance explanations and loyalty levels |
 | `/api/company/subscriptions` | GET/POST | Read or create company tariff plans |
+| `/api/company/subscriptions/:uuid` | PATCH | Update a company subscription |
 | `/api/company/subscriptions/:uuid/entitlements` | POST | Configure controlled service issuance |
+| `/api/company/subscriptions/:uuid/entitlements/:entitlementUuid` | PATCH | Update an entitlement |
 | `/api/company/subscriptions/redemptions` | POST | Consume an entitlement under its allowance |
 | `/api/company/club` | GET | Partner club overview, verified companies and paired subscription proposals |
 | `/api/company/club/bundles` | POST | Create a two-sided paired subscription proposal |
@@ -130,8 +155,11 @@ All `/api/company/*` routes require an active company membership. Platform role 
 | `/api/company/media` | GET/POST | List/upload company logo, hero and gallery assets |
 | `/api/company/media/assets/:id` | DELETE | Delete a media asset |
 | `/api/company/media/offers` | POST | Create a public special offer with optional image |
+| `/api/company/media/offers/:id` | PATCH | Update public special offer metadata |
 | `/api/company/media/offers/:id` | DELETE | Delete a public special offer |
 | `/api/company/media/files/:key` | GET | Serve stored company media file |
+| `/api/company/social-links` | GET/POST | List/create public company social links |
+| `/api/company/social-links/:id` | PATCH/DELETE | Update/delete a public social link |
 
 ## Registered API surface
 
@@ -140,6 +168,7 @@ All `/api/registered/*` routes require `CLIENT`.
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/api/registered/profile` | GET | Client profile, stats, preferences and referral state |
+| `/api/registered/profile` | PUT | Update client profile fields |
 | `/api/registered/onboarding/complete` | POST | Mark first-run tutorial completed |
 | `/api/registered/onboarding/skip` | POST | Skip tutorial |
 | `/api/registered/profile/preferences` | PUT | Update privacy/communication preferences |
@@ -151,14 +180,30 @@ All `/api/registered/*` routes require `CLIENT`.
 | `/api/registered/dashboard` | GET | Home dashboard read model |
 | `/api/registered/marketplace` | GET | Active subscription catalog; optional category filter |
 | `/api/registered/companies` | GET | Partner list with points, levels and locations |
+| `/api/registered/recommendations` | GET | Personalized/recommended company feed |
 | `/api/registered/wallet` | GET | Loyalty cards where user has activity |
 | `/api/registered/companies/:id/favorite` | PUT | Favorite/unfavorite company through the registered API surface |
 | `/api/registered/qr` | GET | UUID-based QR payload |
+| `/api/registered/lookup-code` | POST | Create short customer lookup code for cashier scan-free flows |
 | `/api/registered/history` | GET | Points activity and subscription archive |
 | `/api/registered/subscriptions/active` | GET | Active subscriptions |
 | `/api/registered/subscriptions/archive` | GET | Expired/canceled subscriptions |
+| `/api/registered/subscriptions/:uuid/activate` | POST | Legacy/dev direct activation path |
 | `/api/registered/payments/subscriptions/:uuid/checkout` | POST | Create YooKassa checkout for a subscription or paired bundle |
 | `/api/registered/payments/:uuid` | GET | Sync/read current user's payment status and activate paid subscription |
+
+## Hunt API surface
+
+All `/api/hunt/*` routes require a client-capable authenticated role. Economy writes are server-authoritative.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/hunt/overview` | GET | Player profile, missions, granted boxes, recent cards, recent posts and economy constants |
+| `/api/hunt/tutorial/complete` | POST | Mark the NH tutorial as completed |
+| `/api/hunt/feed` | GET | Published Hunt feed with current user's like state |
+| `/api/hunt/posts` | POST | Create a GPS/place-bound Hunt post, normalize place context and grant server-side rewards |
+| `/api/hunt/posts/:uuid/like` | POST | Like a post once and reward the author through the Influence ledger |
+| `/api/hunt/boxes/open` | POST | Open a granted box or buy a standard box with Influence and roll a Hunt Card |
 
 ## Payments API surface
 
@@ -176,13 +221,26 @@ All `/api/registered/*` routes require `CLIENT`.
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/api/public/company-media/:slug` | GET | Public logo, hero, gallery and special offers for shared company cards |
+| `/api/public/companies` | GET | Public company listing read model |
+| `/api/public/companies/:slug` | GET | Public company detail read model |
+| `/api/landing/contact` | POST | Public lead capture with spam/rate checks and Telegram delivery |
+| `/api/i18n/locale` | GET/POST | Read/update locale cookie and user preference when possible |
+| `/api/account/connections` | GET/DELETE | Read/remove linked external account connections |
+| `/api/telegram/webhook` | POST | Telegram bot webhook |
+| `/api/telegram/status` | GET | Telegram link status |
+| `/api/telegram/link-token` | POST | Create Telegram link token |
+| `/api/telegram/request-phone` | POST | Request phone sharing from Telegram |
+| `/api/max/webhook` | POST | Max bot webhook |
+| `/api/max/link-token` | POST | Create Max link token |
 
 ## Backend responsibilities
 
-- `AuthService`: registration, login, refresh, password change, freeze/reactivate, login events, email confirmation and reset-code cleanup.
+- `AuthService`: registration, login, Telegram/Max Mini App auth, refresh, password change, freeze/reactivate/block, login events, email confirmation and reset-code cleanup.
+- OAuth/VK ID services: provider discovery, start/callback, account linking/unlinking and one-time login-ticket exchange.
 - `AdminService`: users, companies, categories, locations, subscriptions, growth, audit, backups and analytics.
-- `RegisteredService`: DB-backed client app read models, profile preferences, favorites, promo/referral redemption, QR and subscription activation.
-- `CompanyService`: local staff roles, cashier operations, tier cashback, entitlements/redemptions, billing, media, revenue forecast and payout requests.
+- `RegisteredService`: DB-backed client app read models, recommendations, profile preferences, favorites, promo/referral redemption, QR, lookup codes and subscription activation.
+- `CompanyService`: local staff roles, cashier operations, lookup-code resolution, customer comments, tier cashback, entitlements/redemptions, billing, media/social links, revenue forecast and payout requests.
+- `HuntService`: server-side Nearloy Hunt player profile, place/post normalization, daily post limits, likes, Influence ledger, box opening, rarity rolls, Hunt Card minting and mission progress.
 - `PaymentsService`: YooKassa checkout creation/reuse, status sync, webhook handling, payment expiration and activation side effects.
 - `EmailService`: persisted email messages, Resend HTTP provider, SMTP routing/fallback and production-safe failure handling.
 - `CompanyAiService`: server-side OpenAI Responses API integration for company-only draft advice; sends a small safe context, supports protected AI gateway routing for local development, uses JSON schema output, and never exposes critical account/security mutations as tools.
@@ -194,8 +252,10 @@ All `/api/registered/*` routes require `CLIENT`.
 - Landing lead services: contact intake, duplicate/spam checks, Telegram delivery history and retries.
 - Company onboarding services: user-first company registration, identity verification modes, encrypted passport file lifecycle and admin review.
 - Telegram services: Bot API proxy support, direct-message admin linking and webhook command handling.
+- Max services: Max Mini App login/linking and bot webhook handling.
 - Admin task services: translate audit fires, verification reviews and finance approvals into deduplicated, permission-scoped resolution cards.
 - Company media services: store public assets/offers and expose read-only media payloads by slug.
+- Company social-link services: validate and publish controlled website/VK/Max/other links for public company surfaces.
 - Public marketing services/pages: keep business landing, giveaway, careers and shared marketing footer as public read-only surfaces with no private API exposure.
 - Mobile app landing: `/mobile-app` hosts generated app visuals and links to the Android APK in `public/downloads`.
 - Careers SEO services/pages: emit canonical metadata, OpenGraph/Twitter previews and JSON-LD `JobPosting` payloads from localized role definitions.

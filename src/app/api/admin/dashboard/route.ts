@@ -23,6 +23,25 @@ function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function fallbackReferralUser(referrerUserId: number) {
+  return {
+    id: referrerUserId,
+    uuid: `missing-user-${referrerUserId}`,
+    name: `Deleted PR user #${referrerUserId}`,
+    email: "deleted-pr-user@deleted.nearloy.local",
+    role: "MANAGER",
+  };
+}
+
+function fallbackReferralCompany(companyId: number) {
+  return {
+    id: companyId,
+    name: `Deleted company #${companyId}`,
+    slug: `missing-company-${companyId}`,
+    isActive: false,
+  };
+}
+
 function allowedSourcesFor(role: string, permissions: Array<{ scope: string; canView: boolean; canEdit: boolean; canApprove: boolean }>) {
   const effective = resolveEffectivePermissions(role, permissions);
   const can = new Map(effective.map((permission) => [permission.scope, permission.canView]));
@@ -224,7 +243,7 @@ export async function GET(request: NextRequest) {
       scope: seesAllReferrals ? "ALL" : "OWN",
       totals: {
         companies: referralRows.length,
-        activeCompanies: referralRows.filter((row) => row.status === "ACTIVE" && row.company.isActive).length,
+        activeCompanies: referralRows.filter((row) => row.status === "ACTIVE" && (row.company?.isActive ?? false)).length,
         recognizedGross: monthlyReport.totals.monthlyGross,
         futureGross: 0,
         whiteBoxNetCommission: Math.round(Math.max(0, monthlyReport.totals.monthlyGross - monthlyReport.totals.monthlyReferralCommission) * 100) / 100,
@@ -245,17 +264,19 @@ export async function GET(request: NextRequest) {
       pipeline,
       companies: referralRows.slice(0, 12).map((row) => {
         const revenue = revenueByCompany.get(row.companyId);
+        const referrer = row.referrer ?? fallbackReferralUser(row.referrerUserId);
+        const company = row.company ?? fallbackReferralCompany(row.companyId);
         return {
           uuid: row.uuid,
           companyId: row.companyId,
-          companyName: row.company.name,
-          companySlug: row.company.slug,
-          companyActive: row.company.isActive,
+          companyName: company.name,
+          companySlug: company.slug,
+          companyActive: company.isActive,
           status: row.status,
           pipelineStatus: row.pipelineStatus,
           referralPercent: Number(row.referralPercent),
           source: row.source,
-          referrer: row.referrer,
+          referrer,
           recognizedGross: revenue?.recognizedGross ?? 0,
           futureGross: revenue?.futureGross ?? 0,
           whiteBoxNetCommission: revenue?.whiteBoxCommission ?? 0,
