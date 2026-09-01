@@ -5,7 +5,7 @@
   storedAt: number | null;
 };
 
-const CACHE_PREFIX = "wb:twa-cache:";
+const CACHE_PREFIX = "wb:twa-cache:v7:";
 const CACHE_MARKER_COOKIE = "wb_twa_cache_touch";
 const DEFAULT_TTL_MS = 2 * 60 * 1000;
 const DEFAULT_STALE_MS = 15 * 60 * 1000;

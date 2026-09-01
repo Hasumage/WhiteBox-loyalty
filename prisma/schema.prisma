@@ -218,6 +218,7 @@ enum PermissionScope {
   DATABASE
   TELEGRAM
   PROMOTION
+  HUNT
   SETTINGS
 }
 
@@ -292,6 +293,103 @@ enum EmailVerificationStatus {
   PENDING
   CONSUMED
   EXPIRED
+}
+
+enum HuntPlaceSource {
+  USER_SUGGESTED
+  COMPANY
+  SYSTEM_SEEDED
+}
+
+enum HuntPostStatus {
+  PUBLISHED
+  HIDDEN
+  REMOVED
+}
+
+enum HuntModerationStatus {
+  CLEAR
+  FLAGGED
+  REVIEWING
+  ACTIONED
+}
+
+enum HuntReportReason {
+  SPAM
+  OFFENSIVE
+  FALSE_PLACE
+  DUPLICATE
+  PRIVATE_DATA
+  COPYRIGHT
+  OTHER
+}
+
+enum HuntReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum HuntReactionType {
+  LIKE
+}
+
+enum HuntCurrencyReason {
+  POST_CREATED
+  POST_LIKED
+  POST_TRENDING
+  BOX_OPENED
+  MISSION_REWARD
+  CARD_UPGRADE
+  MODERATION_REVERSAL
+  ADMIN_ADJUSTMENT
+}
+
+enum HuntCardUpgradeStatus {
+  PENDING_BONUS
+  COMPLETED
+}
+
+enum HuntBoxStatus {
+  GRANTED
+  OPENED
+  EXPIRED
+}
+
+enum HuntBoxType {
+  DAILY
+  POST
+  TRENDING
+  CATEGORY
+  DISTRICT
+  FOUNDER
+  PARTNER
+}
+
+enum HuntCardRarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+enum HuntElement {
+  FLAME
+  WATER
+  NATURE
+  WIND
+  MUSIC
+  LIGHT
+  SHADOW
+}
+
+enum HuntMissionKind {
+  DAILY
+  WEEKLY
+  SEASONAL
+  ONBOARDING
 }
 
 model User {
@@ -370,6 +468,17 @@ model User {
   deletedKycPhotos                       CompanyKycRecord[]              @relation("CompanyKycPhotoDeletedBy")
   sentEmailMessages                      EmailMessage[]                  @relation("EmailSender")
   targetEmailMessages                    EmailMessage[]                  @relation("EmailTargetUser")
+  huntProfile                            HuntPlayerProfile?
+  huntPlaces                             HuntPlace[]                     @relation("HuntPlaceCreator")
+  huntPosts                              HuntPost[]
+  huntPostReactions                      HuntPostReaction[]
+  huntPostReports                        HuntPostReport[]                @relation("HuntPostReporter")
+  moderatedHuntPostReports               HuntPostReport[]                @relation("HuntPostReportModerator")
+  huntCurrencyLedger                     HuntCurrencyLedger[]
+  huntBoxes                              HuntBox[]
+  huntCards                              HuntCard[]
+  huntCardUpgrades                       HuntCardUpgrade[]
+  huntMissionProgress                    HuntMissionProgress[]
 }
 
 model ProfileStatus {
@@ -445,6 +554,9 @@ model Category {
   subscriptions       Subscription[]
   subscriptionBundles SubscriptionBundle[]
   favoredByUsers      UserFavoriteCategory[]
+  huntPlaces          HuntPlace[]
+  huntPosts           HuntPost[]
+  huntCreatureSpecies HuntCreatureSpecies[]
 }
 
 model UserFavoriteCategory {
@@ -537,6 +649,8 @@ model Company {
   specialOffers                 CompanySpecialOffer[]
   socialLinks                   CompanySocialLink[]
   targetEmailMessages           EmailMessage[]                   @relation("EmailTargetCompany")
+  huntPlaces                    HuntPlace[]
+  huntPosts                     HuntPost[]
 
   @@index([categoryId])
   @@index([supportManagerId])
@@ -1398,30 +1512,30 @@ model OAuthAccount {
 }
 
 model OAuthState {
-  id           String    @id @default(cuid())
-  provider     String
-  stateHash    String    @unique
-  codeVerifier String    @db.Text
+  id            String    @id @default(cuid())
+  provider      String
+  stateHash     String    @unique
+  codeVerifier  String    @db.Text
   redirectAfter String?
   linkUserId    Int?
-  ipAddress    String?
-  userAgent    String?
-  expiresAt    DateTime
-  consumedAt   DateTime?
-  createdAt    DateTime  @default(now())
+  ipAddress     String?
+  userAgent     String?
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime  @default(now())
 
   @@index([provider, expiresAt])
 }
 
 model OAuthLoginTicket {
-  id          String    @id @default(cuid())
-  ticketHash  String    @unique
-  userId      Int
-  provider    String
+  id            String    @id @default(cuid())
+  ticketHash    String    @unique
+  userId        Int
+  provider      String
   redirectAfter String?
-  expiresAt   DateTime
-  consumedAt  DateTime?
-  createdAt   DateTime  @default(now())
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1668,4 +1782,306 @@ model TelegramMessageQueue {
   @@index([status, nextRetryAt])
   @@index([source, sourceId])
   @@index([recipientChatId, createdAt])
+}
+
+model HuntPlayerProfile {
+  id                  String    @id @default(cuid())
+  userId              Int       @unique
+  influenceBalance    Int       @default(0)
+  lifetimeInfluence   Int       @default(0)
+  xp                  Int       @default(0)
+  level               Int       @default(1)
+  postsCount          Int       @default(0)
+  likesReceivedCount  Int       @default(0)
+  boxesOpenedCount    Int       @default(0)
+  cardsOwnedCount     Int       @default(0)
+  tutorialCompletedAt DateTime?
+  lastDailyBoxAt      DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([level, xp])
+  @@index([lifetimeInfluence])
+}
+
+model HuntPlace {
+  id               String               @id @default(cuid())
+  uuid             String               @unique @default(uuid())
+  slug             String               @unique
+  name             String
+  description      String?
+  categoryId       Int?
+  companyId        Int?
+  createdById      Int?
+  source           HuntPlaceSource      @default(USER_SUGGESTED)
+  address          String?
+  city             String?
+  district         String?
+  latitude         Decimal?             @db.Decimal(10, 7)
+  longitude        Decimal?             @db.Decimal(10, 7)
+  geohash          String?
+  tags             String[]             @default([])
+  postCount        Int                  @default(0)
+  likeCount        Int                  @default(0)
+  wantedCount      Int                  @default(0)
+  isActive         Boolean              @default(true)
+  isClaimable      Boolean              @default(true)
+  moderationStatus HuntModerationStatus @default(CLEAR)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  category  Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  company   Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  createdBy User?      @relation("HuntPlaceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  posts     HuntPost[]
+
+  @@index([categoryId, isActive])
+  @@index([companyId])
+  @@index([createdById])
+  @@index([city, district])
+  @@index([geohash])
+  @@index([moderationStatus, createdAt])
+}
+
+model HuntPost {
+  id               String               @id @default(cuid())
+  uuid             String               @unique @default(uuid())
+  userId           Int
+  placeId          String
+  categoryId       Int?
+  companyId        Int?
+  caption          String               @db.Text
+  photoUrl         String?
+  mediaUrls        String[]             @default([])
+  tags             String[]             @default([])
+  rating           Int?
+  visitPriceBand   String?
+  moodTags         String[]             @default([])
+  latitude         Decimal?             @db.Decimal(10, 7)
+  longitude        Decimal?             @db.Decimal(10, 7)
+  locationAccuracy Int?
+  gpsConfidence    Int                  @default(0)
+  status           HuntPostStatus       @default(PUBLISHED)
+  moderationStatus HuntModerationStatus @default(CLEAR)
+  likeCount        Int                  @default(0)
+  score            Int                  @default(0)
+  influenceAwarded Int                  @default(0)
+  firstTrendingAt  DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  place     HuntPlace          @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  category  Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  company   Company?           @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  reactions HuntPostReaction[]
+  reports   HuntPostReport[]
+  boxes     HuntBox[]          @relation("HuntBoxSourcePost")
+
+  @@index([userId, createdAt])
+  @@index([placeId, createdAt])
+  @@index([categoryId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([status, moderationStatus, score, createdAt])
+  @@index([moderationStatus, updatedAt])
+}
+
+model HuntPostReaction {
+  id        String           @id @default(cuid())
+  postId    String
+  userId    Int
+  type      HuntReactionType @default(LIKE)
+  createdAt DateTime         @default(now())
+
+  post HuntPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId, type])
+  @@index([userId, createdAt])
+  @@index([postId, createdAt])
+}
+
+model HuntPostReport {
+  id          String               @id @default(cuid())
+  uuid        String               @unique @default(uuid())
+  postId      String
+  reporterId  Int
+  reason      HuntReportReason
+  details     String?              @db.Text
+  status      HuntReportStatus     @default(OPEN)
+  moderatorId Int?
+  resolvedAt  DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  post      HuntPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reporter  User     @relation("HuntPostReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  moderator User?    @relation("HuntPostReportModerator", fields: [moderatorId], references: [id], onDelete: SetNull)
+
+  @@unique([postId, reporterId])
+  @@index([postId, status])
+  @@index([reporterId, createdAt])
+  @@index([status, createdAt])
+  @@index([moderatorId])
+}
+
+model HuntCurrencyLedger {
+  id           String             @id @default(cuid())
+  uuid         String             @unique @default(uuid())
+  userId       Int
+  amount       Int
+  reason       HuntCurrencyReason
+  sourceType   String?
+  sourceId     String?
+  balanceAfter Int
+  metadata     Json?
+  createdAt    DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([reason, createdAt])
+  @@index([sourceType, sourceId])
+}
+
+model HuntCreatureSpecies {
+  id           String         @id @default(cuid())
+  slug         String         @unique
+  name         String
+  description  String         @db.Text
+  element      HuntElement
+  baseRarity   HuntCardRarity @default(COMMON)
+  categoryId   Int?
+  baseStats    Json
+  traitPool    Json
+  visualPrompt String         @db.Text
+  imageUrl     String?
+  isActive     Boolean        @default(true)
+  sortOrder    Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  category Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  cards    HuntCard[]
+
+  @@index([element, baseRarity, isActive])
+  @@index([categoryId])
+}
+
+model HuntBox {
+  id            String         @id @default(cuid())
+  uuid          String         @unique @default(uuid())
+  userId        Int
+  type          HuntBoxType
+  rarity        HuntCardRarity @default(COMMON)
+  status        HuntBoxStatus  @default(GRANTED)
+  influenceCost Int            @default(0)
+  sourcePostId  String?
+  rewardCardId  String?        @unique
+  expiresAt     DateTime?
+  openedAt      DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourcePost HuntPost? @relation("HuntBoxSourcePost", fields: [sourcePostId], references: [id], onDelete: SetNull)
+  rewardCard HuntCard? @relation("HuntBoxRewardCard", fields: [rewardCardId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, createdAt])
+  @@index([type, rarity])
+  @@index([sourcePostId])
+}
+
+model HuntCard {
+  id         String         @id @default(cuid())
+  uuid       String         @unique @default(uuid())
+  ownerId    Int
+  speciesId  String
+  rarity     HuntCardRarity
+  element    HuntElement
+  level      Int            @default(1)
+  xp         Int            @default(0)
+  stats      Json
+  trait      String
+  visualSeed String
+  isLocked   Boolean        @default(false)
+  sourceBox  HuntBox?       @relation("HuntBoxRewardCard")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  owner   User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  species HuntCreatureSpecies @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+  upgrades HuntCardUpgrade[]
+
+  @@index([ownerId, rarity, createdAt])
+  @@index([speciesId])
+  @@index([element, rarity])
+}
+
+model HuntCardUpgrade {
+  id             String                @id @default(cuid())
+  uuid           String                @unique @default(uuid())
+  userId         Int
+  cardId         String
+  levelFrom      Int
+  levelTo        Int
+  cost           Int
+  statsBefore    Json
+  baseDeltas     Json
+  statsAfterBase Json
+  bonusStat      String?
+  bonusDelta     Int?
+  statsAfterBonus Json?
+  status         HuntCardUpgradeStatus @default(PENDING_BONUS)
+  createdAt      DateTime              @default(now())
+  bonusAppliedAt DateTime?
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card HuntCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([cardId, createdAt])
+}
+
+model HuntMission {
+  id              String          @id @default(cuid())
+  slug            String          @unique
+  title           String
+  description     String          @db.Text
+  kind            HuntMissionKind
+  targetAction    String
+  targetCount     Int             @default(1)
+  rewardInfluence Int             @default(0)
+  rewardXp        Int             @default(0)
+  rewardBoxType   HuntBoxType?
+  isActive        Boolean         @default(true)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  progress HuntMissionProgress[]
+
+  @@index([kind, isActive])
+  @@index([startsAt, endsAt])
+}
+
+model HuntMissionProgress {
+  id          String    @id @default(cuid())
+  userId      Int
+  missionId   String
+  progress    Int       @default(0)
+  completedAt DateTime?
+  claimedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission HuntMission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, missionId])
+  @@index([userId, completedAt, claimedAt])
+  @@index([missionId])
 }

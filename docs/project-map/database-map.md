@@ -24,6 +24,7 @@ The visual map should track all Prisma models. Current schema models:
 - `CompanyBillingPromoRedemption`
 - `Payment`
 - `CompanyReferral`
+- `PrFunnelCompany`
 - `CompanyVerificationApplication`
 - `CompanyKycRecord`
 - `CompanyKycAccessLog`
@@ -39,6 +40,7 @@ The visual map should track all Prisma models. Current schema models:
 - `CompanyCategory`
 - `CompanyMediaAsset`
 - `CompanySpecialOffer`
+- `CompanySocialLink`
 - `CompanyLevelRule`
 - `CompanyMember`
 - `CompanyPurchase`
@@ -54,6 +56,8 @@ The visual map should track all Prisma models. Current schema models:
 - `ReferralInvite`
 - `RefreshToken`
 - `OAuthAccount`
+- `OAuthState`
+- `OAuthLoginTicket`
 - `LoginEvent`
 - `LoyaltyTransaction`
 - `EmailChangeRequest`
@@ -64,6 +68,16 @@ The visual map should track all Prisma models. Current schema models:
 - `LandingLead`
 - `NotificationDelivery`
 - `TelegramMessageQueue`
+- `HuntPlayerProfile`
+- `HuntPlace`
+- `HuntPost`
+- `HuntPostReaction`
+- `HuntCurrencyLedger`
+- `HuntCreatureSpecies`
+- `HuntBox`
+- `HuntCard`
+- `HuntMission`
+- `HuntMissionProgress`
 
 ## UX features
 
@@ -84,7 +98,9 @@ The visual map should track all Prisma models. Current schema models:
 - `Map + Branches`: company locations, categories and map-related context.
 - `Billing + Payments`: YooKassa payments, company billing account/invoices/promos, finance operations and payout provider metadata.
 - `Company Public Media`: company slug, logo/hero/gallery assets and special offers.
+- `PR Funnel`: acquisition pipeline, attributed companies, PR payouts and referral ownership.
 - `Operations`: admin tasks, system alerts, landing leads and notification queues.
+- `Nearloy Hunt`: Hunt profiles, places, posts, reactions, Influence ledger, boxes, species, cards, missions and progress.
 
 ## Maintenance rule
 

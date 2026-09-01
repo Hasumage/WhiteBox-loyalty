@@ -7,6 +7,7 @@ import { LandingLeadForm } from "@/components/landing/LandingLeadForm";
 import { MarketingAccountButton } from "@/components/landing/MarketingAccountButton";
 import { MarketingFooter } from "@/components/landing/MarketingFooter";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
+import { MarketingPageReveal } from "@/components/landing/MarketingPageReveal";
 import { OpenNearLoyDemo } from "@/components/landing/OpenNearLoyDemo";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
@@ -126,6 +127,7 @@ export default function HomePage() {
     <main className="min-h-screen overflow-hidden bg-[#02050a] text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(103,232,249,0.14),transparent_28%),radial-gradient(circle_at_85%_20%,rgba(255,255,255,0.08),transparent_24%),linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:auto,auto,80px_80px,80px_80px]" />
       <MarketingHeader active="users" />
+      <MarketingPageReveal>
 
       <section className="relative z-10 mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:px-8 lg:py-24">
         <div>
@@ -346,6 +348,7 @@ export default function HomePage() {
       </section>
 
       <MarketingFooter />
+      </MarketingPageReveal>
     </main>
   );
 }

@@ -50,6 +50,8 @@ function isCapacitorClientRoute(path: string) {
     path === "/map" ||
     path.startsWith("/map/") ||
     path === "/history" ||
+    path === "/hunt" ||
+    path.startsWith("/hunt/") ||
     path === "/scan" ||
     path === "/company" ||
     path.startsWith("/company/") ||
@@ -85,6 +87,10 @@ export async function middleware(request: NextRequest) {
   }
 
   if (path.startsWith("/help")) {
+    return responseWithLocale(request);
+  }
+
+  if (path === "/hunt/public") {
     return responseWithLocale(request);
   }
 
@@ -162,6 +168,8 @@ export const config = {
     "/company/register",
     "/map",
     "/history",
+    "/hunt",
+    "/hunt/:path*",
     "/settings/:path*",
     "/scan",
     "/categories/:path*",

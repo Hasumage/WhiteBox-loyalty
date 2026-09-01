@@ -91,6 +91,15 @@ const adminMenu: AdminMenuSection[] = [
     ],
   },
   {
+    groupKey: "admin.nav.hunt",
+    items: [
+      { href: "/admin/hunt", labelKey: "admin.nav.huntDashboard", icon: LayoutDashboard, scope: "HUNT" },
+      { href: "/admin/hunt/characters", labelKey: "admin.nav.huntCharacters", icon: Sparkles, scope: "HUNT" },
+      { href: "/admin/hunt/players", labelKey: "admin.nav.huntPlayers", icon: Users, scope: "HUNT" },
+      { href: "/admin/hunt/tournament", labelKey: "admin.nav.huntTournament", icon: Trophy, scope: "HUNT" },
+    ],
+  },
+  {
     groupKey: "admin.nav.usersPartners",
     items: [
       { href: "/admin/users", labelKey: "admin.nav.users", icon: Users, scope: "USERS" },

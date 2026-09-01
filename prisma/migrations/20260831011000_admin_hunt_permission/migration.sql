@@ -1,0 +1,1 @@
+ALTER TYPE "PermissionScope" ADD VALUE IF NOT EXISTS 'HUNT';

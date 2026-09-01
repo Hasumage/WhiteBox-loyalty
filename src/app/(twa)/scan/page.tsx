@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import QRCode from "qrcode";
-import { Clock3, Hash, QrCode, RefreshCw, ShieldCheck } from "lucide-react";
+import { Clock3, Hash, QrCode, RefreshCw } from "lucide-react";
 import { createTwaLookupCode, getTwaQr, type TwaLookupCode, type TwaQr } from "@/lib/api/twa-client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
@@ -81,12 +81,6 @@ export default function ScanPage() {
       </motion.header>
 
       <Card className="glass mx-auto w-full max-w-sm overflow-hidden border-white/10">
-        <CardHeader className="border-b border-white/10 bg-white/[0.03] pb-3">
-          <CardTitle className="flex items-center justify-center gap-2 text-base">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            {t("client.scan.yourQr")}
-          </CardTitle>
-        </CardHeader>
         <CardContent className="p-5">
           <div className="mx-auto flex aspect-square max-w-[240px] items-center justify-center rounded-2xl border border-white/10 bg-slate-50 p-3 shadow-lg shadow-black/20">
             {qr?.payload ? (

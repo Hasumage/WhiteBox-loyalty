@@ -2,7 +2,7 @@
 
 This document summarizes the recent product PRs and the current pending update that define the current NearLoy product state.
 
-## Current update — Admin AI, finance payouts, auth recovery and operations polish
+## Current update - Admin AI, finance payouts, auth recovery and operations polish
 
 - Admin AI assistant was added under `/admin/ai` with permission-scoped context modules for overview, companies, users, finance, payments, PR, tasks, audit, Telegram and verification.
 - Admin AI uses OpenAI when configured, can attach/paste images, keeps chat context client-side for the current page session, and may only propose/apply safe actions allowed by the admin's own permissions.
@@ -80,3 +80,12 @@ The project docs should now describe NearLoy as:
 - An operations platform with task Kanban, system health and permission-scoped alerts.
 - An email-delivery product that requires production-safe provider configuration.
 - A public marketing surface with business landing, giveaway, careers, legal terms and reusable header/footer components.
+
+## Current doc sync - 2026-08-28
+
+- Project map was reconciled against current route files, Nest controllers and Prisma models.
+- Docs now describe `/app` as the authenticated client dashboard and `/` as a public entry page.
+- Missing client/public surfaces were added: category pages, full map, payment success, mobile auth routes, `/mobile-map`, `/max` and `/requisites`.
+- Missing admin/company surfaces were added: user activity/security/relations pages, PR subpages, company offers and social links.
+- API docs now call out the mixed backend shape: Nest REST controllers plus local Next route handlers under `src/app/api`.
+- Entity/database docs now include `OAuthState`, `OAuthLoginTicket`, `PrFunnelCompany`, `CompanySocialLink` and `PermissionScope.PROMOTION`.

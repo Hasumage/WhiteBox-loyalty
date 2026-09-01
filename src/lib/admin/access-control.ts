@@ -9,6 +9,7 @@ export const ADMIN_PERMISSION_SCOPES = [
   "DATABASE",
   "TELEGRAM",
   "PROMOTION",
+  "HUNT",
   "SETTINGS",
 ] as const;
 
@@ -68,6 +69,12 @@ export const ADMIN_PERMISSION_ZONES = [
     title: "Продвижение",
     description: "Ручное усиление рекомендаций компаний и точечный вывод партнёров в топ выдачи.",
     scopes: ["PROMOTION"],
+  },
+  {
+    id: "hunt",
+    title: "Nearloy Hunt",
+    description: "Game branch: creatures, players, UGC moderation, economy and tournaments.",
+    scopes: ["HUNT"],
   },
   {
     id: "tech",
@@ -157,6 +164,12 @@ export const ADMIN_PERMISSION_META: Record<
     description: "Ручная настройка веса компаний в рекомендациях: процент эффективности и режим «рекомендовать всем».",
     risk: "high",
   },
+  HUNT: {
+    title: "Nearloy Hunt",
+    shortTitle: "Hunt",
+    description: "Dashboard, creature catalog, player analytics, tournaments and UGC moderation for Nearloy Hunt.",
+    risk: "medium",
+  },
   SETTINGS: {
     title: "Настройки доступа",
     shortTitle: "Settings",
@@ -188,6 +201,7 @@ export function defaultPermissionForRole(role: string, scope: AdminPermissionSco
     if (scope === "COMPANIES") return permission(scope, true, true, false);
     if (scope === "COMPANY_VERIFICATIONS") return permission(scope, true, true, true);
     if (scope === "PR") return permission(scope, false, false, false);
+    if (scope === "HUNT") return permission(scope, true, true, false);
     if (scope === "SUPPORT") return permission(scope, true, true, false);
     if (scope === "AUDIT" || scope === "TELEGRAM") return permission(scope, true, false, false);
     return permission(scope);
@@ -235,6 +249,7 @@ export function clampPermissionToRole(role: string, input: AdminPermissionLike):
     if (
       scope === "FINANCE" ||
       scope === "PROMOTION" ||
+      scope === "HUNT" ||
       scope === "SETTINGS" ||
       scope === "COMPANY_VERIFICATIONS" ||
       scope === "PR"

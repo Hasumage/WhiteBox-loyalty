@@ -9,6 +9,8 @@ Identity and access:
 - `User`
 - `RefreshToken`
 - `OAuthAccount`
+- `OAuthState`
+- `OAuthLoginTicket`
 - `LoginEvent`
 - `EmailChangeRequest`
 - `EmailMessage`
@@ -27,6 +29,7 @@ Catalog and partners:
 - `CompanyLocation`
 - `CompanyMediaAsset`
 - `CompanySpecialOffer`
+- `CompanySocialLink`
 - `CompanyLevelRule`
 - `CompanyMember`
 - `CompanyPurchase`
@@ -35,6 +38,7 @@ Catalog and partners:
 - `CompanyBillingPromoCode`
 - `CompanyBillingPromoRedemption`
 - `CompanyReferral`
+- `PrFunnelCompany`
 - `CompanyVerificationApplication`
 - `CompanyKycRecord`
 - `CompanyKycAccessLog`
@@ -53,6 +57,16 @@ Client state and ledger:
 
 - `UserFavoriteCategory`
 - `UserProfilePreference`
+- `HuntPlayerProfile`
+- `HuntPlace`
+- `HuntPost`
+- `HuntPostReaction`
+- `HuntCurrencyLedger`
+- `HuntCreatureSpecies`
+- `HuntBox`
+- `HuntCard`
+- `HuntMission`
+- `HuntMissionProgress`
 - `UserCompany`
 - `UserSubscription`
 - `LoyaltyTransaction`
@@ -73,6 +87,7 @@ Operations:
 
 ## Enum highlights
 
+- `ProfileStatusRarity`: `RARE | EPIC | LEGENDARY`
 - `UserRole`: `CLIENT | COMPANY | ADMIN | SUPER_ADMIN | MANAGER | SUPPORT`
 - `AccountStatus`: `ACTIVE | FROZEN_PENDING_DELETION | BLOCKED`
 - `CompanyMemberRole`: `OWNER | MANAGER | CASHIER`
@@ -92,7 +107,9 @@ Operations:
 - `AdminTaskSource`: `AUDIT | COMPANY_VERIFICATION | FINANCE`
 - `AdminTaskPriority`: `NORMAL | HIGH | CRITICAL`
 - `AdminTaskStatus`: `OPEN | IN_PROGRESS | RESOLVED | DISMISSED`
-- `PermissionScope`: `USERS | COMPANIES | COMPANY_VERIFICATIONS | PR | FINANCE | SUPPORT | AUDIT | DATABASE | TELEGRAM | SETTINGS`
+- `LandingLeadStatus`: `NEW | IN_PROGRESS | CLOSED | SPAM`
+- `NotificationDeliveryStatus`: `PENDING | SENT | FAILED`
+- `PermissionScope`: `USERS | COMPANIES | COMPANY_VERIFICATIONS | PR | FINANCE | SUPPORT | AUDIT | DATABASE | TELEGRAM | PROMOTION | SETTINGS`
 - `FinanceOperationType`: `PAYOUT_REQUEST | PAYOUT_APPROVAL | MANUAL_ADJUSTMENT | REFUND`
 - `FinanceOperationStatus`: `DRAFT | PENDING_APPROVAL | APPROVED | REJECTED | PAID | CANCELED`
 - `CompanyBillingStatus`: `TRIAL | ACTIVE | PAST_DUE | SUSPENDED`
@@ -101,6 +118,7 @@ Operations:
 - `CompanyEmploymentType`: `SELF_EMPLOYED | INDIVIDUAL_ENTREPRENEUR`
 - `IdentityVerificationMode`: `FULL | DEFERRED`
 - `PassportFileStatus`: `ACTIVE | DELETED | MISSING`
+- `CompanyKycAccessAction`: `UPSERT_FROM_VERIFICATION | REVEAL_DATA | VIEW_PHOTO | DELETE_PHOTO`
 - `CompanyReferralStatus`: `ACTIVE | PAUSED | ENDED`
 - `CompanyReferralPipelineStatus`: `LEAD | NEGOTIATION | TRIAL | CONNECTED | REVENUE_ACTIVE | LOST`
 - `SubscriptionBundleStatus`: `DRAFT | ACTIVE | ARCHIVED`
@@ -111,10 +129,21 @@ Operations:
 - `EmailMessageTargetType`: `USER | COMPANY | DIRECT`
 - `EmailVerificationPurpose`: `REGISTRATION | PASSWORD_RESET`
 - `EmailVerificationStatus`: `PENDING | CONSUMED | EXPIRED`
+- `CompanySocialLinkKind`: `WEBSITE | VK | MAX | OTHER`
+- `HuntPlaceSource`: `USER_SUGGESTED | COMPANY | SYSTEM_SEEDED`
+- `HuntPostStatus`: `PUBLISHED | HIDDEN | REMOVED`
+- `HuntModerationStatus`: `CLEAR | FLAGGED | REVIEWING | ACTIONED`
+- `HuntReactionType`: `LIKE`
+- `HuntCurrencyReason`: `POST_CREATED | POST_LIKED | POST_TRENDING | BOX_OPENED | MISSION_REWARD | CARD_UPGRADE | MODERATION_REVERSAL | ADMIN_ADJUSTMENT`
+- `HuntBoxStatus`: `GRANTED | OPENED | EXPIRED`
+- `HuntBoxType`: `DAILY | POST | TRENDING | CATEGORY | DISTRICT | FOUNDER | PARTNER`
+- `HuntCardRarity`: `COMMON | UNCOMMON | RARE | EPIC | LEGENDARY`
+- `HuntElement`: `FLAME | WATER | NATURE | WIND | MUSIC | LIGHT | SHADOW`
+- `HuntMissionKind`: `DAILY | WEEKLY | SEASONAL | ONBOARDING`
 
 ## Relationship map
 
-- `User 1:N RefreshToken`, `OAuthAccount`, `LoginEvent`, `LoyaltyTransaction`, `PromoCodeRedemption`.
+- `User 1:N RefreshToken`, `OAuthAccount`, `OAuthLoginTicket`, `LoginEvent`, `LoyaltyTransaction`, `PromoCodeRedemption`.
 - `User 1:1 UserProfilePreference`.
 - `User N:M Category` through `UserFavoriteCategory`.
 - `User N:M Company` through `UserCompany`.
@@ -126,12 +155,16 @@ Operations:
 - `User 1:N AuditEvent` as actor and as target.
 - `User 1:N AdminTask` as assignee and as resolver.
 - `User 1:N EmailMessage` as sender/target.
+- `User 1:1 HuntPlayerProfile`; `User 1:N HuntPost`, `HuntPostReaction`, `HuntCurrencyLedger`, `HuntBox`, `HuntCard` and `HuntMissionProgress`.
 - `Category 1:N Company` as primary category.
 - `Company N:M Category` through `CompanyCategory`.
 - `Company 1:N CompanyLocation`, `CompanyLevelRule`, `Subscription`, `LoyaltyTransaction`.
 - `Company 1:N CompanyMember`, `CompanyPurchase`, `SubscriptionRedemption`.
-- `Company 1:1 CompanyBillingAccount`; `Company 1:N CompanyBillingInvoice`, `Payment`, `CompanyMediaAsset`, `CompanySpecialOffer`.
+- `Company 1:1 CompanyBillingAccount`; `Company 1:N CompanyBillingInvoice`, `Payment`, `CompanyMediaAsset`, `CompanySpecialOffer`, `CompanySocialLink`.
 - `Company 1:1 CompanyReferral`; referral owner is a `User`.
+- `Company 1:N PrFunnelCompany` as attributed/acquisition funnel records.
+- `Company 1:N HuntPlace` and `HuntPost` when a game place/post is later connected to a real company.
+- `Category 1:N HuntPlace`, `HuntPost` and `HuntCreatureSpecies`.
 - `Company 1:1 CompanyKycRecord`; KYC access/deletion is audited through `CompanyKycAccessLog`.
 - `Subscription 1:N SubscriptionEntitlement`.
 - `UserSubscription 1:N SubscriptionRedemption`.
@@ -181,6 +214,7 @@ Company public cards use:
 - `Company.slug` as the stable public URL key.
 - `CompanyMediaAsset` for logo, hero and gallery images.
 - `CompanySpecialOffer` for public offers/promos shown on the company card.
+- `CompanySocialLink` for public website/VK/Max/other links.
 
 The current runtime storage layer is suitable for demo/dev. Production media should move to persistent Railway volume or object storage before heavy use.
 
@@ -191,6 +225,25 @@ Operational Telegram delivery is routed to one shared admin chat:
 - `TELEGRAM_ADMIN_CHAT_ID` stores the readable admin chat id. The app normalizes supergroup ids to the Bot API form (`-100...`) before sending.
 - Landing leads, company verification requests and payout requests are sent to the shared admin chat instead of personal admin accounts.
 - `User.telegramId` still stores linked private Telegram chats for personal flows such as account notifications, phone confirmation and client app entry.
+
+## External account links
+
+- `OAuthAccount` stores linked OAuth providers such as VK ID.
+- `OAuthState` protects browser OAuth handoffs with hashed state and PKCE verifier data.
+- `OAuthLoginTicket` stores short-lived one-time tickets that exchange OAuth callback success into a normal NearLoy session.
+- `User.telegramId` and `User.maxId` store messenger-specific identities for Telegram and Max Mini App login/linking.
+
+## Nearloy Hunt
+
+- `HuntPlayerProfile` stores player-level progress and cached counters.
+- `HuntPlace` stores user-suggested, company-backed or seeded places. It can exist before a company joins Nearloy.
+- `HuntPost` stores GPS/place-bound user content with moderation status, tags, score and cached like count.
+- `HuntPostReaction` enforces one Nearloy-like per user/post/type.
+- `HuntCurrencyLedger` is the source of truth for Influence changes and balance-after auditability.
+- `HuntCreatureSpecies` defines collectible creature families, base stats, traits and visual prompt hints.
+- `HuntBox` stores granted/opened boxes and their source post/reward card relationship.
+- `HuntCard` stores the actual user's collectible card, rolled rarity, element, stats, trait and visual seed.
+- `HuntMission` and `HuntMissionProgress` support onboarding, daily, weekly and seasonal tasks.
 
 ## Location model
 

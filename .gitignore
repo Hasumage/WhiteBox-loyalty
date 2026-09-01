@@ -34,8 +34,14 @@ yarn-error.log*
 tmp_api_*.log
 tmp-*.log
 backups/
+storage/
 storage/private/
 storage/public/
+apps/api/storage/
+public/hunt/
+public/hunt-assets/**/*.before-regenerate.webp
+public/hunt-assets/**/*.before-reframe.webp
+public/hunt-assets/**/*.original.webp
 .tmp/
 /tmp/
 /output/

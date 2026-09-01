@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Filter,
   Gift,
+  MapPin,
   Megaphone,
   RefreshCw,
   Search,
@@ -24,6 +25,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import {
   adminCreatePromoCode,
+  adminGetHuntGrowthPlaces,
   adminGetCompanyUser,
   adminGetReferralCampaign,
   adminListCompanyUsers,
@@ -32,6 +34,7 @@ import {
   adminUpdateReferralCampaign,
   type AdminCompanySubscription,
   type AdminCompanyUser,
+  type AdminHuntGrowthPlace,
   type AdminPromoCode,
   type AdminReferralCampaign,
 } from "@/lib/api/admin-client";
@@ -58,6 +61,7 @@ type PromoTypeFilter = "ALL" | "POINTS" | "SUBSCRIPTION";
 type PromoExpiryFilter = "ALL" | "NO_EXPIRY" | "EXPIRING_7" | "EXPIRED";
 type PromoSortBy = "createdAt" | "code" | "title" | "status" | "type" | "company" | "redemptions" | "maxRedemptions" | "expiresAt" | "points";
 type SortDir = "asc" | "desc";
+type HuntLeadFilter = "ALL" | "priority_outreach" | "warm_lead" | "watch" | "already_claimed";
 
 const emptyPromoForm: PromoForm = {
   code: "WELCOME500",
@@ -112,6 +116,24 @@ function renewalUnitLabel(unit: string, t: ReturnType<typeof useI18n>["t"]) {
   if (normalized === "month") return t("admin.growth.periodMonth");
   if (normalized === "year") return t("admin.growth.periodYear");
   return unit;
+}
+
+function huntLeadLabel(hint: AdminHuntGrowthPlace["acquisitionHint"]) {
+  if (hint === "priority_outreach") return "Priority";
+  if (hint === "warm_lead") return "Warm";
+  if (hint === "already_claimed") return "Claimed";
+  return "Watch";
+}
+
+function huntLeadBadgeVariant(hint: AdminHuntGrowthPlace["acquisitionHint"]) {
+  if (hint === "priority_outreach") return "default" as const;
+  if (hint === "already_claimed") return "secondary" as const;
+  return "outline" as const;
+}
+
+function formatHuntDate(date: string | null, locale: Locale) {
+  if (!date) return "No posts";
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(date));
 }
 
 function CompanySearchSelect({
@@ -184,6 +206,7 @@ export default function AdminGrowthPage() {
   const { locale, t } = useI18n("ru");
   const [promoCodes, setPromoCodes] = useState<AdminPromoCode[]>([]);
   const [campaign, setCampaign] = useState<AdminReferralCampaign | null>(null);
+  const [huntPlaces, setHuntPlaces] = useState<AdminHuntGrowthPlace[]>([]);
   const [form, setForm] = useState<PromoForm>(emptyPromoForm);
   const [promoCompanyQuery, setPromoCompanyQuery] = useState("");
   const [subscriptionCompanyQuery, setSubscriptionCompanyQuery] = useState("");
@@ -200,6 +223,7 @@ export default function AdminGrowthPage() {
   const [inventoryExpiry, setInventoryExpiry] = useState<PromoExpiryFilter>("ALL");
   const [inventorySortBy, setInventorySortBy] = useState<PromoSortBy>("createdAt");
   const [inventorySortDir, setInventorySortDir] = useState<SortDir>("desc");
+  const [huntLeadFilter, setHuntLeadFilter] = useState<HuntLeadFilter>("ALL");
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -210,9 +234,10 @@ export default function AdminGrowthPage() {
 
   async function load() {
     setLoading(true);
-    const [codes, referral] = await Promise.all([adminListPromoCodes(), adminGetReferralCampaign()]);
+    const [codes, referral, huntLeads] = await Promise.all([adminListPromoCodes(), adminGetReferralCampaign(), adminGetHuntGrowthPlaces()]);
     setPromoCodes(codes);
     setCampaign(referral);
+    setHuntPlaces(huntLeads);
     if (referral) {
       setCampaignDraft({
         title: referral.title,
@@ -249,6 +274,21 @@ export default function AdminGrowthPage() {
     const redemptions = promoCodes.reduce((sum, code) => sum + code.redemptionCount, 0);
     return { active, redemptions };
   }, [promoCodes]);
+
+  const huntStats = useMemo(() => {
+    return {
+      priority: huntPlaces.filter((place) => place.acquisitionHint === "priority_outreach").length,
+      warm: huntPlaces.filter((place) => place.acquisitionHint === "warm_lead").length,
+      posts: huntPlaces.reduce((sum, place) => sum + place.postCount, 0),
+      likes: huntPlaces.reduce((sum, place) => sum + place.likeCount, 0),
+    };
+  }, [huntPlaces]);
+
+  const filteredHuntPlaces = useMemo(() => {
+    return huntPlaces
+      .filter((place) => huntLeadFilter === "ALL" || place.acquisitionHint === huntLeadFilter)
+      .sort((a, b) => b.demandScore - a.demandScore);
+  }, [huntLeadFilter, huntPlaces]);
 
   const inventoryCompanies = useMemo(() => {
     return Array.from(new Set(promoCodes.map((code) => promoCompanyLabel(code, t)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
@@ -461,6 +501,68 @@ export default function AdminGrowthPage() {
         <Card className="glass border-white/10"><CardContent className="flex items-center gap-3 p-4"><div className="rounded-2xl bg-emerald-500/15 p-3 text-emerald-300"><BadgePercent className="h-5 w-5" /></div><div><p className="text-xs text-muted-foreground">{t("admin.growth.totalRedemptions")}</p><p className="text-2xl font-bold">{promoStats.redemptions}</p></div></CardContent></Card>
         <Card className="glass border-white/10"><CardContent className="flex items-center gap-3 p-4"><div className="rounded-2xl bg-sky-500/15 p-3 text-sky-300"><UsersRound className="h-5 w-5" /></div><div><p className="text-xs text-muted-foreground">{t("admin.growth.referralRewarded")}</p><p className="text-2xl font-bold">{campaign?.stats.rewardedInvites ?? 0}</p></div></CardContent></Card>
       </div>
+
+      <Card className="glass border-white/10">
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <MapPin className="h-4 w-4 text-primary" /> Nearloy Hunt demand
+              </CardTitle>
+              <CardDescription>
+                Organic places created by players before company onboarding.
+              </CardDescription>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+              <Badge variant="secondary">{huntStats.priority} priority</Badge>
+              <Badge variant="secondary">{huntStats.warm} warm</Badge>
+              <Badge variant="secondary">{huntStats.posts} posts</Badge>
+              <Badge variant="secondary">{huntStats.likes} likes</Badge>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["ALL", "priority_outreach", "warm_lead", "watch", "already_claimed"] as HuntLeadFilter[]).map((filter) => (
+              <Button
+                key={filter}
+                type="button"
+                variant={huntLeadFilter === filter ? "default" : "secondary"}
+                className={huntLeadFilter === filter ? "" : "glass border-white/10"}
+                onClick={() => setHuntLeadFilter(filter)}
+              >
+                {filter === "ALL" ? "All" : huntLeadLabel(filter)}
+              </Button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {filteredHuntPlaces.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-muted/10 p-6 text-center text-sm text-muted-foreground">
+              No Hunt demand signals for this filter yet.
+            </div>
+          )}
+          {filteredHuntPlaces.slice(0, 12).map((place) => (
+            <div key={place.uuid} className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-muted/10 p-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold">{place.name}</p>
+                  <Badge variant={huntLeadBadgeVariant(place.acquisitionHint)}>{huntLeadLabel(place.acquisitionHint)}</Badge>
+                  {place.company && <Badge variant="secondary">{place.company.name}</Badge>}
+                  {place.category && <Badge variant="outline">{place.category.name}</Badge>}
+                </div>
+                <p className="mt-1 truncate text-sm text-muted-foreground">
+                  {[place.address, place.district, place.city].filter(Boolean).join(" · ") || "No address"} · last post {formatHuntDate(place.lastPostAt, locale)}
+                </p>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs lg:w-[360px]">
+                <div className="rounded-xl bg-background/45 px-2 py-2"><p className="text-muted-foreground">Score</p><p className="font-semibold">{place.demandScore}</p></div>
+                <div className="rounded-xl bg-background/45 px-2 py-2"><p className="text-muted-foreground">Posts</p><p className="font-semibold">{place.postCount}</p></div>
+                <div className="rounded-xl bg-background/45 px-2 py-2"><p className="text-muted-foreground">Likes</p><p className="font-semibold">{place.likeCount}</p></div>
+                <div className="rounded-xl bg-background/45 px-2 py-2"><p className="text-muted-foreground">Users</p><p className="font-semibold">{place.uniqueAuthors + place.uniqueReactors}</p></div>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="glass border-white/10">
