@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import {
   HuntBoxStatus,
   HuntBoxType,
+  HuntBoxRewardKind,
   HuntCardUpgradeStatus,
   HuntCardRarity,
   HuntCurrencyReason,
@@ -29,11 +30,179 @@ import { UploadHuntMediaDto } from "./dto/upload-hunt-media.dto";
 const POST_CREATE_REWARD = 35;
 const LIKE_AUTHOR_REWARD = 8;
 const POST_BOX_COST = 120;
-const SHOP_BOXES: Partial<Record<HuntBoxType, { cost: number; rarity: HuntCardRarity }>> = {
-  [HuntBoxType.POST]: { cost: 120, rarity: HuntCardRarity.COMMON },
-  [HuntBoxType.CATEGORY]: { cost: 300, rarity: HuntCardRarity.UNCOMMON },
-  [HuntBoxType.TRENDING]: { cost: 650, rarity: HuntCardRarity.RARE },
-  [HuntBoxType.DISTRICT]: { cost: 900, rarity: HuntCardRarity.EPIC },
+const DEFAULT_BOX_CONFIGS: Record<string, {
+  slug: string;
+  type: HuntBoxType;
+  title: string;
+  description: string;
+  imageUrl: string;
+  cost: number;
+  minRarity: HuntCardRarity;
+  maxRarity: HuntCardRarity | null;
+  itemCountMin: number;
+  itemCountMax: number;
+  dailyLimit: number | null;
+  statusDropChanceBp: number;
+  guaranteedRarity?: HuntCardRarity | null;
+  guaranteedCount?: number;
+  rotationGroup?: string | null;
+  rotationIndex?: number | null;
+  rotationElement?: HuntElement | null;
+  rotationStartsAt?: Date | null;
+  isActive: boolean;
+  isPurchasable: boolean;
+  sortOrder: number;
+  rarityWeights: Partial<Record<HuntCardRarity, number>>;
+}> = {
+  [HuntBoxType.PROMO]: {
+    slug: "promo-daily",
+    type: HuntBoxType.PROMO,
+    title: "Промо-бокс",
+    description: "Один бесплатный бокс в сутки. Дроп не выше эпической редкости.",
+    imageUrl: "/hunt-assets/shop/promo-box.png",
+    cost: 0,
+    minRarity: HuntCardRarity.COMMON,
+    maxRarity: HuntCardRarity.EPIC,
+    itemCountMin: 1,
+    itemCountMax: 2,
+    dailyLimit: 1,
+    statusDropChanceBp: 550,
+    isActive: true,
+    isPurchasable: true,
+    sortOrder: 5,
+    rarityWeights: {
+      [HuntCardRarity.COMMON]: 5200,
+      [HuntCardRarity.UNCOMMON]: 3000,
+      [HuntCardRarity.RARE]: 1400,
+      [HuntCardRarity.EPIC]: 400,
+      [HuntCardRarity.LEGENDARY]: 0,
+    },
+  },
+  [HuntBoxType.POST]: {
+    slug: "city-box",
+    type: HuntBoxType.POST,
+    title: "Районная коробка",
+    description: "Базовая коробка Nearloy для обычных постов о местах и районных находок.",
+    imageUrl: "/hunt-assets/shop/district-box-v2.png",
+    cost: 120,
+    minRarity: HuntCardRarity.COMMON,
+    maxRarity: null,
+    itemCountMin: 1,
+    itemCountMax: 1,
+    dailyLimit: null,
+    statusDropChanceBp: 250,
+    isActive: true,
+    isPurchasable: true,
+    sortOrder: 10,
+    rarityWeights: {
+      [HuntCardRarity.COMMON]: 5600,
+      [HuntCardRarity.UNCOMMON]: 2700,
+      [HuntCardRarity.RARE]: 1250,
+      [HuntCardRarity.EPIC]: 380,
+      [HuntCardRarity.LEGENDARY]: 10,
+    },
+  },
+  [HuntBoxType.CATEGORY]: {
+    slug: "rare-box",
+    type: HuntBoxType.CATEGORY,
+    title: "Редкая коробка",
+    description: "Коробка с повышенным шансом редких и эпических персонажей.",
+    imageUrl: "/hunt-assets/shop/rare-card-crate.webp",
+    cost: 300,
+    minRarity: HuntCardRarity.UNCOMMON,
+    maxRarity: null,
+    itemCountMin: 1,
+    itemCountMax: 2,
+    dailyLimit: null,
+    statusDropChanceBp: 420,
+    isActive: true,
+    isPurchasable: true,
+    sortOrder: 20,
+    rarityWeights: {
+      [HuntCardRarity.COMMON]: 1800,
+      [HuntCardRarity.UNCOMMON]: 4200,
+      [HuntCardRarity.RARE]: 2700,
+      [HuntCardRarity.EPIC]: 1200,
+      [HuntCardRarity.LEGENDARY]: 20,
+    },
+  },
+  [HuntBoxType.TRENDING]: {
+    slug: "resource-chest",
+    type: HuntBoxType.TRENDING,
+    title: "Городская коробка",
+    description: "Городская коробка для развития коллекции: обычные, необычные и редкие персонажи с шансом на эпик.",
+    imageUrl: "/hunt-assets/shop/city-box-v2.png",
+    cost: 650,
+    minRarity: HuntCardRarity.COMMON,
+    maxRarity: null,
+    itemCountMin: 2,
+    itemCountMax: 3,
+    dailyLimit: null,
+    statusDropChanceBp: 650,
+    isActive: true,
+    isPurchasable: true,
+    sortOrder: 30,
+    rarityWeights: {
+      [HuntCardRarity.COMMON]: 1800,
+      [HuntCardRarity.UNCOMMON]: 3200,
+      [HuntCardRarity.RARE]: 3300,
+      [HuntCardRarity.EPIC]: 1600,
+      [HuntCardRarity.LEGENDARY]: 25,
+    },
+  },
+  [HuntBoxType.DISTRICT]: {
+    slug: "weekly-gold",
+    type: HuntBoxType.DISTRICT,
+    title: "Редкий дроп недели",
+    description: "Премиальный сундук с высоким шансом эпических и легендарных персонажей.",
+    imageUrl: "/hunt-assets/shop/weekly-gold-chest.webp",
+    cost: 1000,
+    minRarity: HuntCardRarity.COMMON,
+    maxRarity: null,
+    itemCountMin: 3,
+    itemCountMax: 5,
+    dailyLimit: null,
+    statusDropChanceBp: 900,
+    guaranteedRarity: HuntCardRarity.EPIC,
+    guaranteedCount: 1,
+    isActive: true,
+    isPurchasable: true,
+    sortOrder: 40,
+    rarityWeights: {
+      [HuntCardRarity.COMMON]: 2400,
+      [HuntCardRarity.UNCOMMON]: 3100,
+      [HuntCardRarity.RARE]: 2200,
+      [HuntCardRarity.EPIC]: 650,
+      [HuntCardRarity.LEGENDARY]: 10,
+    },
+  },
+  [HuntBoxType.ELEMENTAL]: {
+    slug: "elemental-weekly",
+    type: HuntBoxType.ELEMENTAL,
+    title: "Стихийный дроп недели",
+    description: "Недельная стихийная коробка. Выпадают только персонажи текущей стихии, не выше эпической редкости.",
+    imageUrl: "/hunt-assets/shop/elemental-nature-box-v2.png",
+    cost: 420,
+    minRarity: HuntCardRarity.COMMON,
+    maxRarity: HuntCardRarity.EPIC,
+    itemCountMin: 2,
+    itemCountMax: 3,
+    dailyLimit: null,
+    statusDropChanceBp: 400,
+    rotationGroup: "elemental-weekly",
+    rotationIndex: 0,
+    rotationElement: HuntElement.FLAME,
+    isActive: true,
+    isPurchasable: true,
+    sortOrder: 50,
+    rarityWeights: {
+      [HuntCardRarity.COMMON]: 3600,
+      [HuntCardRarity.UNCOMMON]: 3300,
+      [HuntCardRarity.RARE]: 2300,
+      [HuntCardRarity.EPIC]: 800,
+      [HuntCardRarity.LEGENDARY]: 0,
+    },
+  },
 };
 const DAILY_POST_LIMIT = 8;
 const DAILY_POST_REWARD_CAP = 175;
@@ -42,6 +211,16 @@ const TAG_LIMIT = 8;
 const MEDIA_LIMIT = 3;
 const MOOD_TAG_LIMIT = 5;
 const MAX_CARD_LEVEL = 30;
+const ELEMENTAL_ROTATION_GROUP = "elemental-weekly";
+const ELEMENTAL_ROTATION_ANCHOR_UTC = Date.UTC(2026, 8, 7, 8, 0, 0, 0);
+const ELEMENTAL_ROTATION_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const ELEMENTAL_ROTATION_ELEMENTS: HuntElement[] = [
+  HuntElement.FLAME,
+  HuntElement.WATER,
+  HuntElement.NATURE,
+  HuntElement.WIND,
+  HuntElement.MUSIC,
+];
 const HUNT_MEDIA_MAX_BYTES = 6 * 1024 * 1024;
 const HUNT_MEDIA_DIR = process.env.HUNT_MEDIA_DIR ?? join(process.cwd(), "storage", "hunt-media");
 const ALLOWED_MEDIA_TYPES = new Map([
@@ -433,6 +612,243 @@ export class HuntService {
     return this.rarityAtLeast(rolled, boxRarity) ? rolled : boxRarity;
   }
 
+  private capRarity(rarity: HuntCardRarity, maxRarity: HuntCardRarity) {
+    return RARITY_ORDER.indexOf(rarity) > RARITY_ORDER.indexOf(maxRarity) ? maxRarity : rarity;
+  }
+
+  private rarityBounds(rarity: HuntCardRarity, minRarity: HuntCardRarity, maxRarity?: HuntCardRarity | null) {
+    let next = this.rarityAtLeast(rarity, minRarity) ? rarity : minRarity;
+    if (maxRarity) next = this.capRarity(next, maxRarity);
+    return next;
+  }
+
+  private weightedPick<T extends { weight: number }>(items: T[]) {
+    const enabled = items.filter((item) => item.weight > 0);
+    const total = enabled.reduce((sum, item) => sum + item.weight, 0);
+    if (total <= 0) return null;
+    let roll = randomInt(0, total);
+    for (const item of enabled) {
+      roll -= item.weight;
+      if (roll < 0) return item;
+    }
+    return enabled[enabled.length - 1] ?? null;
+  }
+
+  private defaultBoxConfig(type: HuntBoxType) {
+    return DEFAULT_BOX_CONFIGS[type] ?? DEFAULT_BOX_CONFIGS[HuntBoxType.POST];
+  }
+
+  private elementalRotation(now = new Date()) {
+    const elapsedWeeks = Math.floor((now.getTime() - ELEMENTAL_ROTATION_ANCHOR_UTC) / ELEMENTAL_ROTATION_WEEK_MS);
+    const rotationIndex = ((elapsedWeeks % ELEMENTAL_ROTATION_ELEMENTS.length) + ELEMENTAL_ROTATION_ELEMENTS.length) % ELEMENTAL_ROTATION_ELEMENTS.length;
+    return {
+      group: ELEMENTAL_ROTATION_GROUP,
+      index: rotationIndex,
+      element: ELEMENTAL_ROTATION_ELEMENTS[rotationIndex],
+      startedAt: new Date(ELEMENTAL_ROTATION_ANCHOR_UTC + elapsedWeeks * ELEMENTAL_ROTATION_WEEK_MS),
+      nextAt: new Date(ELEMENTAL_ROTATION_ANCHOR_UTC + (elapsedWeeks + 1) * ELEMENTAL_ROTATION_WEEK_MS),
+    };
+  }
+
+  private isCurrentRotatingBox(config: { rotationGroup?: string | null; rotationIndex?: number | null }) {
+    if (!config.rotationGroup) return true;
+    if (config.rotationGroup !== ELEMENTAL_ROTATION_GROUP) return true;
+    return config.rotationIndex === this.elementalRotation().index;
+  }
+
+  private chanceAtLeastOncePerBox(perItemChance: number, itemCountMin: number, itemCountMax: number, guaranteedSlots = 0) {
+    const min = Math.max(1, itemCountMin);
+    const max = Math.max(min, itemCountMax);
+    let totalChance = 0;
+    let variants = 0;
+    for (let count = min; count <= max; count += 1) {
+      const rolledSlots = Math.max(0, count - guaranteedSlots);
+      totalChance += rolledSlots > 0 ? 1 - (1 - perItemChance) ** rolledSlots : 0;
+      variants += 1;
+    }
+    return variants > 0 ? totalChance / variants : 0;
+  }
+
+  private async getBoxConfig(tx: Prisma.TransactionClient, type: HuntBoxType, configId?: string | null) {
+    if (!configId && type === HuntBoxType.ELEMENTAL) {
+      const rotation = this.elementalRotation();
+      const config = await tx.huntBoxConfig.findFirst({
+        where: {
+          type,
+          rotationGroup: rotation.group,
+          rotationIndex: rotation.index,
+          isActive: true,
+        },
+        include: {
+          rarityChances: { where: { isEnabled: true } },
+          speciesRules: { where: { isEnabled: true }, include: { species: true } },
+          statusChances: { where: { isEnabled: true }, include: { status: true } },
+        },
+      });
+      if (config) return config;
+    }
+
+    const config = await tx.huntBoxConfig.findFirst({
+      where: configId ? { id: configId } : { type, isActive: true },
+      include: {
+        rarityChances: { where: { isEnabled: true } },
+        speciesRules: { where: { isEnabled: true }, include: { species: true } },
+        statusChances: { where: { isEnabled: true }, include: { status: true } },
+      },
+      orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
+    });
+    if (config) return config;
+    return null;
+  }
+
+  private boxConfigPayload(config: Awaited<ReturnType<HuntService["getBoxConfig"]>> | null, type: HuntBoxType) {
+    const fallback = this.defaultBoxConfig(type);
+    const source = config ?? fallback;
+    const rarityWeights = config
+      ? Object.fromEntries(config.rarityChances.map((chance) => [chance.rarity, chance.weight]))
+      : fallback.rarityWeights;
+    const total = Object.values(rarityWeights).reduce((sum, weight) => sum + Number(weight ?? 0), 0);
+    const rotation = source.rotationGroup === ELEMENTAL_ROTATION_GROUP ? this.elementalRotation() : null;
+    const guaranteedRarity = source.guaranteedRarity ?? null;
+    const guaranteedCount = source.guaranteedCount ?? 0;
+    const chances = RARITY_ORDER.map((rarity) => {
+      const weight = Number(rarityWeights[rarity] ?? 0);
+      const perItemChance = total > 0 ? weight / total : 0;
+      const boxChance = guaranteedRarity === rarity && guaranteedCount > 0
+        ? 1
+        : this.chanceAtLeastOncePerBox(perItemChance, source.itemCountMin, source.itemCountMax, guaranteedCount);
+      return {
+        rarity,
+        weight,
+        chance: Math.round(boxChance * 10000) / 100,
+        enabled: weight > 0,
+      };
+    });
+    return {
+      uuid: "id" in source ? source.id : source.slug,
+      slug: source.slug,
+      type: source.type,
+      title: source.title,
+      description: source.description,
+      imageUrl: source.imageUrl,
+      cost: source.cost,
+      minRarity: source.minRarity,
+      maxRarity: source.maxRarity,
+      itemCountMin: source.itemCountMin,
+      itemCountMax: source.itemCountMax,
+      dailyLimit: source.dailyLimit,
+      statusDropChance: Math.round((source.statusDropChanceBp / 100) * 100) / 100,
+      guaranteedRarity,
+      guaranteedCount,
+      rotationGroup: source.rotationGroup ?? null,
+      rotationIndex: source.rotationIndex ?? null,
+      rotationElement: source.rotationElement ?? null,
+      isCurrentRotation: rotation ? source.rotationIndex === rotation.index : true,
+      rotationEndsAt: rotation?.nextAt.toISOString() ?? null,
+      isActive: source.isActive,
+      isPurchasable: source.isPurchasable,
+      sortOrder: source.sortOrder,
+      rarityChances: chances,
+    };
+  }
+
+  private rollRarityFromConfig(
+    config: Awaited<ReturnType<HuntService["getBoxConfig"]>> | null,
+    type: HuntBoxType,
+    fallbackRarity: HuntCardRarity,
+  ) {
+    const fallback = this.defaultBoxConfig(type);
+    const rows = config?.rarityChances.length
+      ? config.rarityChances.map((chance) => ({ rarity: chance.rarity, weight: chance.weight }))
+      : Object.entries(fallback.rarityWeights).map(([rarity, weight]) => ({ rarity: rarity as HuntCardRarity, weight: Number(weight ?? 0) }));
+    const picked = this.weightedPick(rows);
+    const raw = picked?.rarity ?? this.rollRarity(fallbackRarity);
+    const minRarity = config?.minRarity ?? fallback.minRarity;
+    const maxRarity = config?.maxRarity ?? fallback.maxRarity;
+    return this.rarityBounds(raw, minRarity, maxRarity);
+  }
+
+  private async pickSpeciesForRarity(tx: Prisma.TransactionClient, targetRarity: HuntCardRarity, config?: Awaited<ReturnType<HuntService["getBoxConfig"]>> | null) {
+    const rotationElement = config?.rotationElement ?? null;
+    const maxRarity = config?.maxRarity ?? null;
+    const pickFromRules = async (baseRarity: HuntCardRarity) => {
+      if (maxRarity && RARITY_ORDER.indexOf(baseRarity) > RARITY_ORDER.indexOf(maxRarity)) return null;
+      const rules = (config?.speciesRules ?? []).filter((rule) => rule.species.isActive && rule.species.baseRarity === baseRarity && (!rotationElement || rule.species.element === rotationElement));
+      const picked = this.weightedPick(rules);
+      return picked?.species ?? null;
+    };
+
+    const pickFromRarity = async (baseRarity: HuntCardRarity) => {
+      if (maxRarity && RARITY_ORDER.indexOf(baseRarity) > RARITY_ORDER.indexOf(maxRarity)) return null;
+      const where = { isActive: true, baseRarity, ...(rotationElement ? { element: rotationElement } : {}) };
+      const count = await tx.huntCreatureSpecies.count({ where });
+      if (!count) return null;
+      return tx.huntCreatureSpecies.findFirst({
+        where,
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        skip: randomInt(0, count),
+      });
+    };
+
+    const configuredSpecies = await pickFromRules(targetRarity);
+    if (configuredSpecies) return configuredSpecies;
+
+    const exactSpecies = await pickFromRarity(targetRarity);
+    if (exactSpecies) return exactSpecies;
+
+    const targetIndex = RARITY_ORDER.indexOf(targetRarity);
+    const fallbackRarities = [
+      ...RARITY_ORDER.slice(targetIndex + 1),
+      ...RARITY_ORDER.slice(0, targetIndex).reverse(),
+    ];
+
+    for (const rarity of fallbackRarities) {
+      const species = await pickFromRarity(rarity);
+      if (species) return species;
+    }
+
+    return tx.huntCreatureSpecies.findFirst({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
+  }
+
+  private async maybeRollProfileStatusReward(tx: Prisma.TransactionClient, userId: number, boxId: string, config: Awaited<ReturnType<HuntService["getBoxConfig"]>> | null, position: number) {
+    if (!config || config.statusDropChanceBp <= 0) return null;
+    if (randomInt(0, 10000) >= config.statusDropChanceBp) return null;
+    const owned = await tx.userProfileStatusUnlock.findMany({ where: { userId }, select: { statusId: true } });
+    const ownedIds = new Set(owned.map((unlock) => unlock.statusId));
+    const pool = config.statusChances.filter((chance) => chance.status.isActive && !ownedIds.has(chance.statusId));
+    const picked = this.weightedPick(pool.map((chance) => ({ ...chance, weight: Math.max(chance.weight, chance.dropChanceBp) })));
+    if (!picked) return null;
+    const unlock = await tx.userProfileStatusUnlock.upsert({
+      where: { userId_statusId: { userId, statusId: picked.statusId } },
+      update: {},
+      create: { userId, statusId: picked.statusId, source: "HUNT_BOX" },
+    });
+    const reward = await tx.huntBoxReward.create({
+      data: {
+        boxId,
+        kind: HuntBoxRewardKind.PROFILE_STATUS,
+        rarity: picked.status.rarity,
+        position,
+        profileStatusId: picked.statusId,
+        profileStatusUnlockId: unlock.id,
+      },
+    });
+    return {
+      uuid: reward.id,
+      kind: reward.kind,
+      rarity: reward.rarity,
+      position,
+      status: {
+        id: picked.status.id,
+        slug: picked.status.slug,
+        title: picked.status.title,
+        description: picked.status.description,
+        rarity: picked.status.rarity,
+        icon: picked.status.icon,
+      },
+    };
+  }
+
   private randomStat(base: number, rarity: HuntCardRarity) {
     const rarityBonus = RARITY_ORDER.indexOf(rarity) * 3;
     return Math.max(1, base + rarityBonus + randomInt(-2, 5));
@@ -440,7 +856,7 @@ export class HuntService {
 
   async overview(userId: number) {
     const profile = await this.ensureProfile(userId);
-    const [missions, boxes, cards, posts] = await Promise.all([
+    const [missions, boxes, cards, posts, boxConfigs] = await Promise.all([
       this.prisma.huntMission.findMany({
         where: { isActive: true },
         orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
@@ -464,7 +880,22 @@ export class HuntService {
         take: 3,
         include: { place: true },
       }),
+      this.prisma.huntBoxConfig.findMany({
+        where: { isActive: true, isPurchasable: true },
+        include: {
+          rarityChances: { where: { isEnabled: true } },
+          speciesRules: { where: { isEnabled: true }, include: { species: true } },
+          statusChances: { where: { isEnabled: true }, include: { status: true } },
+        },
+        orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
+      }),
     ]);
+    const visibleBoxConfigs = boxConfigs.filter((config) => this.isCurrentRotatingBox(config));
+    const configuredTypes = new Set(visibleBoxConfigs.map((config) => config.type));
+    const fallbackOffers = Object.values(DEFAULT_BOX_CONFIGS)
+      .filter((config) => config.isActive && config.isPurchasable && !configuredTypes.has(config.type))
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((config) => this.boxConfigPayload(null, config.type));
 
     return {
       profile,
@@ -484,6 +915,10 @@ export class HuntService {
         claimedAt: mission.progress[0]?.claimedAt ?? null,
       })),
       boxes,
+      boxOffers: [
+        ...visibleBoxConfigs.map((config) => this.boxConfigPayload(config, config.type)),
+        ...fallbackOffers,
+      ].sort((a, b) => a.sortOrder - b.sortOrder),
       cards,
       recentPosts: posts,
       economy: {
@@ -585,6 +1020,41 @@ export class HuntService {
     };
   }
 
+  async collection(userId: number, query: import("./dto/hunt-collection.dto").HuntCollectionDto) {
+    const needle = query.query.trim();
+    const elementNames = { FLAME: "огонь", WATER: "вода", NATURE: "природа", WIND: "ветер", MUSIC: "музыка", LIGHT: "свет", SHADOW: "тьма" };
+    const rarityNames = { COMMON: "обычная", UNCOMMON: "необычная", RARE: "редкая", EPIC: "эпическая", LEGENDARY: "легендарная" };
+    const matching = (names: Record<string, string>) => Object.entries(names).filter(([key, name]) => `${key} ${name}`.toLowerCase().includes(needle.toLowerCase())).map(([key]) => key);
+    const where: Prisma.HuntCardWhereInput = {
+      ownerId: userId,
+      ...(query.element !== "all" ? { element: query.element as HuntElement } : {}),
+      ...(needle ? { OR: [
+        { species: { nameRu: { contains: needle, mode: "insensitive" } } },
+        { species: { nameEn: { contains: needle, mode: "insensitive" } } },
+        { trait: { contains: needle, mode: "insensitive" } },
+        { element: { in: matching(elementNames) as HuntElement[] } },
+        { rarity: { in: matching(rarityNames) as HuntCardRarity[] } },
+      ] } : {}),
+    };
+    const nameOrder: Prisma.HuntCardOrderByWithRelationInput = { species: query.locale === "en" ? { nameEn: "asc" } : { nameRu: "asc" } };
+    const orders: Record<string, Prisma.HuntCardOrderByWithRelationInput[]> = {
+      rarity: [{ rarity: "desc" }, { level: "desc" }, nameOrder],
+      level: [{ level: "desc" }, { rarity: "desc" }, nameOrder],
+      name: [nameOrder, { rarity: "desc" }],
+      element: [{ element: "asc" }, { rarity: "desc" }, nameOrder],
+      newest: [{ createdAt: "desc" }],
+    };
+    return this.prisma.$transaction(async (tx) => {
+      const total = await tx.huntCard.count({ where: { ownerId: userId } });
+      const filteredTotal = await tx.huntCard.count({ where });
+      const pages = Math.max(1, Math.ceil(filteredTotal / 20));
+      const page = Math.min(query.page, pages);
+      const cards = await tx.huntCard.findMany({ where, include: { species: true }, orderBy: [...orders[query.sort], { uuid: "asc" }], skip: (page - 1) * 20, take: 20 });
+      const counts = await tx.huntCard.groupBy({ by: ["speciesId"], where: { ownerId: userId, speciesId: { in: cards.map(c => c.speciesId) } }, _count: { _all: true } });
+      return { cards, total, filteredTotal, page, pages, speciesCounts: Object.fromEntries(cards.map(c => [c.species.slug, counts.find(n => n.speciesId === c.speciesId)?._count._all ?? 1])) };
+    });
+  }
+
   async cardCatalog(userId: number) {
     const [species, ownedCounts] = await Promise.all([
       this.prisma.huntCreatureSpecies.findMany({
@@ -604,6 +1074,10 @@ export class HuntService {
       slug: item.slug,
       name: item.name,
       description: item.description,
+      nameRu: item.nameRu,
+      nameEn: item.nameEn,
+      descriptionRu: item.descriptionRu,
+      descriptionEn: item.descriptionEn,
       element: item.element,
       baseRarity: item.baseRarity,
       category: item.category,
@@ -637,6 +1111,10 @@ export class HuntService {
       slug: species.slug,
       name: species.name,
       description: species.description,
+      nameRu: species.nameRu,
+      nameEn: species.nameEn,
+      descriptionRu: species.descriptionRu,
+      descriptionEn: species.descriptionEn,
       element: species.element,
       baseRarity: species.baseRarity,
       category: null,
@@ -1268,57 +1746,119 @@ export class HuntService {
     });
   }
 
-  async openBox(userId: number, boxUuid?: string, boxType: HuntBoxType = HuntBoxType.POST) {
+  async openBox(userId: number, boxUuid?: string, boxType: HuntBoxType = HuntBoxType.POST, boxConfigId?: string) {
     return this.prisma.$transaction(async (tx) => {
       await this.ensureProfile(userId, tx);
       let box = boxUuid
         ? await tx.huntBox.findFirst({ where: { uuid: boxUuid, userId, status: HuntBoxStatus.GRANTED } })
         : null;
+      let config = await this.getBoxConfig(tx, box?.type ?? boxType, box?.configId ?? boxConfigId);
 
       if (!box) {
-        const offer = SHOP_BOXES[boxType] ?? SHOP_BOXES[HuntBoxType.POST]!;
+        if (boxConfigId && !config) {
+          throw new BadRequestException("This Hunt box config is not available.");
+        }
+        const fallback = this.defaultBoxConfig(boxType);
+        const offer = config ?? fallback;
+        if (!offer.isActive || !offer.isPurchasable) {
+          throw new BadRequestException("This Hunt box is not available.");
+        }
+        if (!this.isCurrentRotatingBox(offer)) {
+          throw new BadRequestException("This weekly Hunt box has already rotated.");
+        }
         const profile = await this.ensureProfile(userId, tx);
         if (profile.influenceBalance < offer.cost) {
           throw new BadRequestException("Not enough NearCoin to open a Hunt box.");
         }
+        if (offer.dailyLimit) {
+          const dayStart = new Date();
+          dayStart.setHours(0, 0, 0, 0);
+          const openedToday = await tx.huntBox.count({
+            where: {
+              userId,
+              type: boxType,
+              createdAt: { gte: dayStart },
+            },
+          });
+          if (openedToday >= offer.dailyLimit) {
+            throw new BadRequestException("This Hunt box is available once per day.");
+          }
+        }
         await this.addInfluence(tx, userId, -offer.cost, HuntCurrencyReason.BOX_OPENED, "box_purchase");
         box = await tx.huntBox.create({
-          data: { userId, type: boxType, rarity: offer.rarity, influenceCost: offer.cost },
+          data: {
+            userId,
+            configId: config?.id,
+            type: offer.type,
+            rarity: offer.minRarity,
+            influenceCost: offer.cost,
+          },
         });
+        if (!config && box.configId) config = await this.getBoxConfig(tx, box.type, box.configId);
       }
 
-      const rarity = this.rollRarity(box.rarity);
-      const species = await tx.huntCreatureSpecies.findFirst({
-        where: { isActive: true },
-        orderBy: [{ baseRarity: "desc" }, { sortOrder: "asc" }],
-        skip: randomInt(0, Math.max(1, await tx.huntCreatureSpecies.count({ where: { isActive: true } }))),
-      }) ?? await tx.huntCreatureSpecies.findFirst({ where: { isActive: true } });
-      if (!species) throw new BadRequestException("No Hunt creature species are seeded.");
+      const activeConfig = config ?? await this.getBoxConfig(tx, box.type, box.configId) ?? null;
+      if (activeConfig && !this.isCurrentRotatingBox(activeConfig)) {
+        throw new BadRequestException("This weekly Hunt box has already rotated.");
+      }
+      const fallback = this.defaultBoxConfig(box.type);
+      const itemCountMin = Math.max(1, activeConfig?.itemCountMin ?? fallback.itemCountMin);
+      const itemCountMax = Math.max(itemCountMin, activeConfig?.itemCountMax ?? fallback.itemCountMax);
+      const itemCount = randomInt(itemCountMin, itemCountMax + 1);
+      const guaranteedCount = Math.min(itemCount, Math.max(0, activeConfig?.guaranteedCount ?? fallback.guaranteedCount ?? 0));
+      const guaranteedRarity = activeConfig?.guaranteedRarity ?? fallback.guaranteedRarity ?? null;
+      const cards: Array<Prisma.HuntCardGetPayload<{ include: { species: true } }>> = [];
+      const rewards: Array<Record<string, unknown>> = [];
 
-      const baseStats = species.baseStats as Record<string, number>;
-      const traitPool = Array.isArray(species.traitPool) ? species.traitPool as string[] : ["Fresh find"];
-      const card = await tx.huntCard.create({
-        data: {
-          ownerId: userId,
-          speciesId: species.id,
-          rarity,
-          element: species.element as HuntElement,
-          stats: Object.fromEntries(Object.entries(baseStats).map(([key, value]) => [key, this.randomStat(Number(value), rarity)])),
-          trait: traitPool[randomInt(0, traitPool.length)] ?? "Fresh find",
-          visualSeed: randomUUID(),
-        },
-        include: { species: true },
-      });
+      for (let index = 0; index < itemCount; index += 1) {
+        const targetRarity = guaranteedRarity && index < guaranteedCount
+          ? this.rarityBounds(guaranteedRarity, activeConfig?.minRarity ?? fallback.minRarity, activeConfig?.maxRarity ?? fallback.maxRarity)
+          : this.rollRarityFromConfig(activeConfig, box.type, box.rarity);
+        const species = await this.pickSpeciesForRarity(tx, targetRarity, activeConfig);
+        if (!species) throw new BadRequestException("No Hunt creature species are seeded.");
+
+        const cardRarity = species.baseRarity as HuntCardRarity;
+        const baseStats = species.baseStats as Record<string, number>;
+        const traitPool = Array.isArray(species.traitPool) ? species.traitPool as string[] : ["Fresh find"];
+        const card = await tx.huntCard.create({
+          data: {
+            ownerId: userId,
+            speciesId: species.id,
+            rarity: cardRarity,
+            element: species.element as HuntElement,
+            stats: Object.fromEntries(Object.entries(baseStats).map(([key, value]) => [key, this.randomStat(Number(value), cardRarity)])),
+            trait: traitPool[randomInt(0, traitPool.length)] ?? "Fresh find",
+            visualSeed: randomUUID(),
+          },
+          include: { species: true },
+        });
+        const rewardRow = await tx.huntBoxReward.create({
+          data: {
+            boxId: box.id,
+            kind: HuntBoxRewardKind.CARD,
+            rarity: card.rarity,
+            position: rewards.length,
+            cardId: card.id,
+          },
+        });
+        cards.push(card);
+        rewards.push({ uuid: rewardRow.id, kind: rewardRow.kind, rarity: rewardRow.rarity, position: rewardRow.position, card });
+      }
+
+      const statusReward = await this.maybeRollProfileStatusReward(tx, userId, box.id, activeConfig, rewards.length);
+      if (statusReward) rewards.push(statusReward);
+
+      const firstCard = cards[0];
       await tx.huntBox.update({
         where: { id: box.id },
-        data: { status: HuntBoxStatus.OPENED, openedAt: new Date(), rewardCardId: card.id },
+        data: { status: HuntBoxStatus.OPENED, openedAt: new Date(), rewardCardId: firstCard?.id },
       });
       await tx.huntPlayerProfile.update({
         where: { userId },
-        data: { boxesOpenedCount: { increment: 1 }, cardsOwnedCount: { increment: 1 } },
+        data: { boxesOpenedCount: { increment: 1 }, cardsOwnedCount: { increment: cards.length } },
       });
       await this.advanceMission(tx, userId, "BOX_OPENED");
-      return { box: { ...box, status: HuntBoxStatus.OPENED }, card };
+      return { box: { ...box, status: HuntBoxStatus.OPENED }, card: firstCard, cards, rewards };
     });
   }
 }

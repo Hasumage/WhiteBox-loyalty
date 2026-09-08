@@ -222,15 +222,7 @@ describe("RegisteredService", () => {
           OR: expect.arrayContaining([
             { companyId: null },
             {
-              company: expect.objectContaining({
-                isActive: true,
-                billingAccount: {
-                  is: expect.objectContaining({
-                    currentPeriodEndsAt: { gt: expect.any(Date) },
-                    status: { in: ["ACTIVE", "TRIAL"] },
-                  }),
-                },
-              }),
+              company: { isActive: true },
             },
           ]),
         }),
@@ -405,15 +397,7 @@ describe("RegisteredService", () => {
 
     expect(prisma.company.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          isActive: true,
-          billingAccount: {
-            is: expect.objectContaining({
-              currentPeriodEndsAt: { gt: expect.any(Date) },
-              status: { in: ["ACTIVE", "TRIAL"] },
-            }),
-          },
-        }),
+        where: { isActive: true },
       }),
     );
     expect(result[0].points.balance).toBe(120);
@@ -516,14 +500,7 @@ describe("RegisteredService", () => {
 
     expect(prisma.company.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          billingAccount: {
-            is: expect.objectContaining({
-              currentPeriodEndsAt: { gt: expect.any(Date) },
-              status: { in: ["ACTIVE", "TRIAL"] },
-            }),
-          },
-        }),
+        where: { OR: [{ id: 5 }, { slug: "5" }], isActive: true },
       }),
     );
     expect(prisma.userCompany.upsert).toHaveBeenCalledWith(

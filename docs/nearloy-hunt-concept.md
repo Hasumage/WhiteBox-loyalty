@@ -2,6 +2,8 @@
 
 This file is the original working concept note. Dedicated game documentation now lives in `docs/hunt/`:
 
+Implemented mobile combat rules, critical hits, cover, displacement, action presentation and match statistics are maintained in [Tactical Arena v7](./hunt/tactical-arena.md). The [Ability Framework](./hunt/ability-framework.md) documents database-backed configuration, lifesteal, the unified character editor and required migration. Older combat ideas do not override these specifications.
+
 - `docs/hunt/README.md`
 - `docs/hunt/product-concept.md`
 - `docs/hunt/domain-model.md`

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { CompanyMemberRole, PaymentProvider, PaymentPurpose, PaymentStatus, Prisma, SubscriptionBundleStatus, SubscriptionStatus } from "@prisma/client";
+import { CompanyBillingPlan, CompanyMemberRole, PaymentProvider, PaymentPurpose, PaymentStatus, Prisma, SubscriptionBundleStatus, SubscriptionStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 import { reassignCompanyReferralFromBillingPromo } from "../company/company-referral-attribution";
@@ -597,12 +597,14 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         create: {
           companyId: invoice.companyId,
           status: "ACTIVE",
+          plan: CompanyBillingPlan.PRO,
           trialEndsAt: null,
           currentPeriodStartsAt: periodStartsAt,
           currentPeriodEndsAt: periodEndsAt,
         },
         update: {
           status: "ACTIVE",
+          plan: CompanyBillingPlan.PRO,
           trialEndsAt: null,
           currentPeriodStartsAt: periodStartsAt,
           currentPeriodEndsAt: periodEndsAt,

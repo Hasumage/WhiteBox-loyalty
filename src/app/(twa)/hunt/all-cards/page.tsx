@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { getHuntCardCatalogResult, type HuntCatalogSpecies, type HuntElement } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
-import { ElementBadge, elementMeta, huntInteractiveClass, huntStatEntries, rarityBadgeClass, rarityClass, StatAffinityBar } from "../_components/hunt-ui";
+import { ElementBadge, elementMeta, huntInteractiveClass, huntRarityLabel, huntSpeciesDescription, huntSpeciesName, huntStatEntries, rarityBadgeClass, rarityClass, StatAffinityBar } from "../_components/hunt-ui";
 
 type SortMode = "rarity" | "owned" | "name";
 type ElementFilter = "all" | HuntElement;
@@ -44,7 +44,7 @@ function revealImageScale(slug: string) {
 }
 
 export default function HuntAllCardsPage() {
-  const { t } = useI18n("ru");
+  const { locale, t } = useI18n("ru");
   const [catalog, setCatalog] = useState<HuntCatalogSpecies[]>([]);
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("owned");
@@ -80,18 +80,18 @@ export default function HuntAllCardsPage() {
     const needle = query.trim().toLowerCase();
     const elementRows = elementFilter === "all" ? catalog : catalog.filter((item) => item.element === elementFilter);
     const rows = needle ? elementRows.filter((item) => {
-      const text = [item.name, item.description, item.element, item.baseRarity, item.category?.name ?? ""].join(" ").toLowerCase();
+      const text = [huntSpeciesName(item, locale), huntSpeciesDescription(item, locale), item.element, item.baseRarity, item.category?.name ?? ""].join(" ").toLowerCase();
       return text.includes(needle);
     }) : [...elementRows];
 
     return rows.sort((left, right) => {
       const ownedFirst = Number(right.ownedCount > 0) - Number(left.ownedCount > 0);
       if (ownedFirst !== 0) return ownedFirst;
-      if (sortMode === "owned") return right.ownedCount - left.ownedCount || left.name.localeCompare(right.name);
-      if (sortMode === "name") return left.name.localeCompare(right.name);
-      return rarityScore[right.baseRarity] - rarityScore[left.baseRarity] || left.name.localeCompare(right.name);
+      if (sortMode === "owned") return right.ownedCount - left.ownedCount || huntSpeciesName(left, locale).localeCompare(huntSpeciesName(right, locale), locale);
+      if (sortMode === "name") return huntSpeciesName(left, locale).localeCompare(huntSpeciesName(right, locale), locale);
+      return rarityScore[right.baseRarity] - rarityScore[left.baseRarity] || huntSpeciesName(left, locale).localeCompare(huntSpeciesName(right, locale), locale);
     });
-  }, [catalog, elementFilter, query, sortMode]);
+  }, [catalog, elementFilter, locale, query, sortMode]);
 
   const selectedElementMeta = elementFilter === "all" ? null : elementMeta[elementFilter];
   const SelectedElementIcon = selectedElementMeta?.icon ?? Sparkles;
@@ -252,9 +252,9 @@ export default function HuntAllCardsPage() {
                 </span>
               </div>
               <div className="absolute inset-x-0 bottom-0 min-w-0 bg-gradient-to-t from-black/88 via-black/62 to-transparent p-2.5 pt-10">
-                <h2 className="truncate text-[13px] font-semibold leading-4 text-white">{item.name}</h2>
+                <h2 className="truncate text-[13px] font-semibold leading-4 text-white">{huntSpeciesName(item, locale)}</h2>
                 <div className="mt-1 flex items-center justify-between gap-1">
-                  <Badge className={cn("max-w-full truncate px-1.5 py-0.5 text-[9px]", rarityBadgeClass[item.baseRarity])}>{item.baseRarity}</Badge>
+                  <Badge className={cn("max-w-full truncate px-1.5 py-0.5 text-[9px]", rarityBadgeClass[item.baseRarity])}>{huntRarityLabel(item.baseRarity, t)}</Badge>
                   {owned && item.ownedCount > 0 && <span className="shrink-0 text-[10px] font-semibold text-cyan-100">x{item.ownedCount}</span>}
                 </div>
               </div>
@@ -272,7 +272,7 @@ export default function HuntAllCardsPage() {
           {selectedCard && (
             <>
               <DialogHeader>
-                <DialogTitle className="truncate">{selectedCard.name}</DialogTitle>
+                <DialogTitle className="truncate">{huntSpeciesName(selectedCard, locale)}</DialogTitle>
               </DialogHeader>
               <div className="mx-auto w-full max-w-[360px] overflow-hidden rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_50%_46%,rgba(103,232,249,0.18),rgba(2,6,12,0.72)_58%,rgba(2,6,12,0.95))]">
                 <div className="relative h-[min(48vh,360px)] min-h-[260px]">
@@ -281,11 +281,11 @@ export default function HuntAllCardsPage() {
                     <ElementBadge element={selectedCard.element} />
                   </div>
                   <div className="absolute bottom-3 left-3">
-                    <Badge className={rarityBadgeClass[selectedCard.baseRarity]}>{selectedCard.baseRarity}</Badge>
+                    <Badge className={rarityBadgeClass[selectedCard.baseRarity]}>{huntRarityLabel(selectedCard.baseRarity, t)}</Badge>
                   </div>
                 </div>
               </div>
-              <p className="text-sm leading-6 text-white/62">{selectedCard.description}</p>
+              <p className="text-sm leading-6 text-white/62">{huntSpeciesDescription(selectedCard, locale)}</p>
               <div className="grid grid-cols-2 gap-2">
                 {huntStatEntries(selectedCard.baseStats).map(([key, value]) => <StatAffinityBar key={key} label={key} value={value} />)}
               </div>

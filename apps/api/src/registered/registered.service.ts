@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
+  CompanyBillingPlan,
   CompanyMediaKind,
-  CompanyBillingStatus,
   LoyaltyTransactionStatus,
   LoyaltyTransactionType,
   Prisma,
@@ -60,6 +60,7 @@ type PublicCompanyRecord = {
     sortOrder: number;
   }>;
   mediaAssets?: Array<{ storageKey: string | null }>;
+  billingAccount?: { plan: CompanyBillingPlan } | null;
 };
 
 @Injectable()
@@ -90,13 +91,11 @@ export class RegisteredService {
   private publicCompanyWhere(now = new Date()): Prisma.CompanyWhereInput {
     return {
       isActive: true,
-      billingAccount: {
-        is: {
-          status: { in: [CompanyBillingStatus.ACTIVE, CompanyBillingStatus.TRIAL] },
-          currentPeriodEndsAt: { gt: now },
-        },
-      },
     };
+  }
+
+  private companyBillingPlan(company: { billingAccount?: { plan: CompanyBillingPlan } | null }) {
+    return company.billingAccount?.plan ?? CompanyBillingPlan.GO;
   }
 
   private canShowUnpaidMapPartnersLocally() {
@@ -145,6 +144,7 @@ export class RegisteredService {
       logoUrl: this.companyMediaUrl(company.mediaAssets?.[0]?.storageKey),
       isActive: company.isActive,
       operatesOnline: company.operatesOnline,
+      billingPlan: this.companyBillingPlan(company),
       isFavorite: false,
       favoritedAt: null,
       category: company.category,
@@ -1097,6 +1097,7 @@ export class RegisteredService {
             },
             take: 1,
           },
+          billingAccount: { select: { plan: true } },
         },
       }),
       this.prisma.loyaltyTransaction.groupBy({
@@ -1126,6 +1127,7 @@ export class RegisteredService {
         logoUrl: this.companyMediaUrl(company.mediaAssets?.[0]?.storageKey),
         isActive: company.isActive,
         operatesOnline: company.operatesOnline,
+        billingPlan: this.companyBillingPlan(company),
         isFavorite: link?.isFavorite ?? false,
         favoritedAt: link?.favoritedAt ?? null,
         category: company.category,
@@ -1207,6 +1209,7 @@ export class RegisteredService {
           take: 1,
           select: { storageKey: true },
         },
+        billingAccount: { select: { plan: true } },
       },
     });
 
@@ -1269,6 +1272,7 @@ export class RegisteredService {
           take: 1,
           select: { storageKey: true },
         },
+        billingAccount: { select: { plan: true } },
       },
     });
 

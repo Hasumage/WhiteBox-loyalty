@@ -50,6 +50,7 @@ import {
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { cn } from "@/lib/utils";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { YandexRtbAd } from "@/components/ads/YandexRtbAd";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { categoryName } from "@/lib/i18n/categories";
 import { companyLevelName } from "@/lib/i18n/company-levels";
@@ -77,6 +78,9 @@ const COMPANY_PLACEHOLDER_ASSETS = {
   galleryExtra: "/company-assets/placeholders/company-gallery-3.svg",
   offer: "/company-assets/placeholders/company-offer.svg",
 };
+const COMPANY_GO_AD_BLOCK_ID =
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_COMPANY_GO_BLOCK_ID ||
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_APP_FEED_BLOCK_ID;
 
 function replaceBrokenImage(event: SyntheticEvent<HTMLImageElement>, fallback: string) {
   if (event.currentTarget.src.endsWith(fallback)) return;
@@ -1469,6 +1473,15 @@ export default function WalletPage() {
             )}
           </div>
         </motion.section>
+
+        {company.billingPlan === "GO" ? (
+          <YandexRtbAd
+            blockId={COMPANY_GO_AD_BLOCK_ID}
+            pageNumber={1}
+            placement={`company-go-${company.slug}`}
+            className="mt-4"
+          />
+        ) : null}
 
         <motion.section
           initial={{ y: 12, opacity: 0 }}

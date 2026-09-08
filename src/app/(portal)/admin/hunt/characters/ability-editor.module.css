@@ -1,0 +1,186 @@
+.editor {
+  color: #edf3f6;
+  font-size: 13px;
+  letter-spacing: 0;
+  min-width: 0;
+}
+.editor * {
+  box-sizing: border-box;
+  letter-spacing: 0;
+}
+.toolbar {
+  position: sticky;
+  top: -16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #111519;
+  padding: 10px 0;
+  border-bottom: 1px solid #323a40;
+}
+.toolbar span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin-right: auto;
+  color: #aab8c1;
+  font-size: 12px;
+}
+.editor button,
+.toolbar a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid #364048;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.editor button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.editor .save {
+  background: #a2f2fb;
+  color: #101519;
+  font-weight: 600;
+}
+.slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.slots button {
+  justify-content: flex-start;
+  text-align: left;
+  min-height: 64px;
+}
+.slots span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.slots small {
+  display: block;
+  color: #acb9c3;
+  font-size: 10px;
+}
+.slots button[aria-selected="true"] {
+  border-color: #96e6ef;
+  background: #24383a;
+}
+.fields {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.rowTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.rowTitle > strong,
+.rowTitle > h3 {
+  margin-right: auto;
+  font-size: 15px;
+}
+.rowTitle > span {
+  color: #a5b3bf;
+  font-size: 11px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #bcc7ce;
+  font-size: 12px;
+  min-width: 0;
+}
+.editor input:not([type="checkbox"]),
+.editor select,
+.editor textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #3a434b;
+  background: #1c2227;
+  color: #f0f4f7;
+  border-radius: 6px;
+  min-height: 36px;
+  padding: 7px 9px;
+  font-size: 13px;
+  color-scheme: dark;
+}
+.editor option {
+  background: #1c2227;
+  color: #f0f4f7;
+}
+.editor textarea {
+  min-height: 65px;
+  resize: vertical;
+}
+.editor .toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+.toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: #9ae9f2;
+}
+.editor section {
+  border-top: 1px solid #323a40;
+  margin-top: 16px;
+  padding-top: 8px;
+}
+.editor section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.effect {
+  border-bottom: 1px solid #323a40;
+  padding: 0 0 16px;
+}
+.effect .rowTitle > select {
+  width: auto;
+  flex: 1;
+}
+.error {
+  color: #ffb3bf;
+  margin: 10px 0;
+}
+.success {
+  color: #a3eee0;
+  margin: 10px 0;
+}
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .slots {
+    gap: 5px;
+  }
+  .slots button {
+    padding: 6px;
+    flex-direction: column;
+    align-items: flex-start;
+    font-size: 11px;
+  }
+}
+@media (max-width: 360px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

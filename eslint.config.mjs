@@ -16,6 +16,7 @@ const eslintConfig = defineConfig([
     "apps/api/dist/**",
     "apps/api/coverage/**",
     "backups/**",
+    "storage/**",
     ".tmp/**",
     "next-env.d.ts",
   ]),

@@ -1,17 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Copy, Gift, Heart, Leaf, MoreHorizontal, Search, Share2, SlidersHorizontal, Sparkles, Star, TrendingUp, WalletCards, X, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { applyHuntCardUpgradeBonus, getCachedHuntOverview, getHuntOverview, upgradeHuntCard, type HuntCard, type HuntCardStatKey, type HuntCardUpgrade, type HuntOverview, type HuntRarity } from "@/lib/api/twa-client";
+import { applyHuntCardUpgradeBonus, getCachedHuntOverview, getHuntCollectionOverview, upgradeHuntCard, type HuntCard, type HuntCardStatKey, type HuntCardUpgrade, type HuntOverview, type HuntRarity } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
-import { ElementBadge, elementMeta, huntInteractiveClass, huntStatEntries, huntStatMeta, rarityBadgeClass, rarityClass, StatValueBar } from "../_components/hunt-ui";
+import { ElementBadge, elementMeta, huntInteractiveClass, huntRarityLabel, huntSpeciesDescription, huntSpeciesName, huntStatEntries, huntStatMeta, rarityBadgeClass, rarityClass, StatValueBar } from "../_components/hunt-ui";
 
 const rarityIndex: Record<HuntRarity, number> = {
   COMMON: 0,
@@ -57,8 +57,14 @@ function revealImageScale(slug: string) {
 }
 
 export default function HuntCardsPage() {
-  const { t } = useI18n("ru");
-  const [overview, setOverview] = useState<HuntOverview>(getCachedHuntOverview());
+  const { locale, t } = useI18n("ru");
+  const [overview, setOverview] = useState<HuntOverview>(() => ({ ...getCachedHuntOverview(), cards: [] }));
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(getCachedHuntOverview().profile.cardsOwnedCount);
+  const [duplicateCounts, setDuplicateCounts] = useState(new Map<string, number>());
+  const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("rarity");
   const [sortOpen, setSortOpen] = useState(false);
@@ -68,13 +74,28 @@ export default function HuntCardsPage() {
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
   const [upgradeView, setUpgradeView] = useState<UpgradeView | null>(null);
 
-  async function refresh(force = false) {
-    setOverview(await getHuntOverview(force));
-  }
+  const refresh = useCallback(async (force = false) => {
+    const id = ++requestId.current;
+    setLoading(true);
+    try {
+      const next = await getHuntCollectionOverview(force, { page, sort: sortMode, element: elementFilter, query, locale });
+      if (id !== requestId.current) return;
+      setOverview(next);
+      setTotal(next.collection.total);
+      setPages(next.collection.pages);
+      setPage(next.collection.page);
+      setDuplicateCounts(new Map(Object.entries(next.collection.speciesCounts)));
+    } catch {
+      if (id === requestId.current) setNotice("Не удалось загрузить коллекцию. Обновите страницу.");
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  }, [page, sortMode, elementFilter, query, locale]);
 
   useEffect(() => {
-    void refresh();
-  }, []);
+    const timer = setTimeout(() => void refresh(), 200);
+    return () => { clearTimeout(timer); requestId.current++; };
+  }, [refresh]);
 
   useEffect(() => {
     if (!notice) return;
@@ -82,30 +103,7 @@ export default function HuntCardsPage() {
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
-  const duplicateCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const card of overview.cards) counts.set(card.species.slug, (counts.get(card.species.slug) ?? 0) + 1);
-    return counts;
-  }, [overview.cards]);
-
-  const cards = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const elementRows = elementFilter === "all" ? overview.cards : overview.cards.filter((card) => card.element === elementFilter);
-    const rows = needle
-      ? elementRows.filter((card) => {
-          const text = [card.species.name, card.species.description, card.trait, card.rarity, card.element, elementMeta[card.element].label].join(" ").toLowerCase();
-          return text.includes(needle);
-        })
-      : [...elementRows];
-
-    return rows.sort((left, right) => {
-      if (sortMode === "name") return left.species.name.localeCompare(right.species.name, "ru") || rarityIndex[right.rarity] - rarityIndex[left.rarity];
-      if (sortMode === "level") return right.level - left.level || rarityIndex[right.rarity] - rarityIndex[left.rarity] || left.species.name.localeCompare(right.species.name, "ru");
-      if (sortMode === "element") return left.element.localeCompare(right.element, "en") || rarityIndex[right.rarity] - rarityIndex[left.rarity] || left.species.name.localeCompare(right.species.name, "ru");
-      if (sortMode === "newest") return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-      return rarityIndex[right.rarity] - rarityIndex[left.rarity] || right.level - left.level || left.species.name.localeCompare(right.species.name, "ru");
-    });
-  }, [elementFilter, overview.cards, query, sortMode]);
+  const cards = overview.cards;
 
   const selectedCard = selectedUuid ? overview.cards.find((card) => card.uuid === selectedUuid) ?? null : null;
   const currentSort = sortOptions.find((option) => option.value === sortMode) ?? sortOptions[0];
@@ -114,7 +112,7 @@ export default function HuntCardsPage() {
     const url = `${window.location.origin}/hunt-share/card/${card.uuid}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: `${card.species.name} in Nearloy Hunt`, url });
+        await navigator.share({ title: `${huntSpeciesName(card.species, locale)} in Nearloy Hunt`, url });
         return;
       }
       await navigator.clipboard.writeText(url);
@@ -167,7 +165,7 @@ export default function HuntCardsPage() {
           <div className="flex items-center justify-center gap-2 text-sm text-white/78">
             <WalletCards className="h-4 w-4 text-cyan-100" />
             <span>{t("client.hunt.collection")}</span>
-            <span className="font-semibold text-white">{overview.cards.length}</span>
+            <span className="font-semibold text-white">{total}</span>
           </div>
           <div className="mx-auto mt-2 h-1 max-w-44 overflow-hidden rounded-full bg-white/10">
             <span className="block h-full rounded-full bg-[linear-gradient(90deg,#67e8f9,#a855f7)]" style={{ width: overview.cards.length ? "100%" : "0%" }} />
@@ -186,7 +184,8 @@ export default function HuntCardsPage() {
           <Search className="h-4 w-4 text-cyan-100" />
           <Input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            maxLength={100}
+            onChange={(event) => { setLoading(true); setPage(1); setQuery(event.target.value); }}
             placeholder="Поиск по имени, стихии, редкости или трейту"
             className="h-9 border-0 bg-transparent px-0 text-white placeholder:text-white/38 focus-visible:ring-0"
           />
@@ -210,6 +209,8 @@ export default function HuntCardsPage() {
                   type="button"
                   onClick={() => {
                     setSortMode(option.value);
+                    if (option.value !== sortMode) setLoading(true);
+                    setPage(1);
                     setSortOpen(false);
                   }}
                   className={cn("flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm", huntInteractiveClass, option.value === sortMode ? "bg-cyan-200/14 text-cyan-50" : "text-white/68")}
@@ -230,7 +231,7 @@ export default function HuntCardsPage() {
               <button
                 key={option}
                 type="button"
-                onClick={() => setElementFilter(option)}
+                onClick={() => { if (option !== elementFilter || page !== 1) setLoading(true); setPage(1); setElementFilter(option); }}
                 className={cn(
                   "flex h-11 shrink-0 items-center gap-2 rounded-2xl border px-3 text-sm font-semibold transition",
                   huntInteractiveClass,
@@ -251,9 +252,14 @@ export default function HuntCardsPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-3 gap-2">
-        {overview.cards.length === 0 && (
-          <div className="col-span-3 rounded-3xl border border-dashed border-white/15 p-5 text-center text-sm text-white/54">{t("client.hunt.cards.empty")}</div>
+      <nav aria-label="Страницы коллекции" className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-3 bg-[#080c10] py-2">
+        <Button aria-label="Предыдущая страница" title="Предыдущая страница" variant="outline" disabled={loading || page <= 1} onClick={() => { setLoading(true); setPage(p => p - 1); }}><ArrowLeft className="h-4 w-4" /></Button>
+        <span aria-live="polite" className="text-sm text-white/70">{loading ? "Загрузка…" : `${page} / ${pages}`}</span>
+        <Button aria-label="Следующая страница" title="Следующая страница" variant="outline" disabled={loading || page >= pages} onClick={() => { setLoading(true); setPage(p => p + 1); }}><ArrowRight className="h-4 w-4" /></Button>
+      </nav>
+      <section aria-busy={loading} className={cn("grid grid-cols-3 gap-2", loading && "opacity-50 pointer-events-none")}>
+        {!loading && overview.cards.length === 0 && (
+          <div className="col-span-3 rounded-3xl border border-dashed border-white/15 p-5 text-center text-sm text-white/54">{total ? "Карточки не найдены." : t("client.hunt.cards.empty")}</div>
         )}
         {overview.cards.length > 0 && cards.length === 0 && (
           <div className="col-span-3 rounded-3xl border border-dashed border-white/15 p-5 text-center text-sm text-white/54">Карточки не найдены.</div>
@@ -272,16 +278,16 @@ export default function HuntCardsPage() {
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_55%,rgba(103,232,249,0.12),rgba(2,6,12,0.25)_52%,rgba(2,6,12,0.62))]">
                 <img src={mediaSrc(card.species.imageUrl)} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center transition", cardImageScale(card.species.slug))} />
                 <span className="absolute left-2 top-2 rounded-full border border-black/30 bg-black/44 px-2 py-1 text-[11px] font-semibold text-white/74 backdrop-blur">
-                  #{String(index + 1).padStart(3, "0")}
+                  #{String((page - 1) * 20 + index + 1).padStart(3, "0")}
                 </span>
                 <span className={cn("absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur", elementMeta[card.element].className)} title={elementMeta[card.element].label}>
                   <ElementIcon className="h-3.5 w-3.5" />
                 </span>
               </div>
               <div className="absolute inset-x-0 bottom-0 min-w-0 bg-gradient-to-t from-black/88 via-black/62 to-transparent p-2.5 pt-10">
-                <h2 className="truncate text-[13px] font-semibold leading-4 text-white">{card.species.name}</h2>
+                <h2 className="truncate text-[13px] font-semibold leading-4 text-white">{huntSpeciesName(card.species, locale)}</h2>
                 <div className="mt-1 flex items-center justify-between gap-1">
-                  <Badge className={cn("max-w-full truncate px-1.5 py-0.5 text-[9px]", rarityBadgeClass[card.rarity])}>{card.rarity}</Badge>
+                  <Badge className={cn("max-w-full truncate px-1.5 py-0.5 text-[9px]", rarityBadgeClass[card.rarity])}>{huntRarityLabel(card.rarity, t)}</Badge>
                   <span className="shrink-0 text-[10px] font-semibold text-cyan-100">ур. {card.level}</span>
                 </div>
                 {duplicateCount > 1 && (
@@ -313,7 +319,7 @@ export default function HuntCardsPage() {
           {selectedCard && (
             <>
               <div className="absolute inset-0 rounded-[24px] bg-[radial-gradient(circle_at_15%_10%,rgba(52,211,153,0.16),transparent_32%),radial-gradient(circle_at_92%_5%,rgba(103,232,249,0.12),transparent_28%)] pointer-events-none" />
-              <DialogTitle className="sr-only">{selectedCard.species.name}</DialogTitle>
+              <DialogTitle className="sr-only">{huntSpeciesName(selectedCard.species, locale)}</DialogTitle>
 
               <div className="relative flex items-center justify-between gap-2">
                 <button type="button" onClick={() => setSelectedUuid(null)} className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-white/78", huntInteractiveClass)} aria-label="Назад">
@@ -338,7 +344,7 @@ export default function HuntCardsPage() {
                       <ElementBadge element={selectedCard.element} />
                     </div>
                     <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 bg-gradient-to-t from-black/82 via-black/42 to-transparent p-4 pt-20">
-                      <Badge className={cn("px-3 py-1.5 text-xs", rarityBadgeClass[selectedCard.rarity])}>{selectedCard.rarity}</Badge>
+                      <Badge className={cn("px-3 py-1.5 text-xs", rarityBadgeClass[selectedCard.rarity])}>{huntRarityLabel(selectedCard.rarity, t)}</Badge>
                       <div className="flex items-center gap-2">
                         <Badge className="border-white/10 bg-white/[0.08] px-3 py-1.5 text-xs text-white">
                           <Star className="mr-1 h-3.5 w-3.5 fill-amber-200 text-amber-200" />
@@ -356,9 +362,9 @@ export default function HuntCardsPage() {
                 <div className="flex flex-col gap-3 sm:justify-center">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h2 className="text-2xl font-semibold leading-tight text-white lg:text-3xl">{selectedCard.species.name}</h2>
+                      <h2 className="text-2xl font-semibold leading-tight text-white lg:text-3xl">{huntSpeciesName(selectedCard.species, locale)}</h2>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <Badge className={cn("px-2.5 py-1 text-xs", rarityBadgeClass[selectedCard.rarity])}>{selectedCard.rarity}</Badge>
+                        <Badge className={cn("px-2.5 py-1 text-xs", rarityBadgeClass[selectedCard.rarity])}>{huntRarityLabel(selectedCard.rarity, t)}</Badge>
                         <ElementBadge element={selectedCard.element} />
                       </div>
                     </div>
@@ -367,7 +373,7 @@ export default function HuntCardsPage() {
                     </button>
                   </div>
 
-                  <p className="text-sm leading-6 text-white/62">{selectedCard.species.description}</p>
+                  <p className="text-sm leading-6 text-white/62">{huntSpeciesDescription(selectedCard.species, locale)}</p>
 
                   <div className="flex items-center gap-2">
                     <span className="h-px flex-1 bg-white/10" />
@@ -437,10 +443,10 @@ export default function HuntCardsPage() {
                   <div className="relative h-[260px] sm:h-[380px]">
                     <img src={mediaSrc(upgradeView.card.species.imageUrl)} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center", revealImageScale(upgradeView.card.species.slug))} />
                     <div className="absolute left-3 top-3">
-                      <Badge className={rarityBadgeClass[upgradeView.card.rarity]}>{upgradeView.card.rarity}</Badge>
+                      <Badge className={rarityBadgeClass[upgradeView.card.rarity]}>{huntRarityLabel(upgradeView.card.rarity, t)}</Badge>
                     </div>
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/84 via-black/48 to-transparent p-4 pt-20 text-center">
-                      <h2 className="text-2xl font-semibold text-white">{upgradeView.card.species.name}</h2>
+                      <h2 className="text-2xl font-semibold text-white">{huntSpeciesName(upgradeView.card.species, locale)}</h2>
                       <div className="mt-2 flex items-center justify-center gap-2">
                         <Badge className="border-white/10 bg-white/[0.08] px-3 py-1.5 text-xs text-white">
                           <Star className="mr-1 h-3.5 w-3.5 fill-amber-200 text-amber-200" />

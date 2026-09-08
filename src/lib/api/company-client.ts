@@ -946,8 +946,18 @@ export function companyFinance() {
 }
 
 export type CompanyBillingData = {
-  account: { status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED"; trialEndsAt: string | null; currentPeriodStartsAt: string; currentPeriodEndsAt: string };
-  invoice: null | { uuid: string; status: "OPEN" | "PAID" | "WAIVED" | "CANCELED"; periodStartsAt: string; periodEndsAt: string; baseFee: string | number; promoDiscountAmount: string | number; commissionCreditAmount: string | number; amountDue: string | number };
+  account: { status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED"; plan?: "GO" | "PRO" | "MAX"; trialEndsAt: string | null; currentPeriodStartsAt: string; currentPeriodEndsAt: string };
+  invoice: null | {
+    uuid: string;
+    status: "OPEN" | "PAID" | "WAIVED" | "CANCELED";
+    periodStartsAt: string;
+    periodEndsAt: string;
+    baseFee: string | number;
+    promoDiscountPercent: string | number;
+    promoDiscountAmount: string | number;
+    commissionCreditAmount: string | number;
+    amountDue: string | number;
+  };
   access?: { status: "TRIAL" | "ACTIVE" | "GRACE" | "PAST_DUE" | "SUSPENDED"; graceEndsAt: string | null; daysLeft: number | null };
   availableBalance: number;
   activePayment: null | CompanyBillingCheckout;

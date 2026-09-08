@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { adminListHuntCharacters, adminUpdateHuntCharacter, type AdminHuntCharacter } from "@/lib/api/admin-client";
 import type { HuntCardStatKey, HuntElement, HuntRarity } from "@/lib/api/twa-client";
 import { cn } from "@/lib/utils";
+import { AbilityEditor } from "./ability-editor";
 import { ElementBadge, elementMeta, huntInteractiveClass, huntStatEntries, rarityBadgeClass, rarityClass, StatAffinityBar } from "@/app/(twa)/hunt/_components/hunt-ui";
 
 const elements: HuntElement[] = ["FLAME", "WATER", "NATURE", "WIND", "MUSIC", "LIGHT", "SHADOW"];
@@ -39,8 +40,9 @@ const elementOptions: ElementFilter[] = ["all", ...elements];
 
 function mediaSrc(url?: string | null) {
   if (!url) return "/hunt-assets/cards/compass-light.webp";
-  if (url.startsWith("/hunt/cards/")) return url.replace("/hunt/cards/", "/hunt-assets/cards/");
-  return url;
+  const [path] = url.split("?");
+  if (path.startsWith("/hunt/cards/")) return path.replace("/hunt/cards/", "/hunt-assets/cards/");
+  return path;
 }
 
 function normalizeCharacter(character: AdminHuntCharacter): EditableCharacter {
@@ -85,6 +87,8 @@ export default function AdminHuntCharactersPage() {
   const [savingUuid, setSavingUuid] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [dialogTab, setDialogTab] = useState<"character" | "abilities">("abilities");
+  const [abilitiesDirty, setAbilitiesDirty] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -135,6 +139,9 @@ export default function AdminHuntCharactersPage() {
   }
 
   function closeDialog() {
+    if (abilitiesDirty && !window.confirm("Изменения способностей не сохранены. Закрыть?")) return;
+    setAbilitiesDirty(false);
+    setDialogTab("abilities");
     setSelectedUuid(null);
     setEditing(false);
   }
@@ -304,14 +311,21 @@ export default function AdminHuntCharactersPage() {
       )}
 
       <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto border-white/10 bg-slate-950 p-4 text-white">
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto border-white/10 bg-[#111519] p-4 text-white">
           {selected && draft && (
             <>
               <DialogHeader>
                 <DialogTitle className="min-w-0 truncate text-2xl">{draft.name}</DialogTitle>
               </DialogHeader>
+              <div role="tablist" aria-label="Настройки персонажа" className="flex gap-4 border-b border-white/10 pb-2 text-sm">
+                <button role="tab" aria-selected={dialogTab === "abilities"} className={dialogTab === "abilities" ? "text-cyan-200" : "text-white/60"} onClick={() => setDialogTab("abilities")}>Способности</button>
+                <button role="tab" aria-selected={dialogTab === "character"} className={dialogTab === "character" ? "text-cyan-200" : "text-white/60"} onClick={() => setDialogTab("character")}>Персонаж</button>
+              </div>
+              <div hidden={dialogTab !== "abilities"}>
+                <AbilityEditor key={draft.uuid} speciesId={draft.uuid} onDirty={setAbilitiesDirty} />
+              </div>
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(260px,360px)_minmax(0,1fr)]">
+              <div className={cn("gap-4 lg:grid-cols-[minmax(260px,360px)_minmax(0,1fr)]", dialogTab === "character" ? "grid" : "hidden")}>
                 <div className={cn("overflow-hidden rounded-[28px] border bg-[radial-gradient(circle_at_50%_46%,rgba(103,232,249,0.18),rgba(2,6,12,0.72)_58%,rgba(2,6,12,0.95))]", rarityClass[draft.baseRarity])}>
                   <div className="relative h-[min(48vh,380px)] min-h-[280px]">
                     <img src={mediaSrc(draft.imageUrl)} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center", revealImageScale(draft.slug))} />

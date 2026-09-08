@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Sparkles, Trophy, Users } from "lucide-react";
+import { Boxes, LayoutDashboard, Sparkles, Trophy, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/admin/hunt", label: "Дашборд", icon: LayoutDashboard },
   { href: "/admin/hunt/characters", label: "Персонажи", icon: Sparkles },
+  { href: "/admin/hunt/boxes", label: "Коробки", icon: Boxes },
   { href: "/admin/hunt/players", label: "Игроки", icon: Users },
   { href: "/admin/hunt/tournament", label: "Турнир", icon: Trophy },
 ];

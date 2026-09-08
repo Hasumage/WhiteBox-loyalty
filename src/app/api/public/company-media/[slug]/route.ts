@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { CompanyMediaKind } from "@prisma/client";
+import { CompanyBillingPlan, CompanyMediaKind } from "@prisma/client";
+import { companyBillingFeatures } from "@/lib/company-billing-plans";
 import { companyMediaUrl } from "@/lib/company-media-storage";
 import { prisma } from "@/lib/prisma";
 
@@ -60,18 +61,23 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         take: 5,
       },
+      billingAccount: {
+        select: { plan: true },
+      },
     },
   });
   if (!company) return NextResponse.json({ message: "Company not found" }, { status: 404 });
   const logo = company.mediaAssets.find((asset) => asset.kind === CompanyMediaKind.LOGO);
   const hero = company.mediaAssets.find((asset) => asset.kind === CompanyMediaKind.HERO);
+  const plan = company.billingAccount?.plan ?? CompanyBillingPlan.GO;
+  const showSpecialOffers = companyBillingFeatures(plan).canManageSpecialOffers;
   return NextResponse.json({
     media: {
       logo: logo ? serializeAsset(logo) : null,
       hero: hero ? serializeAsset(hero) : null,
       gallery: company.mediaAssets.filter((asset) => asset.kind === CompanyMediaKind.GALLERY).slice(0, 10).map(serializeAsset),
     },
-    offers: company.specialOffers.map(serializeOffer),
+    offers: showSpecialOffers ? company.specialOffers.map(serializeOffer) : [],
     socialLinks: company.socialLinks.map(serializeSocialLink),
   });
 }

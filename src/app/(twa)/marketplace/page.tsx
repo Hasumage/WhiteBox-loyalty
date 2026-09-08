@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowLeft, ChevronRight, CircleDollarSign, Loader2, SlidersHorizontal, X } from "lucide-react";
@@ -22,6 +22,7 @@ import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { getCachedTwaMarketplace, getTwaMarketplace, type TwaMarketplace, type TwaSubscriptionPlan } from "@/lib/api/twa-client";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { YandexRtbAd } from "@/components/ads/YandexRtbAd";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { categoryName } from "@/lib/i18n/categories";
@@ -29,6 +30,10 @@ import { formatPlanPrice as formatLocalizedPlanPrice } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/format";
 
 const POPULAR_CATEGORY_SLUGS = ["coffee", "books", "auto", "barber", "beauty", "food", "fitness", "retail"];
+const MARKETPLACE_FEED_AD_BLOCK_ID =
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_MARKETPLACE_FEED_BLOCK_ID ||
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_APP_FEED_BLOCK_ID ||
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_HUNT_FEED_BLOCK_ID;
 
 function formatPlanPrice(plan: TwaSubscriptionPlan, t: TranslateFn) {
   return formatLocalizedPlanPrice(plan.price, plan.renewalUnit, t);
@@ -268,61 +273,68 @@ function MarketplaceEnabledPage() {
       <ul className="space-y-2">
         {visibleSubscriptions.map((plan, index) => {
           const category = plan.category;
+          const showAdAfter = index === 3 || (index > 3 && (index - 3) % 7 === 0);
           return (
-            <motion.li
-              key={plan.uuid}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(index * 0.04, 0.24) }}
-            >
-              <Link href={`/marketplace/${plan.uuid}`} className="group block">
-                <Card className="glass border-white/10 transition-all active:scale-[0.98] hover:border-white/20">
-                  <CardContent className="flex items-start gap-3 px-3 py-2.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20">
-                      {category ? (
-                        <CategoryIcon iconName={category.icon ?? "Circle"} className="h-5 w-5 text-primary" />
-                      ) : (
-                        <CircleDollarSign className="h-5 w-5 text-primary" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">{plan.name}</p>
-                      <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
-                        {plan.description}
-                      </p>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium text-primary">
-                          {formatPlanPrice(plan, t)}
-                        </span>
-                        {category && (
-                          <Badge variant="secondary" className="inline-flex items-center gap-1 text-[10px] font-normal">
-                            <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
-                            {categoryName(category, t)}
-                          </Badge>
+            <Fragment key={plan.uuid}>
+              <motion.li
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(index * 0.04, 0.24) }}
+              >
+                <Link href={`/marketplace/${plan.uuid}`} className="group block">
+                  <Card className="glass border-white/10 transition-all active:scale-[0.98] hover:border-white/20">
+                    <CardContent className="flex items-start gap-3 px-3 py-2.5">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20">
+                        {category ? (
+                          <CategoryIcon iconName={category.icon ?? "Circle"} className="h-5 w-5 text-primary" />
+                        ) : (
+                          <CircleDollarSign className="h-5 w-5 text-primary" />
                         )}
-                        {plan.company && (
-                          <Badge variant="outline" className="text-[10px] font-normal">
-                            {plan.company.name}
-                          </Badge>
-                        )}
-                        {plan.type === "bundle" && plan.partners && (
-                          <Badge variant="outline" className="max-w-full text-[10px] font-normal">
-                            <span className="truncate">{plan.partners}</span>
-                          </Badge>
-                        )}
-                        {plan.isOwned && <Badge className="text-[10px] font-normal">{t("client.common.active")}</Badge>}
                       </div>
-                    </div>
-                    <span
-                      aria-hidden="true"
-                      className="flex h-10 w-10 shrink-0 self-center items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-muted-foreground transition-colors group-hover:text-foreground"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </span>
-                  </CardContent>
-                </Card>
-              </Link>
-            </motion.li>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold">{plan.name}</p>
+                        <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
+                          {plan.description}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-primary">
+                            {formatPlanPrice(plan, t)}
+                          </span>
+                          {category && (
+                            <Badge variant="secondary" className="inline-flex items-center gap-1 text-[10px] font-normal">
+                              <CategoryIcon iconName={category.icon ?? "Circle"} className="h-3 w-3" />
+                              {categoryName(category, t)}
+                            </Badge>
+                          )}
+                          {plan.company && (
+                            <Badge variant="outline" className="text-[10px] font-normal">
+                              {plan.company.name}
+                            </Badge>
+                          )}
+                          {plan.type === "bundle" && plan.partners && (
+                            <Badge variant="outline" className="max-w-full text-[10px] font-normal">
+                              <span className="truncate">{plan.partners}</span>
+                            </Badge>
+                          )}
+                          {plan.isOwned && <Badge className="text-[10px] font-normal">{t("client.common.active")}</Badge>}
+                        </div>
+                      </div>
+                      <span
+                        aria-hidden="true"
+                        className="flex h-10 w-10 shrink-0 self-center items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-muted-foreground transition-colors group-hover:text-foreground"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </span>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </motion.li>
+              {showAdAfter && (
+                <li>
+                  <YandexRtbAd blockId={MARKETPLACE_FEED_AD_BLOCK_ID} pageNumber={Math.floor(index / 7) + 1} placement="marketplace-feed" />
+                </li>
+              )}
+            </Fragment>
           );
         })}
       </ul>

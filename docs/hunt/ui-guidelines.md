@@ -2,6 +2,10 @@
 
 ## Design Goal
 
+Tactical arena: one portrait layout, maximum 430px even on desktop; bounded pan/pinch/zoom, no desktop sidebar. Ability descriptions use a 400ms hold and an animated panel above the bottom controls, never a modal. Character info is available by tap on the info icon or a 450ms map-character hold; show HP, shield and effect duration without opening the journal. Resolution camera follows participants but yields to manual gestures. Crit impacts are distinct and displacement follows the hit. Match results contain compact per-character damage/healing/absorption/control tables. Previews remain estimates, never expose future rolls. Park planters use the transparent `park-cover.png` sprite. [Implementation details](./tactical-arena.md).
+
+Character administration opens on the three ability slots. Use labelled numeric fields, dark native options, bounded values, draft reset, explicit save, revision history and a saved-content play preview. Do not save on every keystroke. [All fields and semantics](./ability-framework.md).
+
 NH should feel like Nearloy first and a game layer second. The game adds delight, collection and progression, but it should still live naturally inside the mobile client.
 
 Keep:

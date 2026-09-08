@@ -59,6 +59,7 @@ async function getPaidCompanyCount() {
         isActive: true,
         billingAccount: {
           is: {
+            plan: "PRO",
             status: "ACTIVE",
             currentPeriodEndsAt: { gt: now },
           },

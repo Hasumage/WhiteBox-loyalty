@@ -245,6 +245,12 @@ enum CompanyBillingStatus {
   SUSPENDED
 }
 
+enum CompanyBillingPlan {
+  GO
+  PRO
+  MAX
+}
+
 enum CompanyBillingInvoiceStatus {
   OPEN
   PAID
@@ -359,12 +365,19 @@ enum HuntBoxStatus {
 
 enum HuntBoxType {
   DAILY
+  PROMO
   POST
   TRENDING
   CATEGORY
   DISTRICT
+  ELEMENTAL
   FOUNDER
   PARTNER
+}
+
+enum HuntBoxRewardKind {
+  CARD
+  PROFILE_STATUS
 }
 
 enum HuntCardRarity {
@@ -494,7 +507,9 @@ model ProfileStatus {
   updatedAt   DateTime            @updatedAt
 
   unlocks         UserProfileStatusUnlock[]
-  selectedByUsers User[]                    @relation("SelectedProfileStatus")
+  selectedByUsers User[]                       @relation("SelectedProfileStatus")
+  huntBoxChances  HuntBoxProfileStatusChance[]
+  huntBoxRewards  HuntBoxReward[]
 
   @@index([rarity, isActive])
 }
@@ -508,9 +523,10 @@ model UserProfileStatusUnlock {
   unlockedAt   DateTime  @default(now())
   seenAt       DateTime?
 
-  user       User          @relation("UserProfileStatusUnlocks", fields: [userId], references: [id], onDelete: Cascade)
-  status     ProfileStatus @relation(fields: [statusId], references: [id], onDelete: Cascade)
-  unlockedBy User?         @relation("ProfileStatusUnlockedBy", fields: [unlockedById], references: [id], onDelete: SetNull)
+  user           User            @relation("UserProfileStatusUnlocks", fields: [userId], references: [id], onDelete: Cascade)
+  status         ProfileStatus   @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  unlockedBy     User?           @relation("ProfileStatusUnlockedBy", fields: [unlockedById], references: [id], onDelete: SetNull)
+  huntBoxRewards HuntBoxReward[]
 
   @@unique([userId, statusId])
   @@index([userId, seenAt])
@@ -662,6 +678,7 @@ model CompanyBillingAccount {
   id                     String               @id @default(cuid())
   companyId              Int                  @unique
   status                 CompanyBillingStatus @default(TRIAL)
+  plan                   CompanyBillingPlan   @default(PRO)
   trialStartedAt         DateTime?
   trialEndsAt            DateTime?
   currentPeriodStartsAt  DateTime
@@ -1904,17 +1921,17 @@ model HuntPostReaction {
 }
 
 model HuntPostReport {
-  id          String               @id @default(cuid())
-  uuid        String               @unique @default(uuid())
+  id          String           @id @default(cuid())
+  uuid        String           @unique @default(uuid())
   postId      String
   reporterId  Int
   reason      HuntReportReason
-  details     String?              @db.Text
-  status      HuntReportStatus     @default(OPEN)
+  details     String?          @db.Text
+  status      HuntReportStatus @default(OPEN)
   moderatorId Int?
   resolvedAt  DateTime?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   post      HuntPost @relation(fields: [postId], references: [id], onDelete: Cascade)
   reporter  User     @relation("HuntPostReporter", fields: [reporterId], references: [id], onDelete: Cascade)
@@ -1947,33 +1964,168 @@ model HuntCurrencyLedger {
 }
 
 model HuntCreatureSpecies {
-  id           String         @id @default(cuid())
-  slug         String         @unique
-  name         String
-  description  String         @db.Text
-  element      HuntElement
-  baseRarity   HuntCardRarity @default(COMMON)
-  categoryId   Int?
-  baseStats    Json
-  traitPool    Json
-  visualPrompt String         @db.Text
-  imageUrl     String?
-  isActive     Boolean        @default(true)
-  sortOrder    Int            @default(0)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id            String         @id @default(cuid())
+  slug          String         @unique
+  name          String
+  description   String         @db.Text
+  nameRu        String?
+  nameEn        String?
+  descriptionRu String?        @db.Text
+  descriptionEn String?        @db.Text
+  element       HuntElement
+  baseRarity    HuntCardRarity @default(COMMON)
+  categoryId    Int?
+  baseStats     Json
+  traitPool     Json
+  visualPrompt  String         @db.Text
+  imageUrl      String?
+  isActive      Boolean        @default(true)
+  sortOrder     Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  category Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  category Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   cards    HuntCard[]
+  boxRules HuntBoxSpeciesRule[]
+  abilities HuntSpeciesAbility[]
 
   @@index([element, baseRarity, isActive])
   @@index([categoryId])
+}
+
+model HuntAbility {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  nameRu        String
+  nameEn        String
+  descriptionRu String   @db.Text
+  descriptionEn String   @db.Text
+  icon          String   @default("sparkles")
+  isActive      Boolean  @default(true)
+  schemaVersion Int      @default(1)
+  revision      Int      @default(1)
+  config        Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  assignments   HuntSpeciesAbility[]
+  revisions     HuntAbilityRevision[]
+}
+
+model HuntSpeciesAbility {
+  speciesId String
+  abilityId String
+  slot      Int
+  species   HuntCreatureSpecies @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+  ability   HuntAbility @relation(fields: [abilityId], references: [id], onDelete: Restrict)
+
+  @@id([speciesId, slot])
+  @@unique([speciesId, abilityId])
+  @@index([abilityId])
+}
+
+model HuntAbilityRevision {
+  id          String @id @default(cuid())
+  abilityId   String
+  revision    Int
+  snapshot    Json
+  actorUserId Int?
+  createdAt   DateTime @default(now())
+  ability     HuntAbility @relation(fields: [abilityId], references: [id], onDelete: Cascade)
+
+  @@unique([abilityId, revision])
+}
+
+model HuntBoxConfig {
+  id                 String          @id @default(cuid())
+  slug               String          @unique
+  type               HuntBoxType
+  title              String
+  description        String          @db.Text
+  imageUrl           String?
+  cost               Int             @default(0)
+  minRarity          HuntCardRarity  @default(COMMON)
+  maxRarity          HuntCardRarity?
+  itemCountMin       Int             @default(1)
+  itemCountMax       Int             @default(1)
+  dailyLimit         Int?
+  statusDropChanceBp Int             @default(0)
+  guaranteedRarity   HuntCardRarity?
+  guaranteedCount    Int             @default(0)
+  rotationGroup      String?
+  rotationIndex      Int?
+  rotationElement    HuntElement?
+  rotationStartsAt   DateTime?
+  isActive           Boolean         @default(true)
+  isPurchasable      Boolean         @default(true)
+  sortOrder          Int             @default(0)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  boxes         HuntBox[]
+  rarityChances HuntBoxRarityChance[]
+  speciesRules  HuntBoxSpeciesRule[]
+  statusChances HuntBoxProfileStatusChance[]
+
+  @@index([type, isActive, sortOrder])
+  @@index([rotationGroup, rotationIndex])
+  @@index([isActive, sortOrder])
+}
+
+model HuntBoxRarityChance {
+  id          String         @id @default(cuid())
+  boxConfigId String
+  rarity      HuntCardRarity
+  weight      Int            @default(0)
+  isEnabled   Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  boxConfig HuntBoxConfig @relation(fields: [boxConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([boxConfigId, rarity])
+  @@index([rarity, isEnabled])
+}
+
+model HuntBoxSpeciesRule {
+  id          String   @id @default(cuid())
+  boxConfigId String
+  speciesId   String
+  weight      Int      @default(100)
+  isEnabled   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  boxConfig HuntBoxConfig       @relation(fields: [boxConfigId], references: [id], onDelete: Cascade)
+  species   HuntCreatureSpecies @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+
+  @@unique([boxConfigId, speciesId])
+  @@index([speciesId, isEnabled])
+}
+
+model HuntBoxProfileStatusChance {
+  id           String              @id @default(cuid())
+  boxConfigId  String
+  statusId     String
+  rarity       ProfileStatusRarity
+  weight       Int                 @default(100)
+  dropChanceBp Int                 @default(0)
+  isEnabled    Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  boxConfig HuntBoxConfig @relation(fields: [boxConfigId], references: [id], onDelete: Cascade)
+  status    ProfileStatus @relation(fields: [statusId], references: [id], onDelete: Cascade)
+
+  @@unique([boxConfigId, statusId])
+  @@index([statusId, isEnabled])
+  @@index([rarity, isEnabled])
 }
 
 model HuntBox {
   id            String         @id @default(cuid())
   uuid          String         @unique @default(uuid())
   userId        Int
+  configId      String?
   type          HuntBoxType
   rarity        HuntCardRarity @default(COMMON)
   status        HuntBoxStatus  @default(GRANTED)
@@ -1985,13 +2137,38 @@ model HuntBox {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourcePost HuntPost? @relation("HuntBoxSourcePost", fields: [sourcePostId], references: [id], onDelete: SetNull)
-  rewardCard HuntCard? @relation("HuntBoxRewardCard", fields: [rewardCardId], references: [id], onDelete: SetNull)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  config     HuntBoxConfig?  @relation(fields: [configId], references: [id], onDelete: SetNull)
+  sourcePost HuntPost?       @relation("HuntBoxSourcePost", fields: [sourcePostId], references: [id], onDelete: SetNull)
+  rewardCard HuntCard?       @relation("HuntBoxRewardCard", fields: [rewardCardId], references: [id], onDelete: SetNull)
+  rewards    HuntBoxReward[]
 
   @@index([userId, status, createdAt])
+  @@index([configId])
   @@index([type, rarity])
   @@index([sourcePostId])
+}
+
+model HuntBoxReward {
+  id                    String            @id @default(cuid())
+  boxId                 String
+  kind                  HuntBoxRewardKind
+  rarity                String
+  position              Int               @default(0)
+  cardId                String?
+  profileStatusId       String?
+  profileStatusUnlockId String?
+  createdAt             DateTime          @default(now())
+
+  box                 HuntBox                  @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  card                HuntCard?                @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  profileStatus       ProfileStatus?           @relation(fields: [profileStatusId], references: [id], onDelete: SetNull)
+  profileStatusUnlock UserProfileStatusUnlock? @relation(fields: [profileStatusUnlockId], references: [id], onDelete: SetNull)
+
+  @@index([boxId, position])
+  @@index([kind, createdAt])
+  @@index([cardId])
+  @@index([profileStatusId])
 }
 
 model HuntCard {
@@ -2011,9 +2188,10 @@ model HuntCard {
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
 
-  owner   User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  species HuntCreatureSpecies @relation(fields: [speciesId], references: [id], onDelete: Restrict)
-  upgrades HuntCardUpgrade[]
+  owner      User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  species    HuntCreatureSpecies @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+  upgrades   HuntCardUpgrade[]
+  boxRewards HuntBoxReward[]
 
   @@index([ownerId, rarity, createdAt])
   @@index([speciesId])
@@ -2021,22 +2199,22 @@ model HuntCard {
 }
 
 model HuntCardUpgrade {
-  id             String                @id @default(cuid())
-  uuid           String                @unique @default(uuid())
-  userId         Int
-  cardId         String
-  levelFrom      Int
-  levelTo        Int
-  cost           Int
-  statsBefore    Json
-  baseDeltas     Json
-  statsAfterBase Json
-  bonusStat      String?
-  bonusDelta     Int?
+  id              String                @id @default(cuid())
+  uuid            String                @unique @default(uuid())
+  userId          Int
+  cardId          String
+  levelFrom       Int
+  levelTo         Int
+  cost            Int
+  statsBefore     Json
+  baseDeltas      Json
+  statsAfterBase  Json
+  bonusStat       String?
+  bonusDelta      Int?
   statsAfterBonus Json?
-  status         HuntCardUpgradeStatus @default(PENDING_BONUS)
-  createdAt      DateTime              @default(now())
-  bonusAppliedAt DateTime?
+  status          HuntCardUpgradeStatus @default(PENDING_BONUS)
+  createdAt       DateTime              @default(now())
+  bonusAppliedAt  DateTime?
 
   user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   card HuntCard @relation(fields: [cardId], references: [id], onDelete: Cascade)

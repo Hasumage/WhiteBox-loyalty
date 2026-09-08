@@ -1186,7 +1186,7 @@ describe("CompanyService", () => {
       paidAmount: 0,
     };
     prisma.companyBillingAccount.findUnique.mockResolvedValue(account);
-    prisma.companyBillingAccount.update.mockResolvedValue({ ...account, status: "PAST_DUE" });
+    prisma.companyBillingAccount.update.mockResolvedValue({ ...account, status: "ACTIVE", plan: "GO" });
     prisma.companyBillingInvoice.findFirst.mockResolvedValue(overdueInvoice);
     prisma.companyBillingInvoice.findMany.mockResolvedValue([overdueInvoice]);
     prisma.userSubscription.findMany.mockResolvedValue([]);
@@ -1195,8 +1195,10 @@ describe("CompanyService", () => {
 
     expect(result.invoice).toEqual(overdueInvoice);
     expect(prisma.companyBillingAccount.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { companyId: 7 }, data: { status: "PAST_DUE" } }),
+      expect.objectContaining({ where: { companyId: 7 }, data: { status: "ACTIVE", plan: "GO" } }),
     );
+    expect(prisma.companyBillingInvoice.upsert).not.toHaveBeenCalled();
+    expect(prisma.companyBillingInvoice.update).not.toHaveBeenCalled();
   });
 
   it("keeps an open company billing invoice in the 3 day grace window", async () => {
@@ -1230,12 +1232,10 @@ describe("CompanyService", () => {
 
     expect(result.invoice).toEqual(graceInvoice);
     expect(result.access).toEqual(expect.objectContaining({ status: "GRACE", daysLeft: 2 }));
-    expect(prisma.companyBillingAccount.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: { status: "PAST_DUE" } }),
-    );
+    expect(prisma.companyBillingAccount.update).not.toHaveBeenCalled();
   });
 
-  it("blocks company workspace actions after the 3 day grace window but keeps billing payable", async () => {
+  it("keeps the workspace accessible on GO after the grace window without forgiving the debt", async () => {
     const now = new Date();
     const account = {
       companyId: 7,
@@ -1258,16 +1258,49 @@ describe("CompanyService", () => {
       paidAmount: 0,
     };
     prisma.companyBillingAccount.findUnique.mockResolvedValue(account);
-    prisma.companyBillingAccount.update.mockResolvedValue({ ...account, status: "PAST_DUE" });
+    prisma.companyBillingAccount.update.mockResolvedValue({ ...account, status: "ACTIVE", plan: "GO" });
     prisma.companyBillingInvoice.findFirst.mockResolvedValue(overdueInvoice);
     prisma.companyBillingInvoice.findMany.mockResolvedValue([overdueInvoice]);
     prisma.userSubscription.findMany.mockResolvedValue([]);
 
-    await expect(service.profile(50)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.profile(50)).resolves.toMatchObject({ company: { slug: "coffee" } });
 
     const billing = await service.billing(50);
-    expect(billing.access).toEqual(expect.objectContaining({ status: "PAST_DUE", daysLeft: 0 }));
+    expect(billing.access).toEqual(expect.objectContaining({ status: "ACTIVE", daysLeft: 0 }));
     expect(billing.invoice).toEqual(overdueInvoice);
+    expect(prisma.companyBillingAccount.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { companyId: 7 }, data: { status: "ACTIVE", plan: "GO" } }),
+    );
+    expect(prisma.companyBillingInvoice.update).not.toHaveBeenCalled();
+    expect(prisma.companyBillingInvoice.upsert).not.toHaveBeenCalled();
+  });
+
+  it("enforces the GO location limit after downgrade while keeping the workspace accessible", async () => {
+    const now = new Date();
+    prisma.companyBillingAccount.findUnique.mockResolvedValue({
+      companyId: 7,
+      status: "ACTIVE",
+      plan: "GO",
+      trialEndsAt: new Date(now.getTime() - DAY_MS * 40),
+      currentPeriodStartsAt: new Date(now.getTime() - DAY_MS * 40),
+      currentPeriodEndsAt: new Date(now.getTime() - DAY_MS * 10),
+      appliedPromoCode: null,
+    });
+    prisma.companyBillingInvoice.findFirst.mockResolvedValue({
+      uuid: "unpaid-pro-invoice",
+      status: "OPEN",
+      periodEndsAt: new Date(now.getTime() - DAY_MS * 10),
+      amountDue: 4990,
+      paidAmount: 0,
+    });
+    prisma.companyLocation.count.mockResolvedValue(2);
+
+    await expect(service.profile(50)).resolves.toMatchObject({ company: { slug: "coffee" } });
+    await expect(service.createLocation(50, { address: "Third address" })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.companyLocation.count).toHaveBeenCalledWith({
+      where: { companyId: 7, isActive: true },
+    });
+    expect(prisma.companyLocation.create).not.toHaveBeenCalled();
   });
 
   it("creates a monthly access invoice from the base fee without consuming sales commission", async () => {

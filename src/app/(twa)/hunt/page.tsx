@@ -24,7 +24,9 @@ const actionCards = [
 
 const HUNT_FEED_PAGE_SIZE = 8;
 const HUNT_FEED_REFRESH_MS = 15000;
-const HUNT_FEED_AD_BLOCK_ID = process.env.NEXT_PUBLIC_YANDEX_RSYA_HUNT_FEED_BLOCK_ID;
+const HUNT_FEED_AD_BLOCK_ID =
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_HUNT_FEED_BLOCK_ID ||
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_APP_FEED_BLOCK_ID;
 
 const reportReasons = [
   { value: "SPAM", labelKey: "client.hunt.report.reasonSpam" },

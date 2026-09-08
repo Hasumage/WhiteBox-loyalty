@@ -66,9 +66,10 @@ export function BottomNav() {
         return item;
       })
     : navItems;
-  const hideNav = isSubscriptionDetail || isFullMap || (pathname.startsWith("/wallet/") && !hasSession);
+  const hideNav = isSubscriptionDetail || isFullMap || pathname === "/hunt/battle/arena" || (pathname.startsWith("/wallet/") && !hasSession);
   const hideFab =
     pathname.startsWith("/wallet/") ||
+    isHuntSurface ||
     pathname.startsWith("/hunt/create") ||
     pathname === "/scan" ||
     pathname === "/onboarding" ||

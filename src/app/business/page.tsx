@@ -2,7 +2,25 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, BarChart3, Building2, CircleDollarSign, Gift, Handshake, MapPinned, QrCode, ShieldCheck, Sparkles, Store, TicketCheck, Trophy, Users } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  Bot,
+  Building2,
+  CircleDollarSign,
+  Crown,
+  Gift,
+  Handshake,
+  MapPinned,
+  Megaphone,
+  QrCode,
+  ShieldCheck,
+  Sparkles,
+  Store,
+  TicketCheck,
+  Trophy,
+  Users,
+} from "lucide-react";
 import { LandingLeadForm } from "@/components/landing/LandingLeadForm";
 import { MarketingFooter } from "@/components/landing/MarketingFooter";
 import { MarketingHeader } from "@/components/landing/MarketingHeader";
@@ -18,6 +36,41 @@ type IconItem = {
   title: string;
   text: string;
 };
+
+const COMPANY_PRO_MONTHLY_PRICE_RUB = 4990;
+const COMPANY_GO_MONTHLY_PRICE_RUB = 0;
+const COMPANY_MAX_PRICE_LABEL = "По запросу";
+
+function formatRubPrice(value: number) {
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
+}
+
+type CompanyPlanPrice =
+  | {
+      kind: "monthly";
+      rub: number;
+    }
+  | {
+      kind: "custom";
+      label: string;
+    };
+
+type CompanyPlan = {
+  name: string;
+  label: string;
+  price: CompanyPlanPrice;
+  title: string;
+  text: string;
+  icon: LucideIcon;
+  tone: string;
+  glow: string;
+  points: Array<{ text: string; icon: LucideIcon }>;
+  featured?: boolean;
+};
+
+function formatPlanPrice(price: CompanyPlanPrice) {
+  return price.kind === "monthly" ? `${formatRubPrice(price.rub)} ₽ / месяц` : price.label;
+}
 
 const businessValue: IconItem[] = [
   { icon: TicketCheck, title: "Подписки как продукт", text: "Создавайте тарифы, услуги и лимиты: каждый день, каждую неделю, раз за период или без лимита." },
@@ -39,6 +92,55 @@ const cases = [
   { title: "Онлайн-сервис", text: "Работа без физической точки, подписки и доставка преимуществ." },
 ];
 
+const companyPlans = [
+  {
+    name: "GO",
+    label: "Бесплатно",
+    price: { kind: "monthly", rub: COMPANY_GO_MONTHLY_PRICE_RUB },
+    title: "Лёгкий старт",
+    text: "Базовая бесплатная подписка, то что нужно для ознакомления!",
+    icon: Store,
+    tone: "border-cyan-200/18 bg-cyan-200/8 text-cyan-50",
+    glow: "from-cyan-300/24",
+    points: [
+      { text: "5 сотрудников и две точки на карте", icon: MapPinned },
+      { text: "Программа лояльности", icon: TicketCheck },
+      { text: "Личная индивидуальная страница компании", icon: Store },
+    ],
+  },
+  {
+    name: "PRO",
+    label: "Основной тариф",
+    price: { kind: "monthly", rub: COMPANY_PRO_MONTHLY_PRICE_RUB },
+    title: "Максимальная лояльность",
+    text: "Всё, что входит в подписку GO, плюс расширенные возможности для более активного использования сервиса.",
+    icon: Sparkles,
+    tone: "border-cyan-100/35 bg-cyan-100/14 text-white",
+    glow: "from-cyan-200/34",
+    points: [
+      { text: "Расширенная бонусная система", icon: BarChart3 },
+      { text: "Акции, промокоды и AI-ассистент", icon: Bot },
+      { text: "Участие в розыгрыше для партнеров", icon: Trophy },
+    ],
+    featured: true,
+  },
+  {
+    name: "MAX",
+    label: "Индивидуально",
+    price: { kind: "custom", label: COMPANY_MAX_PRICE_LABEL },
+    title: "Под крупную сеть",
+    text: "Персональный формат для компаний, которым нужны отдельные условия подключения.",
+    icon: Crown,
+    tone: "border-violet-200/22 bg-violet-300/10 text-violet-50",
+    glow: "from-violet-300/26",
+    points: [
+      { text: "Индивидуальные лимиты", icon: Crown },
+      { text: "Отдельные условия запуска", icon: Handshake },
+      { text: "Приоритетное сопровождение", icon: ShieldCheck },
+    ],
+  },
+] satisfies CompanyPlan[];
+
 function GlowCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] shadow-[0_0_44px_rgba(255,255,255,0.055)] backdrop-blur ${className}`}>
@@ -57,6 +159,89 @@ function ImagePanel({ src, title, text }: { src: string; title: string; text: st
         <p className="mt-2 text-sm leading-6 text-white/58">{text}</p>
       </div>
     </GlowCard>
+  );
+}
+
+function CompanyPlansSection() {
+  return (
+    <section className="relative z-10 px-4 pb-14 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <GlowCard className="p-4 sm:p-6">
+          <div className="mb-5 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.26em] text-cyan-100/64">Тарифы платформы</p>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">GO для старта, PRO для роста</h2>
+              <p className="mt-2 text-sm leading-6 text-white/56">
+                Компания не блокируется без оплаты: бесплатный GO оставляет рабочий кабинет, а PRO открывает полную версию без рекламы.
+              </p>
+            </div>
+            <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-cyan-100/18 bg-cyan-100/10 px-4 py-2.5 text-sm font-semibold text-cyan-50">
+              <Megaphone className="h-4 w-4" />
+              GO монетизируется рекламой
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[0.95fr_1.1fr_0.95fr]">
+            {companyPlans.map((plan, index) => (
+              <div
+                key={plan.name}
+                className={`relative flex min-h-[430px] flex-col overflow-hidden rounded-[1.5rem] border p-4 sm:p-5 ${
+                  plan.featured
+                    ? "border-cyan-100/38 bg-cyan-100/[0.095] shadow-[0_0_70px_rgba(103,232,249,0.12)]"
+                    : "border-white/10 bg-black/20"
+                }`}
+              >
+                <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${plan.glow} via-transparent to-transparent`} />
+                <div className="relative flex h-full flex-col">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold ${plan.tone}`}>
+                      <plan.icon className="h-4 w-4" />
+                      Nearloy {plan.name}
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/54">
+                      {plan.label}
+                    </span>
+                  </div>
+
+                  <div className="mt-6">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${plan.tone}`}>
+                        <span className="text-sm font-semibold">0{index + 1}</span>
+                      </div>
+                      <h3 className="text-xl font-semibold sm:text-2xl">{plan.title}</h3>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-white/58">{plan.text}</p>
+                  </div>
+
+                  <div className="mt-5 grid gap-2.5">
+                    {plan.points.map((point) => (
+                      <div key={point.text} className="flex min-h-12 items-center gap-3 rounded-2xl border border-white/10 bg-black/28 px-3 py-2.5 text-sm text-white/72">
+                        <point.icon className="h-4 w-4 shrink-0 text-cyan-100" />
+                        <span>{point.text}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    className={`mt-auto rounded-3xl border p-4 ${
+                      plan.featured ? "border-cyan-100/20 bg-cyan-100/10" : "border-white/10 bg-black/24"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-100/64">Стоимость</p>
+                        <p className="mt-1 text-2xl font-semibold">{formatPlanPrice(plan.price)}</p>
+                      </div>
+                      <CircleDollarSign className="h-7 w-7 text-cyan-100" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </GlowCard>
+      </div>
+    </section>
   );
 }
 
@@ -96,6 +281,8 @@ export default function BusinessLandingPage() {
           text="Подписки, клиенты, выплаты, текущая и будущая прибыль в одном рабочем пространстве."
         />
       </section>
+
+      <CompanyPlansSection />
 
       <section className="relative z-10 px-4 pb-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">

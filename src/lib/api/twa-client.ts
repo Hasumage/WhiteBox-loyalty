@@ -38,6 +38,7 @@ export type TwaCompany = {
   logoUrl?: string | null;
   isActive: boolean;
   operatesOnline: boolean;
+  billingPlan?: "GO" | "PRO" | "MAX";
   isFavorite: boolean;
   favoritedAt: string | null;
   recommendation?: {
@@ -226,7 +227,7 @@ export type TwaLookupCode = {
 
 export type HuntRarity = "COMMON" | "UNCOMMON" | "RARE" | "EPIC" | "LEGENDARY";
 export type HuntElement = "FLAME" | "WATER" | "NATURE" | "WIND" | "MUSIC" | "LIGHT" | "SHADOW";
-export type HuntBoxType = "DAILY" | "POST" | "TRENDING" | "CATEGORY" | "DISTRICT" | "FOUNDER" | "PARTNER";
+export type HuntBoxType = "DAILY" | "PROMO" | "POST" | "TRENDING" | "CATEGORY" | "DISTRICT" | "ELEMENTAL" | "FOUNDER" | "PARTNER";
 export type HuntCardStatKey = "health" | "attack" | "luck" | "evasion";
 export type HuntReportReason = "SPAM" | "OFFENSIVE" | "FALSE_PLACE" | "DUPLICATE" | "PRIVATE_DATA" | "COPYRIGHT" | "OTHER";
 
@@ -266,6 +267,33 @@ export type HuntBox = {
   createdAt: string;
 };
 
+export type HuntBoxOffer = {
+  uuid: string;
+  slug: string;
+  type: HuntBoxType;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  cost: number;
+  minRarity: HuntRarity;
+  maxRarity: HuntRarity | null;
+  itemCountMin: number;
+  itemCountMax: number;
+  dailyLimit: number | null;
+  statusDropChance: number;
+  guaranteedRarity: HuntRarity | null;
+  guaranteedCount: number;
+  rotationGroup: string | null;
+  rotationIndex: number | null;
+  rotationElement: HuntElement | null;
+  isCurrentRotation: boolean;
+  rotationEndsAt: string | null;
+  isActive: boolean;
+  isPurchasable: boolean;
+  sortOrder: number;
+  rarityChances: Array<{ rarity: HuntRarity; weight: number; chance: number; enabled: boolean }>;
+};
+
 export type HuntCard = {
   uuid: string;
   rarity: HuntRarity;
@@ -280,6 +308,10 @@ export type HuntCard = {
     slug: string;
     name: string;
     description: string;
+    nameRu?: string | null;
+    nameEn?: string | null;
+    descriptionRu?: string | null;
+    descriptionEn?: string | null;
     element: HuntElement;
     baseRarity?: HuntRarity;
     baseStats?: Record<string, number>;
@@ -287,6 +319,16 @@ export type HuntCard = {
     imageUrl?: string | null;
   };
 };
+
+export type HuntBoxReward =
+  | { uuid: string; kind: "CARD"; rarity: HuntRarity | string; position: number; card: HuntCard }
+  | {
+      uuid: string;
+      kind: "PROFILE_STATUS";
+      rarity: ProfileStatusRarity | string;
+      position: number;
+      status: Pick<ProfileStatus, "id" | "slug" | "title" | "description" | "rarity" | "icon">;
+    };
 
 export type HuntCardUpgrade = {
   uuid: string;
@@ -304,6 +346,10 @@ export type HuntCatalogSpecies = {
   slug: string;
   name: string;
   description: string;
+  nameRu?: string | null;
+  nameEn?: string | null;
+  descriptionRu?: string | null;
+  descriptionEn?: string | null;
   element: HuntElement;
   baseRarity: HuntRarity;
   category: ApiCategory | null;
@@ -356,6 +402,7 @@ export type HuntOverview = {
   profile: HuntProfile;
   missions: HuntMission[];
   boxes: HuntBox[];
+  boxOffers?: HuntBoxOffer[];
   cards: HuntCard[];
   recentPosts: Array<{
     uuid: string;
@@ -882,6 +929,20 @@ export function getHuntOverview(force = false) {
   return getJson<HuntOverview>("/hunt/overview", huntOverviewFallback, TWA_CACHE_TTL_MS, force);
 }
 
+export type HuntCollectionMeta = { total: number; filteredTotal: number; page: number; pages: number; speciesCounts: Record<string, number> };
+export async function getHuntCollectionOverview(force = false, params: { page?: number; sort?: string; element?: string; locale?: string; query?: string } = {}): Promise<HuntOverview & { collection: HuntCollectionMeta }> {
+  const search = new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)]));
+  const res = await fetchWithAuthRecovery(`${apiBase()}/hunt/cards/collection?${search}`, {
+    method: "GET",
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Не удалось загрузить полную коллекцию. Попробуйте обновить страницу.");
+  const { cards, ...collection } = (await res.json()) as HuntCollectionMeta & { cards: HuntCard[] };
+  const overview = await getHuntOverview(force);
+  return { ...overview, cards, collection };
+}
+
 export function getHuntFeed(force = false) {
   return getJson<HuntPost[]>("/hunt/feed", [], TWA_CACHE_TTL_MS, force);
 }
@@ -930,7 +991,7 @@ export async function getHuntCardCatalogResult(force = false) {
   } catch (error) {
     return cached.hit
       ? { ok: true as const, data: cached.data }
-      : { ok: false as const, message: error instanceof Error ? error.message : "Failed to load Hunt card catalog." };
+      : { ok: false as const, message: "Не удалось подключиться к API. Проверьте, что backend запущен на localhost:3001." };
   }
 }
 
@@ -1004,8 +1065,8 @@ export async function reportHuntPost(uuid: string, input: { reason: HuntReportRe
   return postJson<{ success: true }>(`/hunt/posts/${uuid}/report`, input, "Failed to report Hunt post");
 }
 
-export async function openHuntBox(boxUuid?: string, boxType?: HuntBoxType) {
-  const result = await postJson<{ box: HuntBox; card: HuntCard }>("/hunt/boxes/open", { boxUuid, boxType }, "Failed to open Hunt box");
+export async function openHuntBox(boxUuid?: string, boxType?: HuntBoxType, boxConfigId?: string) {
+  const result = await postJson<{ box: HuntBox; card: HuntCard; cards?: HuntCard[]; rewards?: HuntBoxReward[] }>("/hunt/boxes/open", { boxUuid, boxType, boxConfigId }, "Failed to open Hunt box");
   if (result.ok) clearTwaCache();
   return result;
 }
