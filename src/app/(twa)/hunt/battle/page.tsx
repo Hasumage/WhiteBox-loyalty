@@ -1,28 +1,27 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Bot, CheckCircle2, Copy, Dices, Gamepad2, KeyRound, Loader2, RefreshCw, Shield, Sparkles, Swords, UserPlus, WalletCards } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight, Copy, Dices, KeyRound, Loader2, Plus, RefreshCw, Shield, UserPlus, WalletCards } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  getCachedHuntOverview,
   createHuntBattleCode,
   findRandomHuntBattle,
-  getHuntCardCatalogResult,
-  getHuntOverview,
+  getCachedHuntOverview,
+  getHuntCollectionOverview,
   type HuntCard,
-  type HuntCatalogSpecies,
   type HuntOverview,
 } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
-import { ElementBadge, huntInteractiveClass, huntStatEntries, mediaSrc, rarityBadgeClass, rarityClass, StatValueBar } from "../_components/hunt-ui";
+import { elementMeta, huntInteractiveClass, huntRarityLabel, huntSpeciesName, mediaSrc, rarityBadgeClass, rarityClass } from "../_components/hunt-ui";
 
-type BattleMode = "idle" | "searching" | "matched" | "code";
+type BattleMode = "random" | "code" | "join";
 
-const opponentNames = ["Nika Pulse", "Alex Route", "Mira Spot", "Leo Signal", "Dima North", "Sasha Ray"];
+const TEAM_SIZE = 3;
+const STORAGE_KEY = "nearloy-hunt-battle-state";
 
 function fill(template: string, values: Record<string, string | number>) {
   return Object.entries(values).reduce((text, [key, value]) => text.replace(`{${key}}`, String(value)), template);
@@ -33,244 +32,280 @@ function buildMatchCode() {
   return `NH-${segment}`;
 }
 
-function cardPower(card: HuntCard) {
-  return huntStatEntries(card.stats).reduce((sum, [, value]) => sum + value, 0) + card.level * 2;
+function saveBattleState(payload: { mode: BattleMode; teamUuids: string[]; leadCardUuid: string; opponentUuid?: string | null; matchCode?: string | null }) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...payload, savedAt: new Date().toISOString() }));
 }
 
-function speciesPower(species: HuntCatalogSpecies) {
-  return huntStatEntries(species.baseStats).reduce((sum, [, value]) => sum + value, 0) + (species.ownedCount > 0 ? 4 : 0);
-}
-
-function PlayerCard({ card }: { card: HuntCard | null }) {
-  const { t } = useI18n("ru");
-  if (!card) {
-    return (
-      <div className="rounded-3xl border border-dashed border-white/14 bg-white/[0.03] p-4 text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-200/16 bg-cyan-200/8 text-cyan-100">
-          <WalletCards className="h-6 w-6" />
-        </div>
-        <p className="mt-3 text-sm font-semibold">{t("client.hunt.battle.noCard")}</p>
-        <p className="mt-1 text-xs leading-5 text-white/48">{t("client.hunt.battle.noCardHint")}</p>
-        <Button asChild className={cn("mt-3 rounded-2xl bg-cyan-200 text-slate-950 hover:bg-cyan-100", huntInteractiveClass)}>
-          <Link href="/hunt/shop">{t("client.hunt.shop.title")}</Link>
-        </Button>
-      </div>
-    );
-  }
-
+function SquadSlot({ card, pending, onReplace, locale, t }: { card: HuntCard | null; pending: HuntCard | null; onReplace: () => void; locale: "ru" | "en"; t: ReturnType<typeof useI18n>["t"] }) {
+  const ElementIcon = card ? elementMeta[card.element].icon : null;
   return (
-    <div className={cn("overflow-hidden rounded-3xl border bg-slate-950/72", rarityClass[card.rarity])}>
-      <div className="relative aspect-square bg-[radial-gradient(circle_at_50%_44%,rgba(103,232,249,0.16),rgba(2,6,12,0.78)_62%,rgba(2,6,12,0.98))]">
-        <img src={mediaSrc(card.species.imageUrl) ?? "/hunt-assets/cards/compass-light.webp"} alt="" className="absolute inset-0 h-full w-full scale-[1.04] object-contain object-center" />
-        <div className="absolute left-3 top-3">
-          <ElementBadge element={card.element} />
-        </div>
-        <Badge className={cn("absolute bottom-3 left-3", rarityBadgeClass[card.rarity])}>{card.rarity}</Badge>
-      </div>
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold">{card.species.name}</h2>
-            <p className="mt-0.5 text-xs text-white/52">{t("client.hunt.levelShort")} {card.level}</p>
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onReplace();
+      }}
+      disabled={!pending}
+      className={cn(
+        "relative min-h-[132px] overflow-hidden rounded-3xl border bg-slate-950 text-left",
+        pending ? huntInteractiveClass : "cursor-default",
+        card ? rarityClass[card.rarity] : "border-dashed border-white/14",
+        pending && "hunt-squad-slot-replaceable hover:border-cyan-200/60 hover:shadow-[0_0_30px_rgba(103,232,249,0.16)]",
+      )}
+    >
+      {card ? (
+        <>
+          <img src={mediaSrc(card.species.imageUrl) ?? "/hunt-assets/cards/compass-light.webp"} alt="" className="absolute inset-0 h-full w-full object-cover object-center opacity-80" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/24 to-transparent" />
+          {ElementIcon && (
+            <span className={cn("absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border backdrop-blur", elementMeta[card.element].className)} title={elementMeta[card.element].label}>
+              <ElementIcon className="h-4 w-4" />
+            </span>
+          )}
+          <div className="absolute inset-x-2 bottom-2">
+            <p className="truncate text-sm font-semibold text-white">{huntSpeciesName(card.species, locale)}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <Badge className={cn("h-6 px-2 text-[10px]", rarityBadgeClass[card.rarity])}>{huntRarityLabel(card.rarity, t)}</Badge>
+            </div>
           </div>
-          <Badge className="border-cyan-200/20 bg-cyan-200/10 text-cyan-100">{cardPower(card)}</Badge>
+        </>
+      ) : (
+        <div className="flex h-full min-h-[132px] flex-col items-center justify-center p-3 text-center text-white/50">
+          <Plus className="h-6 w-6 text-cyan-100/72" />
+          <span className="mt-2 text-xs">Пустой слот</span>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {huntStatEntries(card.stats).map(([key, value]) => <StatValueBar key={key} label={key} value={value} />)}
+      )}
+    </button>
+  );
+}
+
+function CandidateOverlay({ card, locale }: { card: HuntCard | null; locale: "ru" | "en" }) {
+  if (!card) return null;
+  const ElementIcon = elementMeta[card.element].icon;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-[104px] z-40 flex justify-center px-4">
+      <button
+        type="button"
+        onClick={(event) => event.stopPropagation()}
+        className={cn(
+          "pointer-events-auto hunt-candidate-card w-[132px] overflow-hidden rounded-3xl border bg-[#070c1c] text-left backdrop-blur",
+          rarityClass[card.rarity],
+        )}
+        aria-label="Выбранная карточка"
+      >
+        <div className="relative aspect-[1.08/1] bg-black">
+          <img src={mediaSrc(card.species.imageUrl) ?? "/hunt-assets/cards/compass-light.webp"} alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
+          <span className={cn("absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border backdrop-blur", elementMeta[card.element].className)} title={elementMeta[card.element].label}>
+            <ElementIcon className="h-4 w-4" />
+          </span>
         </div>
-      </div>
+        <div className="min-h-[58px] border-t border-white/5 bg-[#081126] px-2.5 py-2">
+          <p className="truncate text-[13px] font-semibold text-white">{huntSpeciesName(card.species, locale)}</p>
+          <p className="mt-1 text-[11px] text-white/50">ур. {card.level}</p>
+        </div>
+      </button>
     </div>
   );
 }
 
-function OpponentCard({ opponent }: { opponent: HuntCatalogSpecies | null }) {
-  const { t } = useI18n("ru");
-  if (!opponent) {
-    return (
-      <div className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.72),rgba(8,13,22,0.96))] p-4">
-        <div className="flex aspect-square items-center justify-center rounded-3xl border border-white/10 bg-white/[0.04]">
-          <Bot className="h-12 w-12 text-cyan-100/72" />
-        </div>
-        <p className="mt-3 text-sm font-semibold">{t("client.hunt.battle.opponentPending")}</p>
-        <p className="mt-1 text-xs leading-5 text-white/48">{t("client.hunt.battle.opponentHint")}</p>
-      </div>
-    );
-  }
-
+function CollectionCard({ card, selected, inTeam, onClick, locale }: { card: HuntCard; selected: boolean; inTeam: boolean; onClick: () => void; locale: "ru" | "en" }) {
   return (
-    <div className={cn("overflow-hidden rounded-3xl border bg-slate-950/72", rarityClass[opponent.baseRarity])}>
-      <div className="relative aspect-square bg-[radial-gradient(circle_at_50%_44%,rgba(168,85,247,0.12),rgba(2,6,12,0.78)_62%,rgba(2,6,12,0.98))]">
-        <img src={mediaSrc(opponent.imageUrl) ?? "/hunt-assets/cards/compass-light.webp"} alt="" className="absolute inset-0 h-full w-full scale-[1.04] object-contain object-center" />
-        <div className="absolute left-3 top-3">
-          <ElementBadge element={opponent.element} />
-        </div>
-        <Badge className={cn("absolute bottom-3 left-3", rarityBadgeClass[opponent.baseRarity])}>{opponent.baseRarity}</Badge>
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "relative overflow-hidden rounded-3xl border bg-[#070c1c] text-left",
+        huntInteractiveClass,
+        selected ? "border-cyan-200 shadow-[0_0_28px_rgba(103,232,249,0.18)]" : inTeam ? "border-emerald-200/45" : "border-white/10",
+      )}
+    >
+      <div className="relative aspect-[1.08/1] bg-black">
+        <img src={mediaSrc(card.species.imageUrl) ?? "/hunt-assets/cards/compass-light.webp"} alt="" className="absolute inset-0 h-full w-full object-cover object-center" />
+        {inTeam && <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-cyan-200 text-slate-950"><Shield className="h-4 w-4" /></span>}
       </div>
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold">{opponent.name}</h2>
-            <p className="mt-0.5 text-xs text-white/52">{opponentNames[speciesPower(opponent) % opponentNames.length]}</p>
-          </div>
-          <Badge className="border-violet-200/20 bg-violet-200/10 text-violet-100">{speciesPower(opponent)}</Badge>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {huntStatEntries(opponent.baseStats).map(([key, value]) => <StatValueBar key={key} label={key} value={value} />)}
-        </div>
+      <div className="min-h-[58px] border-t border-white/5 bg-[#081126] px-2.5 py-2">
+        <p className="truncate text-[13px] font-semibold text-white">{huntSpeciesName(card.species, locale)}</p>
+        <p className="mt-1 text-[11px] text-white/50">ур. {card.level}</p>
       </div>
-    </div>
+    </button>
   );
 }
 
-export default function HuntBattlePage() {
-  const { t } = useI18n("ru");
+export default function HuntBattleLobbyPage() {
+  const { locale, t } = useI18n("ru");
+  const router = useRouter();
+  const squadRef = useRef<HTMLElement | null>(null);
   const [overview, setOverview] = useState<HuntOverview>(getCachedHuntOverview());
-  const [catalog, setCatalog] = useState<HuntCatalogSpecies[]>([]);
-  const [selectedCardUuid, setSelectedCardUuid] = useState<string | null>(overview.cards[0]?.uuid ?? null);
-  const [mode, setMode] = useState<BattleMode>("idle");
-  const [opponent, setOpponent] = useState<HuntCatalogSpecies | null>(null);
-  const [matchCode, setMatchCode] = useState("");
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [knownCards, setKnownCards] = useState<HuntCard[]>(getCachedHuntOverview().cards);
+  const [teamUuids, setTeamUuids] = useState<string[]>(() => getCachedHuntOverview().cards.slice(0, TEAM_SIZE).map((card) => card.uuid));
+  const [pendingCardUuid, setPendingCardUuid] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState("");
+  const [matchCode, setMatchCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"random" | "code" | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([getHuntOverview(), getHuntCardCatalogResult(true)]).then(([nextOverview, catalogResult]) => {
+    getHuntCollectionOverview(false, { page, locale }).then((nextOverview) => {
       if (!mounted) return;
       setOverview(nextOverview);
-      setSelectedCardUuid((current) => current ?? nextOverview.cards[0]?.uuid ?? null);
-      if (catalogResult.ok) setCatalog(catalogResult.data);
+      setPages(nextOverview.collection.pages);
+      setKnownCards(current => [...new Map([...current, ...nextOverview.cards].map(card => [card.uuid, card])).values()]);
+      setTeamUuids((current) => {
+        const kept = current;
+        const additions = nextOverview.cards.map((card) => card.uuid).filter((uuid) => !kept.includes(uuid));
+        return [...kept, ...additions].slice(0, TEAM_SIZE);
+      });
+    }).catch(() => {
+      if (mounted) setNotice("Не удалось загрузить полную коллекцию. Обновите список карточек.");
     });
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [page, locale]);
 
-  const selectedCard = useMemo(() => overview.cards.find((card) => card.uuid === selectedCardUuid) ?? overview.cards[0] ?? null, [overview.cards, selectedCardUuid]);
-  const unlockedOpponents = useMemo(() => catalog.filter((item) => item.ownedCount > 0), [catalog]);
-  const opponentPool = unlockedOpponents.length ? unlockedOpponents : catalog;
+  const cardsByUuid = useMemo(() => new Map(knownCards.map((card) => [card.uuid, card])), [knownCards]);
+  const team = teamUuids.map((uuid) => cardsByUuid.get(uuid) ?? null);
+  const pendingCard = pendingCardUuid ? cardsByUuid.get(pendingCardUuid) ?? null : null;
+  const ready = team.filter(Boolean).length === TEAM_SIZE;
 
-  async function findRandomOpponent() {
-    if (!selectedCard || opponentPool.length === 0) {
-      setNotice(t("client.hunt.battle.needCard"));
+  function selectPendingCard(uuid: string) {
+    setPendingCardUuid(uuid);
+    window.requestAnimationFrame(() => {
+      squadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  function replaceSlot(index: number) {
+    if (!pendingCard) return;
+    setTeamUuids((current) => {
+      const next = [...current];
+      const previousIndex = next.indexOf(pendingCard.uuid);
+      if (previousIndex >= 0) next[previousIndex] = next[index] ?? "";
+      next[index] = pendingCard.uuid;
+      return next.filter(Boolean).slice(0, TEAM_SIZE);
+    });
+    setPendingCardUuid(null);
+  }
+
+  async function refresh() {
+    try {
+      const next = await getHuntCollectionOverview(true, { page, locale });
+      setOverview(next);
+      setPages(next.collection.pages);
+      setKnownCards(current => [...new Map([...current, ...next.cards].map(card => [card.uuid, card])).values()]);
+    } catch {
+      setNotice("Не удалось загрузить полную коллекцию. Обновите список карточек.");
+    }
+  }
+
+  async function startRandomMatch() {
+    const leadCard = team.find(Boolean);
+    if (!leadCard || !ready) {
+      setNotice("Соберите отряд из трёх персонажей.");
       return;
     }
     setNotice(null);
-    setMode("searching");
-    const result = await findRandomHuntBattle(selectedCard.uuid);
-    if (result.ok) {
-      setOpponent(result.data.opponent);
-      setMode("matched");
-      return;
-    }
-    setNotice(result.message);
-    window.setTimeout(() => {
-      const nextOpponent = opponentPool[Math.floor(Math.random() * opponentPool.length)] ?? null;
-      setOpponent(nextOpponent);
-      setMode("matched");
-    }, 450);
-  }
-
-  async function copyCode() {
-    const code = matchCode || buildMatchCode();
-    setMatchCode(code);
-    setMode("code");
-    try {
-      await navigator.clipboard.writeText(code);
-      setNotice(fill(t("client.hunt.battle.codeCopied"), { code }));
-    } catch {
-      setNotice(code);
-    }
+    setBusy("random");
+    const result = await findRandomHuntBattle(leadCard.uuid);
+    saveBattleState({
+      mode: "random",
+      teamUuids: teamUuids.slice(0, TEAM_SIZE),
+      leadCardUuid: leadCard.uuid,
+      opponentUuid: result.ok ? result.data.opponent.uuid : null,
+    });
+    setBusy(null);
+    router.push("/hunt/battle/arena");
   }
 
   async function createCode() {
-    if (!selectedCard) {
-      setNotice(t("client.hunt.battle.needCard"));
+    const leadCard = team.find(Boolean);
+    if (!leadCard || !ready) {
+      setNotice("Соберите отряд из трёх персонажей.");
       return;
     }
-    setOpponent(null);
-    const result = await createHuntBattleCode(selectedCard.uuid);
-    setMatchCode(result.ok ? result.data.code : buildMatchCode());
-    setMode("code");
-    setNotice(result.ok ? null : result.message);
+    setNotice(null);
+    setBusy("code");
+    const result = await createHuntBattleCode(leadCard.uuid);
+    const code = result.ok ? result.data.code : buildMatchCode();
+    setMatchCode(code);
+    saveBattleState({ mode: "code", teamUuids: teamUuids.slice(0, TEAM_SIZE), leadCardUuid: leadCard.uuid, matchCode: code });
+    setBusy(null);
   }
 
   function joinMatch() {
+    const leadCard = team.find(Boolean);
     const code = joinCode.trim().toUpperCase();
+    if (!leadCard || !ready) {
+      setNotice("Соберите отряд из трёх персонажей.");
+      return;
+    }
     if (code.length < 4) {
       setNotice(t("client.hunt.battle.codeInvalid"));
       return;
     }
-    setMatchCode(code.startsWith("NH-") ? code : `NH-${code}`);
-    setMode("code");
-    setNotice(t("client.hunt.battle.joinReady"));
+    saveBattleState({ mode: "join", teamUuids: teamUuids.slice(0, TEAM_SIZE), leadCardUuid: leadCard.uuid, matchCode: code.startsWith("NH-") ? code : `NH-${code}` });
+    router.push("/hunt/battle/arena");
   }
 
-  const battleTitle = mode === "matched" ? t("client.hunt.battle.matched") : mode === "searching" ? t("client.hunt.battle.searching") : mode === "code" ? t("client.hunt.battle.codeMode") : t("client.hunt.battle.ready");
+  async function copyCode() {
+    if (!matchCode) return;
+    try {
+      await navigator.clipboard.writeText(matchCode);
+      setNotice(fill(t("client.hunt.battle.codeCopied"), { code: matchCode }));
+    } catch {
+      setNotice(matchCode);
+    }
+  }
 
   return (
-    <main className="min-h-full px-4 pb-24 pt-5 text-white">
-      <header className="mb-4 flex items-center justify-between gap-3">
-        <Link href="/hunt" className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-white/70", huntInteractiveClass)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <Badge className="border-cyan-200/20 bg-cyan-200/10 text-cyan-100">{t("client.hunt.title")}</Badge>
-      </header>
-
-      <section className="mb-4 overflow-hidden rounded-3xl border border-cyan-200/16 bg-[radial-gradient(circle_at_50%_0%,rgba(103,232,249,0.16),rgba(8,13,22,0.84)_44%,rgba(3,7,18,0.96))] p-4 shadow-[0_0_45px_rgba(103,232,249,0.10)]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-cyan-200/78">{t("client.hunt.battle.eyebrow")}</p>
-            <h1 className="mt-1 text-3xl font-semibold">{t("client.hunt.battle.title")}</h1>
-            <p className="mt-2 text-sm leading-6 text-white/60">{t("client.hunt.battle.subtitle")}</p>
-          </div>
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-200/22 bg-cyan-200/10 text-cyan-100">
-            <Swords className="h-6 w-6" />
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <Button type="button" onClick={findRandomOpponent} disabled={mode === "searching"} className={cn("col-span-2 rounded-2xl bg-cyan-200 text-slate-950 hover:bg-cyan-100", huntInteractiveClass)}>
-            {mode === "searching" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Dices className="mr-2 h-4 w-4" />}
-            {t("client.hunt.battle.random")}
-          </Button>
-          <Button type="button" onClick={() => void createCode()} variant="secondary" className={cn("rounded-2xl border-white/10 bg-white/[0.06]", huntInteractiveClass)}>
-            <KeyRound className="h-4 w-4" />
-          </Button>
-        </div>
-      </section>
-
-      {notice && <div className="mb-4 rounded-2xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm text-cyan-50">{notice}</div>}
-
-      <section className="mb-4 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+    <main className="min-h-full px-4 pb-24 pt-5 text-white" onClick={() => setPendingCardUuid(null)}>
+      <section ref={squadRef} className="mb-4 scroll-mt-5 rounded-3xl border border-cyan-200/16 bg-[radial-gradient(circle_at_50%_0%,rgba(103,232,249,0.16),rgba(8,13,22,0.84)_44%,rgba(3,7,18,0.96))] p-4 shadow-[0_0_45px_rgba(103,232,249,0.10)]">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-white/42">{t("client.hunt.battle.arena")}</p>
-            <h2 className="mt-1 text-xl font-semibold">{battleTitle}</h2>
+            <p className="text-xs uppercase tracking-[0.22em] text-cyan-200/78">Лобби</p>
+            <h1 className="mt-1 text-2xl font-semibold">Соберите отряд</h1>
           </div>
-          {mode === "matched" && <Badge className="border-emerald-200/20 bg-emerald-200/10 text-emerald-100"><CheckCircle2 className="mr-1 h-3 w-3" />{t("client.hunt.battle.found")}</Badge>}
+          <Badge className={cn("border-cyan-200/20 bg-cyan-200/10 text-cyan-100", ready && "border-emerald-200/25 bg-emerald-200/10 text-emerald-100")}>
+            {team.filter(Boolean).length} / {TEAM_SIZE}
+          </Badge>
         </div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-          <PlayerCard card={selectedCard} />
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-cyan-100">
-            <Swords className="h-5 w-5" />
-          </div>
-          <OpponentCard opponent={opponent} />
-        </div>
-      </section>
 
-      <section className="mb-4 grid gap-3 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-        <div className="flex items-center gap-2">
-          <Gamepad2 className="h-5 w-5 text-cyan-100" />
-          <h2 className="text-lg font-semibold">{t("client.hunt.battle.lobby")}</h2>
+        <div className="grid grid-cols-3 gap-2">
+          {Array.from({ length: TEAM_SIZE }, (_, index) => (
+            <SquadSlot key={index} card={team[index]} pending={pendingCard} locale={locale} t={t} onReplace={() => replaceSlot(index)} />
+          ))}
         </div>
-        <div className="grid grid-cols-[1fr_auto] gap-2">
-          <Input value={joinCode} onChange={(event) => setJoinCode(event.target.value)} placeholder={t("client.hunt.battle.codePlaceholder")} className="h-12 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/38" />
-          <Button type="button" onClick={joinMatch} variant="secondary" className={cn("h-12 rounded-2xl border-white/10 bg-white/[0.06]", huntInteractiveClass)}>
+
+        <p className="mt-3 min-h-5 text-xs leading-5 text-white/52">
+          {pendingCard ? "Нажмите на слот отряда, чтобы заменить персонажа." : "Выберите персонажа ниже и замените им слот в отряде."}
+        </p>
+
+        <div className="mt-4 grid grid-cols-[1fr_60px] gap-2">
+          <Button type="button" onClick={startRandomMatch} disabled={busy === "random"} className={cn("h-12 rounded-2xl bg-cyan-200 text-slate-950 hover:bg-cyan-100", huntInteractiveClass)}>
+            {busy === "random" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Dices className="mr-2 h-4 w-4" />}
+            Случайный бой
+          </Button>
+          <Button type="button" onClick={() => void createCode()} disabled={busy === "code"} variant="secondary" className={cn("h-12 w-[60px] rounded-2xl border-white/10 bg-white/[0.06]", huntInteractiveClass)} aria-label={t("client.hunt.battle.matchCode")}>
+            {busy === "code" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+          </Button>
+        </div>
+
+        <div className="mt-2 grid grid-cols-[1fr_60px] gap-2">
+          <Input value={joinCode} onChange={(event) => setJoinCode(event.target.value)} placeholder={t("client.hunt.battle.codePlaceholder")} className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/38" />
+          <Button type="button" onClick={joinMatch} variant="secondary" className={cn("h-11 w-[60px] rounded-2xl border-white/10 bg-white/[0.06]", huntInteractiveClass)}>
             <UserPlus className="h-4 w-4" />
           </Button>
         </div>
+
         {matchCode && (
-          <button type="button" onClick={copyCode} className={cn("flex items-center justify-between gap-3 rounded-2xl border border-cyan-200/18 bg-cyan-200/10 px-4 py-3 text-left", huntInteractiveClass)}>
+          <button type="button" onClick={copyCode} className={cn("mt-2 flex w-full items-center justify-between gap-3 rounded-2xl border border-cyan-200/18 bg-cyan-200/10 px-4 py-3 text-left", huntInteractiveClass)}>
             <span>
               <span className="block text-xs uppercase tracking-[0.18em] text-cyan-100/72">{t("client.hunt.battle.matchCode")}</span>
               <span className="mt-1 block text-xl font-semibold text-cyan-50">{matchCode}</span>
@@ -280,33 +315,74 @@ export default function HuntBattlePage() {
         )}
       </section>
 
-      <section className="grid gap-2">
+      {notice && <div className="mb-4 rounded-2xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm text-cyan-50">{notice}</div>}
+
+      <section className="grid gap-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">{t("client.hunt.battle.chooseCard")}</h2>
-          <Button type="button" onClick={() => void getHuntOverview(true).then(setOverview)} variant="ghost" className={cn("h-9 rounded-2xl px-3 text-white/68 hover:bg-white/[0.06]", huntInteractiveClass)}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            {t("client.hunt.refreshing").replace("...", "")}
+          <div className="flex items-center gap-2">
+            <WalletCards className="h-5 w-5 text-cyan-100" />
+            <h2 className="text-lg font-semibold">Карты для отряда</h2>
+          </div>
+          <Button type="button" onClick={() => void refresh()} variant="ghost" className={cn("h-9 rounded-2xl px-3 text-white/68 hover:bg-white/[0.06]", huntInteractiveClass)}>
+            <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
+
         {overview.cards.length === 0 && <div className="rounded-3xl border border-dashed border-white/15 p-5 text-center text-sm text-white/54">{t("client.hunt.cards.empty")}</div>}
+
         <div className="grid grid-cols-3 gap-2">
-          {overview.cards.map((card) => {
-            const selected = card.uuid === selectedCard?.uuid;
-            return (
-              <button key={card.uuid} type="button" onClick={() => setSelectedCardUuid(card.uuid)} className={cn("relative overflow-hidden rounded-2xl border bg-slate-950 text-left", huntInteractiveClass, selected ? "border-cyan-200 shadow-[0_0_30px_rgba(103,232,249,0.16)]" : "border-white/10")}>
-                <div className="relative aspect-square bg-white/[0.03]">
-                  <img src={mediaSrc(card.species.imageUrl) ?? "/hunt-assets/cards/compass-light.webp"} alt="" className="absolute inset-0 h-full w-full scale-[1.08] object-contain object-center" />
-                  {selected && <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-cyan-200 text-slate-950"><Shield className="h-4 w-4" /></span>}
-                </div>
-                <div className="p-2">
-                  <p className="truncate text-xs font-semibold">{card.species.name}</p>
-                  <p className="mt-0.5 text-[10px] text-white/46">{t("client.hunt.levelShort")} {card.level}</p>
-                </div>
-              </button>
-            );
-          })}
+          {overview.cards.map((card) => (
+            <CollectionCard key={card.uuid} card={card} selected={card.uuid === pendingCardUuid} inTeam={teamUuids.includes(card.uuid)} locale={locale} onClick={() => selectPendingCard(card.uuid)} />
+          ))}
         </div>
       </section>
+      <nav aria-label="Страницы карточек" className="flex items-center justify-between gap-3">
+        <Button aria-label="Предыдущая страница" disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ArrowLeft className="h-4 w-4" /></Button>
+        <span>{page} / {pages}</span>
+        <Button aria-label="Следующая страница" disabled={page >= pages} onClick={() => setPage(p => p + 1)}><ArrowRight className="h-4 w-4" /></Button>
+      </nav>
+      <CandidateOverlay card={pendingCard} locale={locale} />
+      <style jsx global>{`
+        @keyframes hunt-squad-slot-nudge {
+          0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+          18% { transform: translate3d(-1px, 0, 0) rotate(-0.45deg); }
+          36% { transform: translate3d(1px, 0, 0) rotate(0.45deg); }
+          54% { transform: translate3d(0, -1px, 0) rotate(0deg); }
+          72% { transform: translate3d(1px, 0, 0) rotate(0.35deg); }
+        }
+        .hunt-squad-slot-replaceable {
+          animation: hunt-squad-slot-nudge 1.05s ease-in-out infinite;
+        }
+        .hunt-candidate-card {
+          box-shadow:
+            0 20px 58px rgba(0, 0, 0, 0.62),
+            0 0 0 1px rgba(103, 232, 249, 0.12),
+            0 0 34px rgba(103, 232, 249, 0.22);
+          animation:
+            hunt-candidate-float 220ms ease-out both,
+            hunt-candidate-glow 1.65s ease-in-out infinite;
+        }
+        @keyframes hunt-candidate-float {
+          from { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.96); }
+          to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        }
+        @keyframes hunt-candidate-glow {
+          0%, 100% {
+            filter: drop-shadow(0 0 10px rgba(103, 232, 249, 0.20));
+            box-shadow:
+              0 20px 58px rgba(0, 0, 0, 0.62),
+              0 0 0 1px rgba(103, 232, 249, 0.12),
+              0 0 28px rgba(103, 232, 249, 0.18);
+          }
+          50% {
+            filter: drop-shadow(0 0 18px rgba(103, 232, 249, 0.36));
+            box-shadow:
+              0 22px 64px rgba(0, 0, 0, 0.66),
+              0 0 0 1px rgba(103, 232, 249, 0.28),
+              0 0 46px rgba(103, 232, 249, 0.34);
+          }
+        }
+      `}</style>
     </main>
   );
 }

@@ -114,7 +114,7 @@ function CompanyBillingContent() {
         if (cancelled) return;
         if (result.status === "SUCCEEDED") {
           setMessageTone("success");
-          setMessage("Оплата через YooKassa прошла успешно. Подписка NearLoy продлена.");
+          setMessage("Оплата через YooKassa прошла успешно. Подписка Nearloy PRO продлена.");
           await load();
         } else if (result.status === "FAILED" || result.status === "CANCELED" || result.status === "EXPIRED") {
           setMessageTone("error");
@@ -180,6 +180,7 @@ function CompanyBillingContent() {
   const trialEndsAt = formatDate(data?.account?.trialEndsAt);
   const invoiceClosed = invoice?.status === "PAID" || invoice?.status === "WAIVED";
   const amountDue = invoiceClosed ? 0 : Number(invoice?.amountDue ?? 0);
+  const hasInvoiceDetails = Boolean(invoice);
   const activePayment = amountDue > 0 ? data?.activePayment ?? null : null;
   const billingHistory = [...(data?.history ?? [])].sort((left, right) => {
     const rightTime = new Date(right.createdAt).getTime();
@@ -219,7 +220,7 @@ function CompanyBillingContent() {
     if (!promo.trim()) return;
     try {
       const result = await applyCompanyBillingPromo(promo.trim());
-      setData((current) => current ? { ...current, invoice: result.invoice } : current);
+      setData(result);
       setMessageTone("success");
       setMessage("Промокод применён. Сумма обновлена.");
     } catch (error) {
@@ -234,7 +235,7 @@ function CompanyBillingContent() {
     try {
       await payCompanyBillingInvoice();
       setMessageTone("success");
-      setMessage("Подписка NearLoy оплачена с баланса компании.");
+      setMessage("Подписка Nearloy PRO оплачена с баланса компании.");
       await load();
     } catch (error) {
       setMessageTone("error");
@@ -268,7 +269,7 @@ function CompanyBillingContent() {
       const result = await getCompanyBillingPayment(activePayment.uuid);
       if (result.status === "SUCCEEDED") {
         setMessageTone("success");
-        setMessage("Оплата подтверждена. Подписка NearLoy продлена.");
+        setMessage("Оплата подтверждена. Подписка Nearloy PRO продлена.");
         clearPaymentCheckCooldown(activePayment.uuid);
         await load();
       } else if (result.status === "FAILED" || result.status === "CANCELED" || result.status === "EXPIRED") {
@@ -295,7 +296,7 @@ function CompanyBillingContent() {
       <header className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-100">Биллинг</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Подписка NearLoy</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Nearloy PRO</h1>
         </div>
         <ReceiptText className="h-5 w-5 shrink-0 text-cyan-100" />
       </header>
@@ -378,7 +379,7 @@ function CompanyBillingContent() {
             ) : null}
           </section>
 
-          {amountDue > 0 ? (
+          {hasInvoiceDetails ? (
             <section className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
               <Metric icon={ReceiptText} label="Базовая цена" value={money(invoice?.baseFee ?? 4990)} />
               <Metric icon={BadgePercent} label="Скидка" value={`-${money(invoice?.promoDiscountAmount ?? 0)}`} />

@@ -1,5 +1,11 @@
 # Nearloy Hunt Domain Model
 
+## Tactical Training State
+
+The v7 training aggregate is a signed transient `Battle` in `src/lib/hunt/tactics.ts`, not a Prisma entity. `Fighter` holds position, normalized species profile, snapshotted ability definitions/revisions, HP, shield expiry, active effects and cooldowns. `Battle.statistics` tracks actual damage/healing/absorption/control by unit. `Battle.energy` is spendable resonance; `Battle.score` is non-spendable control score. Effects support damage, lifesteal, heal, shield, burn, poison, buffs, push and pull. Directional low cover remains separate from sight-blocking walls. [Rules and scaling](./tactical-arena.md).
+
+Persistent definitions use `HuntAbility` (localized metadata, JSON config, schema/revision), `HuntSpeciesAbility` (unique ordered slots 0..2) and `HuntAbilityRevision` (immutable snapshots and actor). They extend `HuntCreatureSpecies` without rewriting owned cards. Administration and battle loading enforce three slots per species. [Storage, constraints and extension policy](./ability-framework.md).
+
 ## Aggregate Overview
 
 The Hunt schema is attached to the existing Nearloy user/company/category graph, but the economy is modeled separately.

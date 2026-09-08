@@ -178,7 +178,6 @@ const companyMenuBase: NavItem[] = [
   { href: "/company/payments", label: "Финансы", icon: CreditCard },
   { href: "/company/billing", label: "Подписка", icon: Gift },
   { href: "/company/compliance", label: "Верификация", icon: FileCheck },
-  { href: "/company/settings", label: "Настройки компании", icon: Settings2 },
   { href: "/company/settings/media", label: "Мультимедиа", icon: Images },
   { href: "/company/settings/offers", label: "Акции", icon: Megaphone },
   { href: "/company/settings/socials", label: "Ссылки", icon: Link2 },
@@ -191,6 +190,7 @@ const companyQuickActionsBase: NavItem[] = [
   { href: "/company/settings/media", label: "Медиа", icon: Images },
   { href: "/company/settings/offers", label: "Акции", icon: Megaphone },
   { href: "/company/settings/socials", label: "Ссылки", icon: Link2 },
+  { href: "/company/ai", label: "AI", icon: Sparkles },
 ];
 
 const companyMenuSectionsBase: CompanyMenuSection[] = [
@@ -218,7 +218,6 @@ const companyMenuSectionsBase: CompanyMenuSection[] = [
   {
     title: "Профиль компании",
     items: [
-      { href: "/company/settings", label: "Настройки", icon: Settings2 },
       { href: "/company/settings/media", label: "Мультимедиа", icon: Images },
       { href: "/company/settings/offers", label: "Акции", icon: Megaphone },
       { href: "/company/settings/socials", label: "Ссылки", icon: Link2 },
@@ -371,7 +370,7 @@ export default function PortalLayout({
   const pathname = usePathname();
   const router = useRouter();
   const isAdmin = pathname.startsWith("/admin");
-  const currentRole = typeof window === "undefined" ? undefined : getStoredUser()?.role;
+  const [currentRole, setCurrentRole] = useState<string | undefined>(undefined);
   const [notifications, setNotifications] = useState<MenuNotifications>({ items: {}, sections: {} });
   const [adminNavigation, setAdminNavigation] = useState<AdminNavigationProfile | null>(null);
   const [companyBillingData, setCompanyBillingData] = useState<CompanyBillingData | null>(null);
@@ -423,6 +422,7 @@ export default function PortalLayout({
 
   useEffect(() => {
     const host = window.location.hostname;
+    setCurrentRole(getStoredUser()?.role);
     setShowLocalCompanyItems(host === "localhost" || host === "127.0.0.1" || host === "[::1]");
   }, []);
 

@@ -1,5 +1,11 @@
 # Nearloy Hunt Roadmap
 
+## Tactical Training: September 7
+
+Implemented in `/hunt/battle/arena`: mobile-only mirrored 3v3, server validation, finite resonance points, separate control score, database-backed composable abilities, lifesteal, elemental counters, crits, cover, knockback/pull, previews, action camera, character status inspection and result statistics. All 21 species have three abilities editable with history in the unified character admin. See [v7 rules](./tactical-arena.md) and [ability framework](./ability-framework.md).
+
+Still pending: human mobile playtesting, individual ability balance telemetry, map/AI tuning (explicitly deferred in this update), persisted authenticated multiplayer and atomic rewarded settlement. Species selection is normalized to mirrored level-one profiles; collection progression is not competitive input. Training stays reward-free, but now requires the ability migration and initializer.
+
 ## Phase 1: Local Foundation
 
 Implemented:

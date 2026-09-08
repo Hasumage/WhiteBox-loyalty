@@ -10,6 +10,8 @@ Working names:
 
 ## Current Status
 
+September 7: mobile tactical training at `/hunt/battle/arena` uses mirrored level-one 3v3 teams, server-resolved crits, park cover, composable abilities, lifesteal, push/pull, previews, action-following camera and character result statistics. All 21 species have three database-backed abilities (63 total), editable at `/admin/hunt/characters`. See [Tactical Arena](./tactical-arena.md) for v7 rules and [Ability Framework](./ability-framework.md) for configuration, history and the required migration/seed. Lobby species selection is supported; collection stat advantages and economy rewards are not used.
+
 The first local foundation is implemented:
 
 - Separate local sandbox database flow through `npm run db:hunt:create`.
@@ -21,6 +23,11 @@ The first local foundation is implemented:
 - Admin database visualizer includes the Hunt schema group.
 
 ## Docs
+
+- [Ability Framework](./ability-framework.md) - unified character editor, all effect settings, revisions, lifesteal, migration and tests.
+
+- [Tactical Arena](./tactical-arena.md) - authoritative training rules, formulas, framework, server protocol, art and verification.
+- [Tactical Balance Results](./tactical-balance-results.md) - versioned simulation results and known balance limitations.
 
 - [Product Concept](./product-concept.md) - game thesis, loop, launch positioning and non-goals.
 - [Domain Model](./domain-model.md) - entities, enums, relationships and scaling notes.

@@ -1,5 +1,19 @@
 import { getAccessToken } from "./auth-client";
 import { fetchWithAuthRecovery } from "./authenticated-fetch";
+import type { EditableAbility } from "@/lib/hunt/ability-config";
+export type AdminHuntAbility = EditableAbility & { history: Array<{ revision: number; createdAt: string; snapshot: Partial<EditableAbility> }> };
+export async function adminReadHuntAbilities(uuid: string): Promise<AdminHuntAbility[]> {
+  const res = await fetchWithAuthRecovery(`/api/admin/hunt/characters/${encodeURIComponent(uuid)}/abilities`, { headers: authHeaders(), cache: "no-store" });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message ?? "Не удалось загрузить способности");
+  return data;
+}
+export async function adminSaveHuntAbilities(uuid: string, input: EditableAbility[]): Promise<AdminHuntAbility[]> {
+  const res = await fetchWithAuthRecovery(`/api/admin/hunt/characters/${encodeURIComponent(uuid)}/abilities`, { method: "PUT", headers: authHeaders(), body: JSON.stringify(input) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message ?? "Не удалось сохранить способности");
+  return data;
+}
 
 export type AdminRole = "CLIENT" | "COMPANY" | "ADMIN" | "SUPER_ADMIN" | "MANAGER" | "SUPPORT";
 
@@ -119,6 +133,85 @@ export type AdminHuntCharacter = {
   category: { slug: string; name: string; icon: string } | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type AdminHuntBoxConfig = {
+  uuid: string;
+  slug: string;
+  type: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  cost: number;
+  minRarity: string;
+  maxRarity: string | null;
+  itemCountMin: number;
+  itemCountMax: number;
+  dailyLimit: number | null;
+  statusDropChanceBp: number;
+  statusDropChance: number;
+  guaranteedRarity: string | null;
+  guaranteedCount: number;
+  rotationGroup: string | null;
+  rotationIndex: number | null;
+  rotationElement: string | null;
+  rotationStartsAt: string | null;
+  isActive: boolean;
+  isPurchasable: boolean;
+  sortOrder: number;
+  boxesCount: number;
+  rarityChances: Array<{ uuid: string; rarity: string; weight: number; enabled: boolean; chance: number }>;
+  speciesRules: Array<{
+    uuid: string;
+    speciesId: string;
+    name: string;
+    nameRu?: string | null;
+    nameEn?: string | null;
+    slug: string;
+    imageUrl: string | null;
+    rarity: string;
+    element: string;
+    weight: number;
+    enabled: boolean;
+  }>;
+  statusChances: Array<{ uuid: string; statusId: string; title: string; rarity: string; statusRarity: string; weight: number; dropChanceBp: number; enabled: boolean }>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminHuntBoxesResponse = {
+  configs: AdminHuntBoxConfig[];
+  species: Array<{ id: string; slug: string; name: string; nameRu?: string | null; nameEn?: string | null; element: string; baseRarity: string; imageUrl: string | null; isActive: boolean }>;
+  statuses: Array<{ id: string; slug: string; title: string; rarity: string; isActive: boolean }>;
+  boxTypes: string[];
+  rarities: string[];
+  statusRarities: string[];
+};
+
+export type AdminHuntBoxSimulationResult = {
+  uuid: string;
+  slug: string;
+  title: string;
+  type: string;
+  rotationElement: string | null;
+  boxesOpened: number;
+  totalCost: number;
+  itemsTotal: number;
+  cardsValue: number;
+  statusesValue: number;
+  totalValue: number;
+  valueRatio: number | null;
+  verdict: "free" | "low" | "ok" | "high";
+  rarityCounts: Record<string, number>;
+  statusCounts: Record<string, number>;
+  averageItemsPerBox: number;
+};
+
+export type AdminHuntBoxSimulationResponse = {
+  boxesPerConfig: number;
+  rarityValue: Record<string, number>;
+  generatedAt: string;
+  results: AdminHuntBoxSimulationResult[];
 };
 
 export type AdminHuntPlayersResponse = {
@@ -1694,6 +1787,55 @@ export async function adminUpdateHuntCharacter(uuid: string, input: Partial<Pick
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to update Hunt character" };
   return { ok: true as const, data: data as AdminHuntCharacter };
+}
+
+export async function adminGetHuntBoxes(): Promise<AdminHuntBoxesResponse | null> {
+  try {
+    const res = await fetchWithAuthRecovery("/api/admin/hunt/boxes", { headers: authHeaders(), cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as AdminHuntBoxesResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function adminUpdateHuntBoxConfig(uuid: string, input: Partial<AdminHuntBoxConfig>) {
+  const res = await fetchWithAuthRecovery(`/api/admin/hunt/boxes/${encodeURIComponent(uuid)}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to update Hunt box" };
+  return { ok: true as const, data: data as AdminHuntBoxConfig };
+}
+
+export async function adminCreateHuntBoxConfig(input: { type: string; title: string; slug?: string; description?: string }) {
+  const res = await fetchWithAuthRecovery("/api/admin/hunt/boxes", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to create Hunt box" };
+  return { ok: true as const, data: data as AdminHuntBoxConfig };
+}
+
+export async function adminDeleteHuntBoxConfig(uuid: string) {
+  const res = await fetchWithAuthRecovery(`/api/admin/hunt/boxes/${encodeURIComponent(uuid)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to delete Hunt box" };
+  return { ok: true as const };
+}
+
+export async function adminRunHuntBoxSimulation() {
+  const res = await fetchWithAuthRecovery("/api/admin/hunt/boxes/simulation", { headers: authHeaders(), cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to run Hunt box simulation" };
+  return { ok: true as const, data: data as AdminHuntBoxSimulationResponse };
 }
 
 export async function adminGetHuntPlayers(): Promise<AdminHuntPlayersResponse | null> {

@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
+  CompanyBillingPlan,
   CompanyMemberRole,
   FinanceOperationStatus,
   FinanceOperationType,
@@ -30,6 +31,7 @@ import { CreateCompanySubscriptionDto } from "../admin/dto/create-company-subscr
 import { PrismaService } from "../prisma/prisma.service";
 import { MAX_SUBSCRIPTION_PRICE_RUB, MIN_SUBSCRIPTION_PRICE_RUB } from "../subscriptions/subscription-limits";
 import { TelegramNotificationsService } from "../telegram/telegram-notifications.service";
+import { companyBillingFeatures, type CompanyBillingFeatureSet } from "./company-billing-plans";
 import { reassignCompanyReferralFromBillingPromo } from "./company-referral-attribution";
 import {
   AwardCompanyPointsDto,
@@ -300,7 +302,7 @@ export class CompanyService {
     }
     if (!options.allowPastDue) {
       const billing = await this.currentBillingInvoice(member.companyId);
-      if ("access" in billing && billing.access?.status === "PAST_DUE") {
+      if ("access" in billing && billing.access?.status === "SUSPENDED") {
         throw new ForbiddenException("Доступ компании приостановлен до продления ежемесячной подписки NearLoy.");
       }
     }
@@ -516,6 +518,11 @@ export class CompanyService {
     return sorted;
   }
 
+  private async activeBillingFeatures(companyId: number): Promise<CompanyBillingFeatureSet> {
+    const billing = await this.currentBillingInvoice(companyId);
+    return companyBillingFeatures(billing.account.plan);
+  }
+
   async profile(userId: number) {
     const member = await this.membership(userId);
     return {
@@ -695,6 +702,16 @@ export class CompanyService {
   async createLocation(userId: number, dto: UpsertCompanyLocationDto) {
     const member = await this.membership(userId);
     this.requireManager(member);
+    const features = await this.activeBillingFeatures(member.companyId);
+    const createsActiveLocation = dto.isActive ?? true;
+    if (createsActiveLocation) {
+      const activeLocations = await this.prisma.companyLocation.count({
+        where: { companyId: member.companyId, isActive: true },
+      });
+      if (activeLocations >= features.maxLocations) {
+        throw new ForbiddenException(`На текущем тарифе доступно максимум ${features.maxLocations} адреса.`);
+      }
+    }
     const address = dto.address.trim();
     const geocoded = this.mapPickedCompanyAddress(dto) ?? (await this.geocodeCompanyAddress(address));
     await this.assertUniqueCompanyLocationAddress(member.companyId, geocoded.formattedAddress);
@@ -732,6 +749,16 @@ export class CompanyService {
     const existing = await this.prisma.companyLocation.findUnique({ where: { uuid: locationUuid } });
     if (!existing || existing.companyId !== member.companyId) {
       throw new NotFoundException("Company location not found.");
+    }
+    const nextIsActive = dto.isActive ?? existing.isActive;
+    if (!existing.isActive && nextIsActive) {
+      const features = await this.activeBillingFeatures(member.companyId);
+      const activeLocations = await this.prisma.companyLocation.count({
+        where: { companyId: member.companyId, isActive: true, id: { not: existing.id } },
+      });
+      if (activeLocations >= features.maxLocations) {
+        throw new ForbiddenException(`На текущем тарифе доступно максимум ${features.maxLocations} адреса.`);
+      }
     }
 
     const nextAddress = dto.address.trim();
@@ -1499,6 +1526,10 @@ export class CompanyService {
     const member = await this.membership(userId);
     this.requireManager(member);
     const levelRules = this.normalizeLevelRules(dto.levelRules);
+    const features = await this.activeBillingFeatures(member.companyId);
+    if (levelRules.length > features.maxLoyaltyLevels) {
+      throw new ForbiddenException(`На текущем тарифе доступно максимум ${features.maxLoyaltyLevels} уровней.`);
+    }
     const subscriptionSpendPolicy = dto.subscriptionSpendPolicy as SubscriptionSpendPolicy;
     await this.prisma.$transaction(async (tx) => {
       await tx.company.update({
@@ -1535,6 +1566,13 @@ export class CompanyService {
     if (dto.role === CompanyMemberRole.OWNER) throw new BadRequestException("A second owner cannot be assigned.");
     if (member.role === CompanyMemberRole.MANAGER && dto.role !== CompanyMemberRole.CASHIER) {
       throw new ForbiddenException("Managers can add cashiers only.");
+    }
+    const features = await this.activeBillingFeatures(member.companyId);
+    const activeMembers = await this.prisma.companyMember.count({
+      where: { companyId: member.companyId, isActive: true },
+    });
+    if (activeMembers >= features.maxTeamMembers) {
+      throw new ForbiddenException(`На текущем тарифе доступно максимум ${features.maxTeamMembers} сотрудников.`);
     }
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException("An account with this email already exists.");
@@ -1578,6 +1616,15 @@ export class CompanyService {
     }
     if (actor.role === CompanyMemberRole.MANAGER && target.role !== CompanyMemberRole.CASHIER) {
       throw new ForbiddenException("Managers can disable cashiers only.");
+    }
+    if (!target.isActive && dto.isActive) {
+      const features = await this.activeBillingFeatures(actor.companyId);
+      const activeMembers = await this.prisma.companyMember.count({
+        where: { companyId: actor.companyId, isActive: true, id: { not: target.id } },
+      });
+      if (activeMembers >= features.maxTeamMembers) {
+        throw new ForbiddenException(`На текущем тарифе доступно максимум ${features.maxTeamMembers} сотрудников.`);
+      }
     }
     return this.prisma.companyMember.update({
       where: { uuid: memberUuid },
@@ -1684,6 +1731,69 @@ export class CompanyService {
       orderBy: { periodStartsAt: "asc" },
     });
     if (overdueInvoice) {
+      const promo = account.appliedPromoCode;
+      const promoActive = Boolean(
+        promo?.isActive &&
+          (!promo.startsAt || promo.startsAt <= now) &&
+          (!promo.expiresAt || promo.expiresAt > now),
+      );
+      if (promoActive && promo?.id) {
+        const calculation = this.billingAmount({
+          baseFee: Number(overdueInvoice.baseFee),
+          discountPercent: Number(promo.discountPercent),
+        });
+        const invoiceStatus = calculation.amountDue === 0 ? "WAIVED" : "OPEN";
+        const invoice = await this.prisma.companyBillingInvoice.update({
+          where: { id: overdueInvoice.id },
+          data: {
+            status: invoiceStatus,
+            promoDiscountPercent: new Prisma.Decimal(Number(promo.discountPercent)),
+            promoDiscountAmount: new Prisma.Decimal(calculation.promoDiscountAmount),
+            commissionCreditAmount: new Prisma.Decimal(calculation.commissionCreditAmount),
+            amountDue: new Prisma.Decimal(calculation.amountDue),
+            appliedPromoCodeId: promo.id,
+          },
+        });
+        if (invoice.status === "WAIVED") {
+          await this.prisma.$transaction((tx) =>
+            reassignCompanyReferralFromBillingPromo({
+              tx,
+              companyId,
+              promoCodeId: promo.id,
+            }),
+          );
+          if (account.status === "PAST_DUE") {
+            account = await this.prisma.companyBillingAccount.update({
+              where: { companyId },
+              data: { status: "ACTIVE", plan: CompanyBillingPlan.PRO },
+              include: { appliedPromoCode: true },
+            });
+          }
+          return {
+            account,
+            invoice,
+            calculation,
+            access: { status: account.status, graceEndsAt: null, daysLeft: null },
+          };
+        }
+        const graceEndsAt = this.addDays(invoice.periodEndsAt, COMPANY_BILLING_GRACE_DAYS);
+        if (graceEndsAt <= now && (account.status !== "ACTIVE" || account.plan !== CompanyBillingPlan.GO)) {
+          account = await this.prisma.companyBillingAccount.update({
+            where: { companyId },
+            data: { status: "ACTIVE", plan: CompanyBillingPlan.GO },
+            include: { appliedPromoCode: true },
+          });
+        }
+        return {
+          account,
+          invoice,
+          calculation,
+          access:
+            graceEndsAt > now
+              ? { status: "GRACE", graceEndsAt, daysLeft: Math.max(0, Math.ceil((graceEndsAt.getTime() - now.getTime()) / DAY_MS)) }
+              : { status: "ACTIVE", graceEndsAt, daysLeft: 0 },
+        };
+      }
       const graceEndsAt = this.addDays(overdueInvoice.periodEndsAt, COMPANY_BILLING_GRACE_DAYS);
       if (graceEndsAt > now) {
         return {
@@ -1692,23 +1802,23 @@ export class CompanyService {
           access: { status: "GRACE", graceEndsAt, daysLeft: Math.ceil((graceEndsAt.getTime() - now.getTime()) / DAY_MS) },
         };
       }
-      if (account.status !== "PAST_DUE") {
+      if (account.status !== "ACTIVE" || account.plan !== CompanyBillingPlan.GO) {
         account = await this.prisma.companyBillingAccount.update({
           where: { companyId },
-          data: { status: "PAST_DUE" },
+          data: { status: "ACTIVE", plan: CompanyBillingPlan.GO },
           include: { appliedPromoCode: true },
         });
       }
       return {
         account,
         invoice: overdueInvoice,
-        access: { status: "PAST_DUE", graceEndsAt, daysLeft: 0 },
+        access: { status: "ACTIVE", graceEndsAt, daysLeft: 0 },
       };
     }
     if (account.status === "PAST_DUE") {
       account = await this.prisma.companyBillingAccount.update({
         where: { companyId },
-        data: { status: "ACTIVE" },
+        data: { status: "ACTIVE", plan: CompanyBillingPlan.PRO },
         include: { appliedPromoCode: true },
       });
     }
@@ -1779,12 +1889,22 @@ export class CompanyService {
           promoCodeId: promo.id,
         }),
       );
-    }
-    const graceEndsAt = this.addDays(invoice.periodEndsAt, COMPANY_BILLING_GRACE_DAYS);
-    if (invoice.status === "OPEN" && invoice.periodEndsAt <= now && graceEndsAt <= now && account.status !== "PAST_DUE") {
       account = await this.prisma.companyBillingAccount.update({
         where: { companyId },
-        data: { status: "PAST_DUE" },
+        data: { status: "ACTIVE", plan: CompanyBillingPlan.PRO },
+        include: { appliedPromoCode: true },
+      });
+    }
+    const graceEndsAt = this.addDays(invoice.periodEndsAt, COMPANY_BILLING_GRACE_DAYS);
+    if (
+      invoice.status === "OPEN" &&
+      invoice.periodEndsAt <= now &&
+      graceEndsAt <= now &&
+      (account.status !== "ACTIVE" || account.plan !== CompanyBillingPlan.GO)
+    ) {
+      account = await this.prisma.companyBillingAccount.update({
+        where: { companyId },
+        data: { status: "ACTIVE", plan: CompanyBillingPlan.GO },
         include: { appliedPromoCode: true },
       });
     }
@@ -1794,7 +1914,9 @@ export class CompanyService {
       calculation,
       access:
         invoice.status === "OPEN" && invoice.periodEndsAt <= now
-          ? { status: graceEndsAt > now ? "GRACE" : "PAST_DUE", graceEndsAt, daysLeft: Math.max(0, Math.ceil((graceEndsAt.getTime() - now.getTime()) / DAY_MS)) }
+          ? graceEndsAt > now
+            ? { status: "GRACE", graceEndsAt, daysLeft: Math.max(0, Math.ceil((graceEndsAt.getTime() - now.getTime()) / DAY_MS)) }
+            : { status: "ACTIVE", graceEndsAt, daysLeft: 0 }
           : { status: account.status, graceEndsAt: null, daysLeft: null },
       referralManager: this.isCompanyReferralCommissionable(company.currentReferral) ? company.currentReferral?.referrer : null,
     };
@@ -1953,6 +2075,10 @@ export class CompanyService {
       await tx.companyBillingInvoice.update({
         where: { id: current.invoice!.id },
         data: { status: "PAID", paidAmount: current.invoice!.amountDue, paidAt: new Date() },
+      });
+      await tx.companyBillingAccount.update({
+        where: { companyId: member.companyId },
+        data: { status: "ACTIVE", plan: CompanyBillingPlan.PRO },
       });
       await reassignCompanyReferralFromBillingPromo({
         tx,

@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 
 type YandexRtbAdProps = {
@@ -9,6 +9,7 @@ type YandexRtbAdProps = {
   pageNumber: number;
   placement: string;
   className?: string;
+  type?: "feed" | "banner";
 };
 
 declare global {
@@ -17,7 +18,7 @@ declare global {
     Ya?: {
       Context?: {
         AdvManager?: {
-          render?: (options: { blockId: string; renderTo: string; async?: boolean; pageNumber?: number }) => void;
+          render?: (options: { blockId: string; renderTo: string; async?: boolean; pageNumber?: number; type?: "feed" }) => void;
         };
       };
     };
@@ -25,15 +26,22 @@ declare global {
 }
 
 function isRtbEnabled(blockId?: string) {
-  return Boolean(blockId?.trim()) && process.env.NEXT_PUBLIC_YANDEX_RSYA_ENABLED !== "false";
+  return Boolean(blockId?.trim()) && process.env.NEXT_PUBLIC_YANDEX_RSYA_ENABLED === "true";
 }
 
 function safeIdPart(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-");
 }
 
-export function YandexRtbAd({ blockId, pageNumber, placement, className }: YandexRtbAdProps) {
+function shouldKeepFallbackVisible() {
+  if (process.env.NODE_ENV !== "production") return true;
+  if (typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1"].includes(window.location.hostname);
+}
+
+export function YandexRtbAd({ blockId, pageNumber, placement, className, type = "feed" }: YandexRtbAdProps) {
   const enabled = isRtbEnabled(blockId);
+  const [hidden, setHidden] = useState(false);
   const renderTo = useMemo(
     () => `yandex_rtb_${safeIdPart(placement)}_${safeIdPart(blockId ?? "disabled")}_${pageNumber}`,
     [blockId, pageNumber, placement],
@@ -41,29 +49,47 @@ export function YandexRtbAd({ blockId, pageNumber, placement, className }: Yande
 
   useEffect(() => {
     if (!enabled || !blockId) return;
+    setHidden(false);
     const target = document.getElementById(renderTo);
     if (!target) return;
+    let settled = false;
+    const hasRenderedAd = () => target.children.length > 0 || target.textContent?.trim();
+    const markRendered = () => {
+      if (hasRenderedAd()) settled = true;
+    };
+    const observer = new MutationObserver(markRendered);
+    observer.observe(target, { childList: true, subtree: true, characterData: true });
+    const fallbackTimer = window.setTimeout(() => {
+      if (!settled && !hasRenderedAd() && !shouldKeepFallbackVisible()) setHidden(true);
+      observer.disconnect();
+    }, 4200);
 
     const render = () => {
-      window.Ya?.Context?.AdvManager?.render?.({
+      const renderOptions: { blockId: string; renderTo: string; async: boolean; pageNumber: number; type?: "feed" } = {
         blockId,
         renderTo,
         async: true,
         pageNumber,
-      });
+      };
+      if (type === "feed") renderOptions.type = "feed";
+      window.Ya?.Context?.AdvManager?.render?.(renderOptions);
     };
 
     target.innerHTML = "";
     if (window.Ya?.Context?.AdvManager?.render) {
       render();
-      return;
+    } else {
+      window.yaContextCb = window.yaContextCb || [];
+      window.yaContextCb.push(render);
     }
 
-    window.yaContextCb = window.yaContextCb || [];
-    window.yaContextCb.push(render);
-  }, [blockId, enabled, pageNumber, renderTo]);
+    return () => {
+      window.clearTimeout(fallbackTimer);
+      observer.disconnect();
+    };
+  }, [blockId, enabled, pageNumber, renderTo, type]);
 
-  if (!enabled) return null;
+  if (!enabled || hidden) return null;
 
   return (
     <aside className={cn("rounded-3xl border border-cyan-200/12 bg-white/[0.025] p-3", className)} aria-label="Реклама">

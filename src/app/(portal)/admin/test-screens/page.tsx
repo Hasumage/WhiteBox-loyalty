@@ -1,4 +1,4 @@
-import { Award, CalendarHeart, Crown, Handshake, Medal, QrCode, Sparkles, Trophy, TrendingUp, UsersRound } from "lucide-react";
+import { Award, CalendarHeart, Crown, Handshake, Medal, QrCode, Swords, Trophy, TrendingUp, UsersRound } from "lucide-react";
 import { ConceptLinkCard, ConceptPageShell } from "./concept-components";
 
 const screens = [
@@ -39,12 +39,6 @@ const screens = [
     icon: QrCode,
   },
   {
-    href: "/admin/test-screens/mascot",
-    title: "Маскот",
-    description: "Пробный дружелюбный персонаж в духе Duolingo, но под NearLoy.",
-    icon: Sparkles,
-  },
-  {
     href: "/admin/test-screens/business-model",
     title: "Бизнес модель",
     description: "Комиссия с подписок, 999 ₽ floor, налоги, платежи, затраты и сценарии рентабельности.",
@@ -55,6 +49,12 @@ const screens = [
     title: "Клуб",
     description: "Приватное сообщество предпринимателей: интро, коллаборации, доверие и сделки внутри NearLoy.",
     icon: Handshake,
+  },
+  {
+    href: "/admin/test-screens/hunt-battle",
+    title: "Бой Nearloy Hunt",
+    description: "Мобильный экран командного боя: 3 персонажа, резонанс, стихии и ручной выбор связок.",
+    icon: Swords,
   },
 ];
 

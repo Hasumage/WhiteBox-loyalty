@@ -2,10 +2,11 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { CompanyMemberRole, LoyaltyTransactionType } from "@prisma/client";
+import { CompanyBillingPlan, CompanyMemberRole, LoyaltyTransactionType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CompanyAiLocationsService } from "./ai-locations/company-ai-locations.service";
 import type { CompanyAiLocationsDraft } from "./ai-locations/company-ai-locations.types";
+import { companyBillingFeatures } from "./company-billing-plans";
 import { CompanyService } from "./company.service";
 import { CompanyAiMode, type CompanyAiAssistDto, type CompanyAiMessageDto } from "./dto/company-ai.dto";
 
@@ -336,6 +337,21 @@ export class CompanyAiService {
 
   async assist(userId: number, dto: CompanyAiAssistDto): Promise<CompanyAiAssistResult> {
     const locale = dto.locale ?? "ru";
+    const member = await this.prisma.companyMember.findFirst({
+      where: { userId, isActive: true },
+      select: { company: { select: { billingAccount: { select: { plan: true } } } } },
+    });
+    const plan = member?.company.billingAccount?.plan ?? CompanyBillingPlan.GO;
+    if (!companyBillingFeatures(plan).hasAiAssistant) {
+      return {
+        reply: locale === "ru" ? "AI-ассистент доступен на тарифе Nearloy PRO." : "The AI assistant is available on the Nearloy PRO plan.",
+        intent: "BLOCKED",
+        pendingAction: null,
+        warnings: [locale === "ru" ? "Текущий тариф: Nearloy GO." : "Current plan: Nearloy GO."],
+        blockedActions: ["AI_ASSISTANT_REQUIRES_PRO"],
+        website: null,
+      };
+    }
     const deterministicGreeting = this.deterministicGreetingReply(dto, locale);
     if (deterministicGreeting) {
       return { ...deterministicGreeting, website: null };

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -24,11 +24,16 @@ import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { YandexRtbAd } from "@/components/ads/YandexRtbAd";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { categoryName } from "@/lib/i18n/categories";
 import { companyLevelName } from "@/lib/i18n/company-levels";
 
 const POPULAR_CATEGORY_SLUGS = ["coffee", "books", "auto", "barber", "beauty", "food", "fitness", "retail"];
+const PARTNERS_FEED_AD_BLOCK_ID =
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_PARTNERS_FEED_BLOCK_ID ||
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_APP_FEED_BLOCK_ID ||
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_HUNT_FEED_BLOCK_ID;
 
 const item = {
   hidden: { opacity: 0, y: 8 },
@@ -288,9 +293,11 @@ export default function CompaniesPage() {
           const badges = companyCategories.slice(0, 3);
           const extraCount = Math.max(0, companyCategories.length - badges.length);
 
+          const showAdAfter = index === 3 || (index > 3 && (index - 3) % 7 === 0);
+
           return (
+            <Fragment key={company.id}>
             <motion.li
-              key={company.id}
               variants={item}
               initial="hidden"
               animate="show"
@@ -407,6 +414,12 @@ export default function CompaniesPage() {
                 </Card>
               </Link>
             </motion.li>
+            {showAdAfter && (
+              <li>
+                <YandexRtbAd blockId={PARTNERS_FEED_AD_BLOCK_ID} pageNumber={Math.floor(index / 7) + 1} placement="partners-feed" />
+              </li>
+            )}
+            </Fragment>
           );
         })}
       </ul>

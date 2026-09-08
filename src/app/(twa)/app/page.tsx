@@ -19,6 +19,7 @@ import { CategoryChipStrip } from "@/components/twa/CategoryChipStrip";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/CategoryIcon";
 import { TwaLoadingScreen } from "@/components/twa/TwaLoadingScreen";
+import { YandexRtbAd } from "@/components/ads/YandexRtbAd";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { interpolate } from "@/lib/i18n/format";
@@ -38,6 +39,9 @@ const item = {
 };
 
 const HOME_LOYALTY_CARDS_PREVIEW_LIMIT = 4;
+const APP_FEED_AD_BLOCK_ID =
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_APP_FEED_BLOCK_ID ||
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_HUNT_FEED_BLOCK_ID;
 
 function getRenewPeriodDays(subscription: TwaUserSubscription) {
   if (!subscription.expiresAt) return 30;
@@ -306,6 +310,7 @@ export default function HomePage() {
         </motion.div>
       </motion.section>
 
+
       {/* #SubNearloyCode: активные клиентские подписки скрыты до отдельного запуска. */}
       {SUBSCRIPTIONS_ENABLED ? (
       <motion.section
@@ -482,6 +487,8 @@ export default function HomePage() {
           </Card>
         </Link>
       </motion.section>
+
+      <YandexRtbAd blockId={APP_FEED_AD_BLOCK_ID} pageNumber={1} placement="app-home-bottom" className="mt-6" />
     </motion.div>
   );
 }

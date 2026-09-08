@@ -1,4 +1,4 @@
-import { CompanyMemberRole } from "@prisma/client";
+import { CompanyBillingPlan, CompanyMemberRole } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
 import { isUserAuthResponse, requireUserSession } from "@/lib/auth/require-user-session";
 import {
@@ -6,6 +6,7 @@ import {
   deleteCompanyMediaFile,
   storeCompanyMediaFile,
 } from "@/lib/company-media-storage";
+import { companyBillingFeatures } from "@/lib/company-billing-plans";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -43,13 +44,23 @@ async function getCompanyMember(request: NextRequest) {
   }
   const member = await prisma.companyMember.findFirst({
     where: { userId: session.userId, isActive: true },
-    select: { companyId: true, role: true },
+    select: { companyId: true, role: true, company: { select: { billingAccount: { select: { plan: true } } } } },
   });
   if (!member) return NextResponse.json({ message: "Компания не найдена." }, { status: 404 });
   if (member.role === CompanyMemberRole.CASHIER) {
     return NextResponse.json({ message: "Недостаточно прав для управления акциями." }, { status: 403 });
   }
   return member;
+}
+
+function requireSpecialOffersPlan(member: {
+  company: { billingAccount: { plan: CompanyBillingPlan } | null };
+}) {
+  const plan = member.company.billingAccount?.plan ?? CompanyBillingPlan.GO;
+  if (!companyBillingFeatures(plan).canManageSpecialOffers) {
+    return NextResponse.json({ message: "Специальные акции и промокоды доступны на тарифе Nearloy PRO." }, { status: 403 });
+  }
+  return null;
 }
 
 function serializeOffer(offer: {
@@ -83,6 +94,8 @@ function serializeOffer(offer: {
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const member = await getCompanyMember(request);
   if (member instanceof NextResponse) return member;
+  const planError = requireSpecialOffersPlan(member);
+  if (planError) return planError;
   const { id } = await params;
   let stored: Awaited<ReturnType<typeof storeCompanyMediaFile>> | null = null;
   try {

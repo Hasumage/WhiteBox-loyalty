@@ -2,14 +2,17 @@ import { adminDictionary } from "./dictionaries/admin";
 import { adminPagesDictionary } from "./dictionaries/admin-pages";
 import { clientDictionary } from "./dictionaries/client";
 import type { Locale } from "./shared";
+import { huntArenaDictionary } from "./dictionaries/hunt-arena";
 
 export const dictionary = {
   en: {
+    ...huntArenaDictionary.en,
     ...adminDictionary.en,
     ...adminPagesDictionary.en,
     ...clientDictionary.en,
   },
   ru: {
+    ...huntArenaDictionary.ru,
     ...adminDictionary.ru,
     ...adminPagesDictionary.ru,
     ...clientDictionary.ru,

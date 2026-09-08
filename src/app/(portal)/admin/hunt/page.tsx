@@ -11,9 +11,10 @@ import { HuntAdminTabs } from "./_components/hunt-admin-tabs";
 
 function mediaSrc(url?: string | null) {
   if (!url) return "/hunt-assets/cards/compass-light.webp";
-  if (url.startsWith("/hunt/cards/")) return url.replace("/hunt/cards/", "/hunt-assets/cards/");
-  if (url.startsWith("/hunt/shop/")) return url.replace("/hunt/shop/", "/hunt-assets/shop/");
-  return url;
+  const [path] = url.split("?");
+  if (path.startsWith("/hunt/cards/")) return path.replace("/hunt/cards/", "/hunt-assets/cards/");
+  if (path.startsWith("/hunt/shop/")) return path.replace("/hunt/shop/", "/hunt-assets/shop/");
+  return path;
 }
 
 function StatCard({ title, value, icon: Icon, tone = "cyan" }: { title: string; value: string | number; icon: typeof Users; tone?: "cyan" | "violet" | "amber" | "emerald" }) {

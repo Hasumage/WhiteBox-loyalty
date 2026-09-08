@@ -7,6 +7,10 @@ export class OpenHuntBoxDto {
   boxUuid?: string;
 
   @IsOptional()
+  @IsString()
+  boxConfigId?: string;
+
+  @IsOptional()
   @IsEnum(HuntBoxType)
   boxType?: HuntBoxType;
 }

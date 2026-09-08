@@ -16,6 +16,7 @@ import { ReportHuntPostDto } from "./dto/report-hunt-post.dto";
 import { UploadHuntMediaDto } from "./dto/upload-hunt-media.dto";
 import { ApplyHuntCardUpgradeBonusDto, UpgradeHuntCardDto } from "./dto/upgrade-hunt-card.dto";
 import { HuntService } from "./hunt.service";
+import { HuntCollectionDto } from "./dto/hunt-collection.dto";
 
 @ApiTags("hunt")
 @ApiBearerAuth("access-token")
@@ -117,6 +118,14 @@ export class HuntController {
     return this.huntService.cardCatalog(user.userId);
   }
 
+  @Get("cards/collection")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: "Owned Hunt cards, server filtering/sorting and 20-card pages" })
+  collection(@CurrentUser() user: RequestUser, @Query() query: HuntCollectionDto) {
+    return this.huntService.collection(user.userId, query);
+  }
+
   @Post("posts")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
@@ -149,7 +158,7 @@ export class HuntController {
   @ApiBody({ type: OpenHuntBoxDto })
   @ApiOperation({ summary: "Open a granted box or buy a standard one with server-side currency" })
   openBox(@CurrentUser() user: RequestUser, @Body() dto: OpenHuntBoxDto) {
-    return this.huntService.openBox(user.userId, dto.boxUuid, dto.boxType);
+    return this.huntService.openBox(user.userId, dto.boxUuid, dto.boxType, dto.boxConfigId);
   }
 
   @Post("cards/upgrade")

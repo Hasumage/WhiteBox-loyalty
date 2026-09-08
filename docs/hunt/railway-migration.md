@@ -2,6 +2,10 @@
 
 Этот документ фиксирует порядок переноса Nearloy Hunt на новую Railway PostgreSQL базу.
 
+## Способности персонажей: сентябрь 2026
+
+Арена v7 требует миграцию `20260907180000_hunt_ability_framework`. После применения миграций и генерации Prisma выполните `npm run db:seed:hunt-abilities` против нужного `DATABASE_URL`, затем перезапустите приложения. Команда добавляет отсутствующие слоты, не перезаписывая сохранённые настройки. Сейчас это 21 персонаж и 63 способности. Не запускайте публичную арену между созданием пустых таблиц и заполнением слотов: она вернёт 503 `CONTENT_NOT_READY`. Старые подписанные бои нужно начать заново. [Подробности и ограничения](./ability-framework.md).
+
 ## Главное решение
 
 Hunt сейчас живет в общей Prisma-схеме Nearloy и использует обычный `DATABASE_URL`.
@@ -86,11 +90,17 @@ JWT_SECRET=<same-jwt-secret-as-api>
 Для РСЯ:
 
 ```env
-NEXT_PUBLIC_YANDEX_RSYA_ENABLED=false
+NEXT_PUBLIC_YANDEX_RSYA_ENABLED=true
+NEXT_PUBLIC_YANDEX_RSYA_APP_FEED_BLOCK_ID=R-A-19849293-1
 NEXT_PUBLIC_YANDEX_RSYA_HUNT_FEED_BLOCK_ID=
+NEXT_PUBLIC_YANDEX_RSYA_PUBLIC_HUNT_FEED_BLOCK_ID=
+NEXT_PUBLIC_YANDEX_RSYA_PARTNERS_FEED_BLOCK_ID=
+NEXT_PUBLIC_YANDEX_RSYA_MARKETPLACE_FEED_BLOCK_ID=
+NEXT_PUBLIC_YANDEX_RSYA_HUNT_SHOP_BANNER_BLOCK_ID=R-A-19849293-2
+NEXT_PUBLIC_YANDEX_RSYA_COMPANY_GO_BLOCK_ID=
 ```
 
-До прохождения модерации РСЯ держим `NEXT_PUBLIC_YANDEX_RSYA_ENABLED=false`. После получения block id можно включить и указать блок для ленты Hunt.
+Если нужно временно выключить рекламу без удаления block id, поставьте `NEXT_PUBLIC_YANDEX_RSYA_ENABLED=false` и заново задеплойте Web service.
 
 ## Порядок первой миграции
 

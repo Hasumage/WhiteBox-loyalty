@@ -10,7 +10,25 @@ Base path:
 
 ## Endpoints
 
+### `POST /api/hunt/training` (Next.js, not Nest)
+
+Independent reward-free tactical arena. Start: `{ "action": "start" }`. Optionally send three `teamUuids` (authenticated owner required), or `previewSpeciesId` (HUNT administrator required). Submit a turn: `{ "action": "round", "token": "<signed snapshot>", "orders": [...] }`. Response: `{ battle, token, frames }`. The wire field `round` counts turns. Modified, expired, terminal or pre-v7 snapshots and invalid orders return HTTP 400. Missing ability content returns 503. Legacy `bonus` values are rejected.
+
+The server validates ownership, path, range, targets, cooldown and shared resonance budget, plans the AI without player orders and resolves all effects. Snapshot HMAC namespace: `hunt-training-v7`; two-hour lifetime. Set the same `JWT_SECRET` on all instances. Critical rolls use a separate HMAC domain plus match nonce, turn and attacker/target IDs; repeat submissions cannot reroll that pair. No random seed or next-roll value is returned to the client.
+
+Frames include optional `critical` and `covered` on attacks, `absorbed` shield damage, and `displace` events with `targetId`, `path`, `amount` (cells), `displacement: "push" | "pull"`. `Battle.statistics` accumulates damage, healing, absorption and control per unit. Spent resonance and control score remain separate. Battle starts read ability definitions from DB and snapshot them; turns remain transient, with no economic rewards. Apply the ability migration and seed before serving starts. Rewarded PvP still needs persistent matches and atomic turn submission. See [Tactical Arena](./tactical-arena.md).
+
+### `GET /api/admin/hunt/characters/:uuid/abilities`
+
+Requires HUNT `canView`. Returns the three ordered definitions with current revision, JSON config and latest 20 history snapshots. Missing species: 404.
+
+### `PUT /api/admin/hunt/characters/:uuid/abilities`
+
+Requires HUNT `canEdit`. Body is exactly three complete editable definitions, including IDs, slots, expected revisions and schema version. All three save atomically with assignment reorder, immutable history and audit event. Invalid values, unknown effect fields or foreign assignments: 400. Stale revision: 409 with no partial update. Restore by submitting a prior snapshot with the current expected revision. [Fields and limits](./ability-framework.md).
+
 ### `GET /api/hunt/overview`
+
+The `cards` field is a home preview limited to 12 instances. Never use it as the full collection or the squad-selection source. Authenticated `GET /api/hunt/cards/collection` returns **20 cards per page**, including duplicate instances, scoped to the current owner. Parameters: `page` (positive integer), `sort` (`rarity`, `level`, `name`, `element`, `newest`), `element` (enum or `all`), `locale` (`ru`/`en`), `query` (up to 100 characters). Filtering and sorting happen in PostgreSQL BEFORE pagination, with UUID as a stable final tie-breaker. Response: `{cards,total,filteredTotal,page,pages,speciesCounts}`. `total` counts the full collection; `filteredTotal` controls filtered pagination. Out-of-range pages clamp to the last page. Search/sort/filter changes reset the UI to page one. Both collection and squad selection use this endpoint; selected squad members remain selected across pages.
 
 Returns the user's Hunt home state:
 

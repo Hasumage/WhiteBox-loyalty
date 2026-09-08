@@ -2,6 +2,8 @@
 
 import { Clover, Flame, HeartPulse, Leaf, Moon, Music, ShieldCheck, Star, Sun, Swords, Waves, Wind } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { TranslationKey } from "@/lib/i18n/dictionary";
+import type { Locale } from "@/lib/i18n/shared";
 import type { HuntCard, HuntCardStatKey, HuntElement, HuntRarity } from "@/lib/api/twa-client";
 
 export const rarityClass: Record<HuntRarity, string> = {
@@ -22,6 +24,35 @@ export const rarityBadgeClass: Record<HuntRarity, string> = {
 
 export const huntInteractiveClass =
   "cursor-pointer transition hover:border-cyan-200/35 hover:bg-cyan-200/10 hover:text-cyan-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
+
+export const rarityLabelKeys: Record<HuntRarity, TranslationKey> = {
+  COMMON: "client.hunt.rarity.common",
+  UNCOMMON: "client.hunt.rarity.uncommon",
+  RARE: "client.hunt.rarity.rare",
+  EPIC: "client.hunt.rarity.epic",
+  LEGENDARY: "client.hunt.rarity.legendary",
+};
+
+export function huntRarityLabel(rarity: HuntRarity, t: (key: TranslationKey) => string) {
+  return t(rarityLabelKeys[rarity]);
+}
+
+export type LocalizedHuntSpecies = {
+  name: string;
+  description?: string | null;
+  nameRu?: string | null;
+  nameEn?: string | null;
+  descriptionRu?: string | null;
+  descriptionEn?: string | null;
+};
+
+export function huntSpeciesName(species: LocalizedHuntSpecies, locale: Locale) {
+  return (locale === "ru" ? species.nameRu : species.nameEn) || species.name;
+}
+
+export function huntSpeciesDescription(species: LocalizedHuntSpecies, locale: Locale) {
+  return (locale === "ru" ? species.descriptionRu : species.descriptionEn) || species.description || "";
+}
 
 const elementFallbackImages: Record<HuntElement, string> = {
   FLAME: "/hunt-assets/cards/coffee-ember.webp",
