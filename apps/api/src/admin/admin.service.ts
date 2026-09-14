@@ -12,6 +12,9 @@ import {
   CompanyReferralPipelineStatus,
   CompanyReferralStatus,
   EmailMessageTargetType,
+  HuntCardGiftStatus,
+  HuntCardRarity,
+  HuntCurrencyReason,
   PaymentStatus,
   PermissionScope,
   PromoCodeRewardType,
@@ -49,6 +52,13 @@ import { CreateSubscriptionEntitlementDto } from "../company/dto/company-workspa
 
 const PAYMENT_CHECKOUT_TTL_MS = 15 * 60 * 1000;
 const ACTIVE_PAYMENT_CHECKOUT_STATUSES = [PaymentStatus.PENDING, PaymentStatus.WAITING_FOR_CAPTURE] as const;
+const HUNT_RARITY_ORDER: HuntCardRarity[] = [
+  HuntCardRarity.COMMON,
+  HuntCardRarity.UNCOMMON,
+  HuntCardRarity.RARE,
+  HuntCardRarity.EPIC,
+  HuntCardRarity.LEGENDARY,
+];
 
 @Injectable()
 export class AdminService {
@@ -2001,6 +2011,225 @@ export class AdminService {
         },
       })),
     };
+  }
+
+  private huntLevelFromXp(xp: number) {
+    return Math.max(1, Math.floor(Math.sqrt(xp / 120)) + 1);
+  }
+
+  private normalizeHuntCardLevel(value: unknown) {
+    const level = Number(value ?? 1);
+    if (!Number.isFinite(level)) return 1;
+    return Math.max(1, Math.min(30, Math.floor(level)));
+  }
+
+  private normalizeHuntRarity(value: unknown): HuntCardRarity | null {
+    return HUNT_RARITY_ORDER.includes(value as HuntCardRarity) ? value as HuntCardRarity : null;
+  }
+
+  private huntSpeciesName(species: { name: string; nameRu: string | null; nameEn: string | null }) {
+    return species.nameRu ?? species.nameEn ?? species.name;
+  }
+
+  private async ensureHuntProfileTx(tx: Prisma.TransactionClient, userId: number) {
+    return tx.huntPlayerProfile.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+  }
+
+  async getUserHuntAdmin(uuid: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { uuid },
+      select: { id: true, uuid: true, name: true, email: true },
+    });
+    if (!user) throw new NotFoundException("User not found");
+
+    const [profile, cards, gifts, species, ledger] = await Promise.all([
+      this.prisma.huntPlayerProfile.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: { userId: user.id },
+      }),
+      this.prisma.huntCard.findMany({
+        where: { ownerId: user.id },
+        include: { species: true, giftSource: { select: { uuid: true, note: true, createdAt: true } } },
+        orderBy: [{ createdAt: "desc" }],
+        take: 250,
+      }),
+      this.prisma.huntCardGift.findMany({
+        where: { userId: user.id },
+        include: {
+          species: true,
+          actor: { select: { uuid: true, name: true, email: true } },
+          acceptedCard: { select: { uuid: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+      this.prisma.huntCreatureSpecies.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          nameRu: true,
+          nameEn: true,
+          baseRarity: true,
+          element: true,
+          imageUrl: true,
+          isActive: true,
+        },
+      }),
+      this.prisma.huntCurrencyLedger.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+        take: 80,
+        select: {
+          uuid: true,
+          amount: true,
+          reason: true,
+          sourceType: true,
+          sourceId: true,
+          balanceAfter: true,
+          metadata: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    return {
+      user,
+      profile,
+      cards,
+      gifts,
+      species,
+      ledger,
+    };
+  }
+
+  async adjustUserHuntCurrency(uuid: string, amount: number, note?: string, actorUserId?: number) {
+    if (!Number.isInteger(amount) || amount === 0) {
+      throw new BadRequestException("Currency adjustment amount must be a non-zero integer.");
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { uuid },
+      select: { id: true, uuid: true, name: true, email: true },
+    });
+    if (!user) throw new NotFoundException("User not found");
+
+    await this.prisma.$transaction(async (tx) => {
+      const current = await this.ensureHuntProfileTx(tx, user.id);
+      const nextBalance = current.influenceBalance + amount;
+      if (nextBalance < 0) throw new BadRequestException("NearCoin balance cannot become negative.");
+      const nextXp = amount > 0 ? current.xp + amount : current.xp;
+      await tx.huntPlayerProfile.update({
+        where: { userId: user.id },
+        data: {
+          influenceBalance: nextBalance,
+          lifetimeInfluence: amount > 0 ? { increment: amount } : undefined,
+          xp: nextXp,
+          level: this.huntLevelFromXp(nextXp),
+        },
+      });
+      await tx.huntCurrencyLedger.create({
+        data: {
+          userId: user.id,
+          amount,
+          reason: HuntCurrencyReason.ADMIN_ADJUSTMENT,
+          sourceType: "admin",
+          sourceId: actorUserId ? String(actorUserId) : undefined,
+          balanceAfter: nextBalance,
+          metadata: {
+            note: note?.trim().slice(0, 1000) || null,
+            actorUserId: actorUserId ?? null,
+          },
+        },
+      });
+    });
+
+    return this.getUserHuntAdmin(uuid);
+  }
+
+  async createUserHuntGift(
+    uuid: string,
+    input: { speciesId?: string; speciesSlug?: string; rarity?: string; level?: number; note?: string },
+    actorUserId?: number,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { uuid },
+      select: { id: true, uuid: true, name: true, email: true },
+    });
+    if (!user) throw new NotFoundException("User not found");
+    const speciesId = input.speciesId?.trim();
+    const speciesSlug = input.speciesSlug?.trim();
+    if (!speciesId && !speciesSlug) throw new BadRequestException("Hunt creature species is required.");
+    const species = await this.prisma.huntCreatureSpecies.findFirst({
+      where: {
+        isActive: true,
+        ...(speciesId ? { id: speciesId } : { slug: speciesSlug }),
+      },
+    });
+    if (!species) throw new NotFoundException("Hunt creature species not found");
+
+    await this.ensureHuntProfileTx(this.prisma, user.id);
+    await this.prisma.huntCardGift.create({
+      data: {
+        userId: user.id,
+        speciesId: species.id,
+        actorUserId,
+        rarity: this.normalizeHuntRarity(input.rarity) ?? species.baseRarity,
+        level: this.normalizeHuntCardLevel(input.level),
+        note: input.note?.trim().slice(0, 1000) || `Подарок: ${this.huntSpeciesName(species)}`,
+      },
+    });
+
+    return this.getUserHuntAdmin(uuid);
+  }
+
+  async cancelUserHuntGift(uuid: string, giftUuid: string) {
+    const user = await this.prisma.user.findUnique({ where: { uuid }, select: { id: true } });
+    if (!user) throw new NotFoundException("User not found");
+    const gift = await this.prisma.huntCardGift.findFirst({
+      where: { uuid: giftUuid, userId: user.id },
+    });
+    if (!gift) throw new NotFoundException("Hunt gift not found");
+    if (gift.status !== HuntCardGiftStatus.PENDING) {
+      throw new ConflictException("Only pending Hunt gifts can be canceled.");
+    }
+    await this.prisma.huntCardGift.update({
+      where: { id: gift.id },
+      data: { status: HuntCardGiftStatus.CANCELED, canceledAt: new Date() },
+    });
+    return this.getUserHuntAdmin(uuid);
+  }
+
+  async deleteUserHuntCard(uuid: string, cardUuid: string) {
+    const user = await this.prisma.user.findUnique({ where: { uuid }, select: { id: true } });
+    if (!user) throw new NotFoundException("User not found");
+    const card = await this.prisma.huntCard.findFirst({
+      where: { uuid: cardUuid, ownerId: user.id },
+      include: { species: true },
+    });
+    if (!card) throw new NotFoundException("Hunt card not found");
+    if (card.isLocked) throw new ConflictException("Locked Hunt cards cannot be deleted.");
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.huntCardGift.updateMany({
+        where: { acceptedCardId: card.id },
+        data: { acceptedCardId: null },
+      });
+      await tx.huntCard.delete({ where: { id: card.id } });
+      await this.ensureHuntProfileTx(tx, user.id);
+      const cardCount = await tx.huntCard.count({ where: { ownerId: user.id } });
+      await tx.huntPlayerProfile.update({
+        where: { userId: user.id },
+        data: { cardsOwnedCount: cardCount },
+      });
+    });
+    return this.getUserHuntAdmin(uuid);
   }
 
   async updateUserByUuid(uuid: string, dto: UpdateUserDto, actorUserId?: number) {

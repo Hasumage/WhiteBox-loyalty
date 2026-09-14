@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { YandexRtbAd } from "@/components/ads/YandexRtbAd";
-import { advanceHuntTutorial, createHuntPost, getCachedHuntOverview, getHuntFeed, getHuntOverview, likeHuntPost, markHuntDailyRewardsSeen, reportHuntPost, startHuntTutorialTrainingMatch, uploadHuntMedia, type HuntOverview, type HuntPost, type HuntReportReason, type HuntTutorialStep } from "@/lib/api/twa-client";
+import { acceptHuntGift, advanceHuntTutorial, createHuntPost, getCachedHuntOverview, getHuntFeed, getHuntOverview, likeHuntPost, markHuntDailyRewardsSeen, reportHuntPost, startHuntTutorialTrainingMatch, uploadHuntMedia, type HuntOverview, type HuntPost, type HuntReportReason, type HuntTutorialStep } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 import { cn } from "@/lib/utils";
@@ -313,6 +313,7 @@ export default function HuntPage() {
   const [reportBusy, setReportBusy] = useState(false);
   const [dailyRewardOpen, setDailyRewardOpen] = useState(false);
   const [dailyRewardBusy, setDailyRewardBusy] = useState(false);
+  const [giftBusy, setGiftBusy] = useState(false);
   const [shareTarget, setShareTarget] = useState<ShareTarget>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [tutorialBusy, setTutorialBusy] = useState(false);
@@ -486,6 +487,28 @@ export default function HuntPage() {
     setDailyRewardBusy(false);
   }
 
+  async function acceptPendingGift(giftUuid: string) {
+    if (giftBusy) return;
+    setGiftBusy(true);
+    setNotice(null);
+    const result = await acceptHuntGift(giftUuid);
+    if (result.ok) {
+      setOverview((current) => ({
+        ...current,
+        cards: [result.data.card, ...current.cards],
+        pendingGifts: current.pendingGifts.filter((gift) => gift.uuid !== giftUuid),
+        profile: {
+          ...current.profile,
+          cardsOwnedCount: current.profile.cardsOwnedCount + 1,
+        },
+      }));
+      setNotice("Подарок принят. Персонаж уже в коллекции.");
+    } else {
+      setNotice(result.message);
+    }
+    setGiftBusy(false);
+  }
+
   async function uploadComposerMedia(files: FileList | null) {
     const queue = Array.from(files ?? []).slice(0, Math.max(0, MAX_COMPOSER_PHOTOS - composerPhotos.length));
     if (queue.length === 0) return;
@@ -657,10 +680,56 @@ export default function HuntPage() {
       .toUpperCase() || "NL";
   const showTutorial = overviewLoaded && !overview.profile.tutorialCompletedAt;
   const dailyReward = overview.dailyLikeReward;
+  const pendingGift = overview.pendingGifts[0] ?? null;
 
   return (
     <main className="min-h-full px-4 pb-24 pt-5 text-white">
       {showTutorial && <Tutorial overview={overview} busy={tutorialBusy} onAction={runTutorialAction} />}
+
+      <Dialog open={Boolean(pendingGift) && !showTutorial && !dailyRewardOpen} onOpenChange={() => undefined}>
+        <DialogContent className="overflow-hidden border-cyan-200/20 bg-slate-950 p-0 text-white">
+          {pendingGift && (
+            <div className="relative">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(103,232,249,0.2),transparent_48%),radial-gradient(circle_at_20%_55%,rgba(168,85,247,0.16),transparent_34%)]" />
+              <div className="relative p-5">
+                <div className="relative mx-auto flex h-48 w-full max-w-[300px] items-center justify-center overflow-hidden rounded-[28px] border border-cyan-200/16 bg-cyan-200/[0.04]">
+                  {pendingGift.species.imageUrl && (
+                    <img src={mediaSrc(pendingGift.species.imageUrl) ?? pendingGift.species.imageUrl} alt="" className="h-full w-full object-contain p-4 drop-shadow-[0_20px_40px_rgba(103,232,249,0.25)]" />
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/80 to-transparent" />
+                </div>
+                <div className="mt-4 text-center">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100/70">Nearloy Hunt</p>
+                  <DialogTitle className="mt-1 text-2xl font-semibold">Тебе прислали персонажа</DialogTitle>
+                  <p className="mt-2 text-sm leading-6 text-white/68">
+                    {pendingGift.note || "Подарок уже ждёт принятия. Забирай карту в коллекцию."}
+                  </p>
+                </div>
+                <div className="mt-4 rounded-3xl border border-white/10 bg-white/[0.04] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-white">{pendingGift.species.nameRu ?? pendingGift.species.nameEn ?? pendingGift.species.name}</p>
+                      <p className="mt-1 text-xs text-white/48">{pendingGift.rarity} · ур. {pendingGift.level}</p>
+                    </div>
+                    <Badge className="rounded-full border-cyan-200/20 bg-cyan-200/10 px-3 text-cyan-50">
+                      Подарок
+                    </Badge>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  disabled={giftBusy}
+                  onClick={() => void acceptPendingGift(pendingGift.uuid)}
+                  className={cn("mt-5 h-12 w-full rounded-2xl bg-cyan-200 text-slate-950 hover:bg-cyan-100", huntInteractiveClass)}
+                >
+                  <Gift className="mr-2 h-4 w-4" />
+                  Принять подарок
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dailyRewardOpen && Boolean(dailyReward)} onOpenChange={(open) => !open && void closeDailyReward(false)}>
         <DialogContent className="overflow-hidden border-cyan-200/20 bg-slate-950 p-0 text-white">

@@ -175,6 +175,14 @@ export class HuntController {
     return this.huntService.markDailyLikeRewardsSeen(user.userId);
   }
 
+  @Post("gifts/:uuid/accept")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: "Accept a pending Hunt card gift" })
+  acceptGift(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
+    return this.huntService.acceptGift(user.userId, uuid);
+  }
+
   @Post("posts/:uuid/report")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
