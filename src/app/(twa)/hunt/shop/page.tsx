@@ -2,14 +2,15 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Boxes, CheckCircle2, Clock3, Gift, HelpCircle, ListChecks, PackageOpen, ShieldQuestion, Sparkles, Star, Tags, WalletCards, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { YandexRtbAd } from "@/components/ads/YandexRtbAd";
-import { getCachedHuntOverview, getHuntOverview, openHuntBox, type HuntBoxOffer, type HuntBoxReward, type HuntBoxType, type HuntOverview, type HuntRarity } from "@/lib/api/twa-client";
+import { advanceHuntTutorial, getCachedHuntOverview, getHuntOverview, openHuntBox, type HuntBoxOffer, type HuntBoxReward, type HuntBoxType, type HuntOverview, type HuntRarity } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 import { cn } from "@/lib/utils";
@@ -450,7 +451,8 @@ function BoxOpeningReveal({ box, rewards, onClose }: { box: OpeningBox; rewards:
 }
 
 export default function HuntShopPage() {
-  const { locale, t } = useI18n("ru");
+  const { t } = useI18n("ru");
+  const router = useRouter();
   const [overview, setOverview] = useState<HuntOverview>(getCachedHuntOverview());
   const [filter, setFilter] = useState<ShopFilter>("all");
   const [busyItem, setBusyItem] = useState<string | null>(null);
@@ -459,6 +461,9 @@ export default function HuntShopPage() {
   const [openingBox, setOpeningBox] = useState<OpeningBox | null>(null);
   const [lastRewards, setLastRewards] = useState<HuntBoxReward[]>([]);
   const [chanceTarget, setChanceTarget] = useState<ShopItem | null>(null);
+  const [tutorialReturnHome, setTutorialReturnHome] = useState(false);
+  const tutorialBoxRef = useRef<HTMLElement | null>(null);
+  const forceFirstBox = !overview.profile.tutorialCompletedAt && overview.profile.huntTutorialStep === "OPEN_FIRST_BOX";
 
   async function refresh(force = false) {
     setOverview(await getHuntOverview(force));
@@ -467,6 +472,10 @@ export default function HuntShopPage() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (forceFirstBox) setFilter("all");
+  }, [forceFirstBox]);
 
   const shopItems = useMemo(() => {
     if (!overview.boxOffers?.length) return fallbackShopItems.map(normalizeBoxChances);
@@ -507,6 +516,10 @@ export default function HuntShopPage() {
     const result = await openHuntBox(undefined, item.boxType, item.configId);
     if (result.ok) {
       setLastRewards(result.data.rewards?.length ? result.data.rewards : [{ uuid: result.data.card.uuid, kind: "CARD", rarity: result.data.card.rarity, position: 0, card: result.data.card }]);
+      if (!overview.profile.tutorialCompletedAt && overview.profile.huntTutorialStep === "OPEN_FIRST_BOX") {
+        await advanceHuntTutorial("box_opened");
+        setTutorialReturnHome(true);
+      }
       await refresh(true);
     } else {
       setOpeningBox(null);
@@ -525,6 +538,9 @@ export default function HuntShopPage() {
     const result = await openHuntBox(boxUuid);
     if (result.ok) {
       setLastRewards(result.data.rewards?.length ? result.data.rewards : [{ uuid: result.data.card.uuid, kind: "CARD", rarity: result.data.card.rarity, position: 0, card: result.data.card }]);
+      if (!overview.profile.tutorialCompletedAt && overview.profile.huntTutorialStep === "OPEN_FIRST_BOX") {
+        await advanceHuntTutorial("box_opened");
+      }
       await refresh(true);
     } else {
       setOpeningBox(null);
@@ -534,6 +550,15 @@ export default function HuntShopPage() {
   }
 
   const visibleItems = filter === "all" ? shopItems : shopItems.filter((item) => item.filter === filter || (filter === "limited" && item.limited));
+  const tutorialTargetItemId = forceFirstBox ? visibleItems.find((item) => item.boxType === "POST")?.id : null;
+
+  useEffect(() => {
+    if (!tutorialTargetItemId) return;
+    const timeout = window.setTimeout(() => {
+      tutorialBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 260);
+    return () => window.clearTimeout(timeout);
+  }, [tutorialTargetItemId]);
 
   return (
     <main className="min-h-full px-4 pb-24 pt-5 text-white">
@@ -545,6 +570,7 @@ export default function HuntShopPage() {
             onClose={() => {
               setLastRewards([]);
               setOpeningBox(null);
+              if (tutorialReturnHome) router.push("/hunt");
             }}
           />
         )}
@@ -633,8 +659,10 @@ export default function HuntShopPage() {
       </section>
 
       <section className="grid gap-3">
-        {visibleItems.map((item) => (
-          <article key={item.id} className={cn("grid grid-cols-[112px_1fr] gap-3 rounded-3xl border bg-white/[0.035] p-3", item.accent)}>
+        {visibleItems.map((item) => {
+          const tutorialTarget = forceFirstBox && item.boxType === "POST";
+          return (
+          <article ref={tutorialTarget ? tutorialBoxRef : undefined} key={item.id} className={cn("grid grid-cols-[112px_1fr] gap-3 rounded-3xl border bg-white/[0.035] p-3", item.accent, tutorialTarget && "relative z-[55] bg-slate-950 shadow-[0_0_0_3px_rgba(165,243,252,0.72),0_0_44px_rgba(103,232,249,0.34)]")}>
             <div className="flex items-center justify-center rounded-2xl bg-black/24">
               <Image src={item.image} alt="" width={160} height={160} className="h-28 w-28 object-contain drop-shadow-[0_0_18px_rgba(103,232,249,0.18)]" />
             </div>
@@ -668,15 +696,31 @@ export default function HuntShopPage() {
                   <ShieldQuestion className="h-4 w-4 shrink-0 text-cyan-200" />
                   <span className="truncate whitespace-nowrap">{rarityRangeLabel(item.minRarity, t)}</span>
                 </button>
-                <Button type="button" disabled={busyItem != null || overview.profile.influenceBalance < item.cost} onClick={() => buyBox(item)} className={cn("rounded-2xl bg-cyan-200 px-4 text-slate-950 hover:bg-cyan-100", huntInteractiveClass)}>
+                <Button type="button" disabled={busyItem != null || overview.profile.influenceBalance < item.cost || (forceFirstBox && !tutorialTarget)} onClick={() => buyBox(item)} className={cn("rounded-2xl bg-cyan-200 px-4 text-slate-950 hover:bg-cyan-100", huntInteractiveClass)}>
                   <Zap className="mr-1.5 h-4 w-4" />
                   {fill(t("client.hunt.shop.buyFor"), { cost: item.cost })}
                 </Button>
               </div>
             </div>
           </article>
-        ))}
+        );})}
       </section>
+
+      {forceFirstBox && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/30 backdrop-brightness-75" aria-hidden="true" />
+          <div className="fixed inset-x-0 bottom-[calc(88px+env(safe-area-inset-bottom))] z-[60] mx-auto w-full max-w-[430px] px-4">
+            <div className="relative min-h-[188px]">
+              <img src="/hunt-assets/tutorial/lira-point.png" alt="" className="pointer-events-none absolute -bottom-2 -left-5 h-48 w-36 object-contain object-bottom drop-shadow-[0_18px_34px_rgba(0,0,0,0.5)]" />
+              <div className="ml-24 rounded-[24px] border border-cyan-200/24 bg-slate-950/96 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.58)] backdrop-blur">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-100/70">Лира Нокс</p>
+                <h2 className="mt-1 text-xl font-semibold text-white">Бери районную коробку</h2>
+                <p className="mt-2 text-sm leading-5 text-white/68">Вот она, наш первый дроп. Нажимай на покупку, а я прослежу, чтобы из коробки вышел боец для стартового отряда.</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
         <DialogContent className="border-white/10 bg-slate-950 text-white">

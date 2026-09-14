@@ -6,6 +6,21 @@ export type Fighter = Cell & {
   profile?: FighterProfile;
   abilities?: Ability[];
   shieldExpires?: number;
+  classTriggers?: Partial<
+    Record<
+      | "batteryRefund"
+      | "controllerBreak"
+      | "duelistExtraAction"
+      | "finisherMomentum"
+      | "guardianRedirect"
+      | "guardianShield"
+      | "provokerFocus"
+      | "provokerExtraAction"
+      | "scoutWindow"
+      | "sniperMark",
+      boolean
+    >
+  >;
   id: string;
   side: Side;
   kind: number;
@@ -35,6 +50,9 @@ export type Battle = {
   round: number;
   units: Fighter[];
   points: Record<Side, number[]>;
+  captureProgress?: Record<Side, number[]>;
+  pointFlags?: Record<Side, boolean[]>;
+  actionLimitBonus?: Record<Side, number>;
   energy: Record<Side, number>;
   score: Record<Side, number>;
   winner: Side | "draw" | null;
@@ -103,7 +121,7 @@ export type AbilityEffect = { enabled?: boolean } & (
     }
   | {
       type: "buff";
-      stat: "attack" | "speed" | "luck";
+      stat: "attack" | "speed" | "luck" | "movement";
       power: Scaling;
       duration: number;
       delay?: number;
@@ -143,13 +161,18 @@ export type FighterProfile = {
   range: number;
   luck: number;
   element: Element;
+  fusionRank?: number;
+  battleClass?: string | null;
+  healingBonus?: number;
+  captureBonus?: number;
+  rangedDamageBonus?: number;
 };
 export type ActiveEffect = {
   type: "burn" | "poison" | "buff";
   sourceId: string;
   abilityId: string;
   amount: number;
-  stat?: "attack" | "speed" | "luck";
+  stat?: "attack" | "speed" | "luck" | "movement";
   starts: number;
   expires: number;
   healingReduction?: number;
@@ -301,9 +324,9 @@ export function elementMultiplier(source: Element, target: Element) {
   return ELEMENT_COUNTERS[source].includes(target) ? 1.2 : 1;
 }
 export const POINTS = [
-  { x: 1, y: 4, income: 1 },
+  { x: 1.15, y: 4, income: 1 },
   { x: 4, y: 4, income: 2 },
-  { x: 7, y: 4, income: 1 },
+  { x: 6.85, y: 4, income: 1 },
 ];
 export const WALLS: Cell[] = [
   { x: 3, y: 2 },
@@ -346,6 +369,7 @@ export const ROSTER = [
 export const sameCell = (a: Cell, b: Cell) => a.x === b.x && a.y === b.y;
 export const distance = (a: Cell, b: Cell) =>
   Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+const nearPoint = (unit: Cell, point: Cell) => distance(unit, point) <= 1;
 export const alive = (b: Battle, side?: Side) =>
   b.units.filter((u) => u.hp > 0 && (!side || u.side === side));
 export const stats = (u: Fighter) => {
@@ -355,8 +379,80 @@ export const stats = (u: Fighter) => {
       result[effect.stat] += effect.amount;
   }
   result.luck = Math.min(100, result.luck);
+  result.attack = Math.max(1, result.attack);
+  result.speed = Math.max(1, result.speed);
+  result.movement = Math.max(1, result.movement);
   return result;
 };
+function hasClassRank(u: Fighter, battleClass: string, rank: number) {
+  const profile = stats(u);
+  return profile.battleClass === battleClass && (profile.fusionRank ?? 1) >= rank;
+}
+export function actionLimit(b: Battle, side: Side) {
+  return Math.max(1, 3 + (b.actionLimitBonus?.[side] ?? 0));
+}
+export function effectiveAbilityCost(u: Fighter, ability: Ability) {
+  if (hasClassRank(u, "BATTERY", 4) && ability.cost > 0)
+    return Math.max(1, Math.ceil(ability.cost * 0.75));
+  return ability.cost;
+}
+export function effectiveAbilityRadius(u: Fighter, ability: Ability) {
+  if (hasClassRank(u, "SNIPER", 4) && ability.radius > 0)
+    return ability.radius + Math.max(1, Math.ceil(ability.radius * 0.2));
+  return ability.radius;
+}
+function applyTeamBuff(
+  b: Battle,
+  side: Side,
+  sourceId: string,
+  stat: "attack" | "speed" | "luck" | "movement",
+  factor: number,
+  abilityId: string,
+  events: BattleEvent[],
+  duration = 1,
+) {
+  for (const ally of alive(b, side)) {
+    const amount = Math.max(1, Math.round(stats(ally)[stat] * factor));
+    ally.effects.push({
+      type: "buff",
+      sourceId,
+      abilityId,
+      stat,
+      amount,
+      starts: b.round + 1,
+      expires: b.round + duration,
+      stacking: "replace",
+    });
+    events.push({ type: "bonus", unitId: ally.id, effect: "buff", amount, abilityId });
+  }
+}
+function classDamageMultiplier(
+  b: Battle | undefined,
+  u: Fighter,
+  target: Fighter,
+  source: "attack" | "skill" = "attack",
+) {
+  let multiplier = 1;
+  if (b && hasClassRank(u, "DUELIST", 3)) {
+    const otherEnemiesNearby = alive(b, u.side === "player" ? "bot" : "player")
+      .some((enemy) => enemy.id !== target.id && distance(enemy, target) <= 1);
+    if (!otherEnemiesNearby) multiplier *= 1.12;
+  }
+  if (hasClassRank(u, "FINISHER", 3) && target.hp <= stats(target).hp * 0.4)
+    multiplier *= source === "skill" && (stats(u).fusionRank ?? 1) >= 4 ? 1.22 : 1.18;
+  if (hasClassRank(u, "SNIPER", 3) && distance(u, target) > 1)
+    multiplier *= 1.14;
+  if (
+    target.effects.some(
+      (effect) =>
+        effect.abilityId === "resonance-sniper-mark" &&
+        effect.sourceId === u.id &&
+        effect.starts <= target.activeTurn,
+    )
+  )
+    multiplier *= 1.2;
+  return multiplier;
+}
 export const scaledPower = (u: Fighter, power: Scaling) =>
   Math.max(
     1,
@@ -408,6 +504,7 @@ export const directDamage = (
   Math.round(
     amount *
       elementMultiplier(stats(u).element, stats(target).element) *
+      (distance(u, target) > 1 ? 1 + (stats(u).rangedDamageBonus ?? 0) : 1) *
       (critical ? criticalMultiplier(u) : 1),
   );
 export const hitDamage = (
@@ -416,20 +513,36 @@ export const hitDamage = (
   amount = stats(u).attack,
   critical = false,
   ignoreCover = false,
+  b?: Battle,
+  source: "attack" | "skill" = "attack",
 ) =>
   Math.round(
     directDamage(u, target, amount, critical) *
+      classDamageMultiplier(b, u, target, source) *
       (1 - (ignoreCover ? 0 : coverProtection(u, target))),
   );
 export function hitPreview(
   u: Fighter,
   target: Fighter,
   amount = stats(u).attack,
-  options: { canCrit?: boolean; ignoreCover?: boolean } = {},
+  options: {
+    canCrit?: boolean;
+    ignoreCover?: boolean;
+    battle?: Battle;
+    source?: "attack" | "skill";
+  } = {},
 ) {
   const damage = Math.max(
     0,
-    hitDamage(u, target, amount, false, options.ignoreCover) - target.shield,
+    hitDamage(
+      u,
+      target,
+      amount,
+      false,
+      options.ignoreCover,
+      options.battle,
+      options.source,
+    ) - target.shield,
   );
   const maxDamage = Math.max(
     0,
@@ -439,6 +552,8 @@ export function hitPreview(
       amount,
       options.canCrit !== false,
       options.ignoreCover,
+      options.battle,
+      options.source,
     ) - target.shield,
   );
   const chance = options.canCrit === false ? 0 : criticalChance(u, target);
@@ -498,7 +613,9 @@ export function orderCost(b: Battle, orders: Order[], bonus?: Bonus | null) {
       return (
         total +
         (o.type === "skill" && unit
-          ? (abilityFor(unit, o.abilityId)?.cost ?? Infinity)
+          ? abilityFor(unit, o.abilityId)
+            ? effectiveAbilityCost(unit, abilityFor(unit, o.abilityId)!)
+            : Infinity
           : 0)
       );
     }, 0)
@@ -530,10 +647,18 @@ export function createBattle(): Battle {
       })),
     ),
     points: { player: [0, 0, 0], bot: [0, 0, 0] },
+    pointFlags: { player: [false, false, false], bot: [false, false, false] },
+    actionLimitBonus: { player: 0, bot: 0 },
     energy: { player: 0, bot: 0 },
     score: { player: 0, bot: 0 },
     winner: null,
   };
+}
+export function applyBattleStartResonance(battle: Battle) {
+  for (const side of ["player", "bot"] as Side[])
+    if (alive(battle, side).some((unit) => hasClassRank(unit, "BATTERY", 5)))
+      battle.energy[side] += 1;
+  return battle;
 }
 export function pathTo(b: Battle, unit: Fighter, to: Cell): Cell[] {
   if (
@@ -585,7 +710,7 @@ export function skillReady(b: Battle, u: Fighter, id?: string) {
     ability.enabled !== false &&
     u.hp > 0 &&
     b.round >= (u.cooldowns[ability.key] ?? 1) &&
-    b.energy[u.side] >= ability.cost
+    b.energy[u.side] >= effectiveAbilityCost(u, ability)
   );
 }
 export function skillTargetFailure(
@@ -627,7 +752,7 @@ export function abilityTargets(
     .filter(
       (t) =>
         (ability.target === "enemy" ? t.side !== u.side : t.side === u.side) &&
-        distance(t, center) <= ability.radius,
+        distance(t, center) <= effectiveAbilityRadius(u, ability),
     )
     .sort(
       (a, c) =>
@@ -656,8 +781,8 @@ export function previewOrder(b: Battle, order: Order, bonus?: Bonus | null) {
   if (order.type === "attack") {
     const target = b.units.find((t) => t.id === order.targetId)!;
     return {
-      ...hitPreview(u, target),
-      hits: [hitPreview(u, target)],
+      ...hitPreview(u, target, stats(u).attack, { battle: b, source: "attack" }),
+      hits: [hitPreview(u, target, stats(u).attack, { battle: b, source: "attack" })],
       delayed: false,
       targetId: target.id,
     };
@@ -683,7 +808,11 @@ export function previewOrder(b: Battle, order: Order, bonus?: Bonus | null) {
       const power = scaledPower(u, effect.power);
       for (const target of targets) {
         if (effect.type === "damage" || effect.type === "lifesteal") {
-          const hit = hitPreview(u, { ...target, shield: 0 }, power, effect);
+          const hit = hitPreview(u, { ...target, shield: 0 }, power, {
+            ...effect,
+            battle: b,
+            source: "skill",
+          });
           hits.push(hit);
           if (effect.type === "lifesteal")
             drains.push({ hit, ratio: effect.ratio });
@@ -701,7 +830,7 @@ export function previewOrder(b: Battle, order: Order, bonus?: Bonus | null) {
           utility += (path.length - 1) * 2;
         }
         if (effect.type === "heal")
-          addHealing(target, healingPower(target, power));
+          addHealing(target, healingPower(target, power, u));
         if (effect.type === "shield")
           shield += Math.max(0, power - target.shield);
         if (effect.type === "burn" || effect.type === "poison")
@@ -729,7 +858,7 @@ export function previewOrder(b: Battle, order: Order, bonus?: Bonus | null) {
         const actual = remaining
           ? (Math.min(target.hp, remaining) * drain.hit.damage) / remaining
           : 0;
-        addHealing(u, healingPower(u, Math.round(actual * drain.ratio)));
+        addHealing(u, healingPower(u, Math.round(actual * drain.ratio), u));
       }
     }
     return {
@@ -765,9 +894,10 @@ export function previewOrder(b: Battle, order: Order, bonus?: Bonus | null) {
   }
   return { shield: bonus?.type === "shield" && bonus.unitId === u.id ? 7 : 0 };
 }
-const healingPower = (u: Fighter, amount: number) =>
+const healingPower = (u: Fighter, amount: number, source?: Fighter) =>
   Math.round(
     amount *
+      (1 + (source ? (stats(source).healingBonus ?? 0) : 0)) *
       (1 -
         Math.max(
           0,
@@ -779,6 +909,9 @@ const healingPower = (u: Fighter, amount: number) =>
 export function moves(b: Battle, unit: Fighter, bonus?: Bonus | null) {
   const limit =
     stats(unit).movement +
+    (b.round === 1 && hasClassRank(unit, "SCOUT", 3)
+      ? Math.max(1, Math.ceil(stats(unit).movement * 0.25))
+      : 0) +
     (bonus?.type === "haste" && bonus.unitId === unit.id ? 1 : 0);
   const result: Cell[] = [];
   for (let y = 0; y < SIZE; y++)
@@ -795,7 +928,13 @@ export function validateOrders(
   orders: Order[],
   bonus?: Bonus | null,
 ) {
-  if (b.winner || !Array.isArray(orders) || orders.length > 3) return false;
+  if (!Array.isArray(orders)) return false;
+  if (b.winner || orders.length > actionLimit(b, side)) return false;
+  if (
+    actionLimit(b, side) <= alive(b, side).length &&
+    new Set(orders.map((o) => o.unitId)).size !== orders.length
+  )
+    return false;
   if (orders.some((o) => !o) || orderCost(b, orders, bonus) > b.energy[side])
     return false;
   if (
@@ -805,10 +944,8 @@ export function validateOrders(
       !alive(b, side).some((u) => u.id === bonus.unitId))
   )
     return false;
-  const ids = new Set<string>();
   return orders.every((o) => {
-    if (!o || ids.has(o.unitId)) return false;
-    ids.add(o.unitId);
+    if (!o) return false;
     const u = alive(b, side).find((u) => u.id === o.unitId);
     if (!u) return false;
     if (o.type === "wait") return true;
@@ -875,7 +1012,15 @@ export function planAI(
       );
       const threat = enemies
         .filter((e) => canAttack(e, { ...u, ...p }))
-        .reduce((n, e) => n + hitPreview(e, { ...u, ...p }).expectedDamage, 0);
+        .reduce(
+          (n, e) =>
+            n +
+            hitPreview(e, { ...u, ...p }, stats(e).attack, {
+              battle: b,
+              source: "attack",
+            }).expectedDamage,
+          0,
+        );
       const targets =
         strategy === "focus"
           ? enemies
@@ -907,10 +1052,14 @@ export function planAI(
       }
     }
     for (const e of enemies.filter((e) => canAttack(u, e))) {
+      const preview = hitPreview(u, e, stats(u).attack, {
+        battle: b,
+        source: "attack",
+      });
       const value =
         positionValue(u) +
-        hitPreview(u, e).expectedDamage * 0.5 +
-        (e.hp <= hitPreview(u, e).damage ? 10 : 0) +
+        preview.expectedDamage * 0.5 +
+        (e.hp <= preview.damage ? 10 : 0) +
         variation();
       if (value > bestValue) {
         bestValue = value;
@@ -922,7 +1071,8 @@ export function planAI(
         const ability = abilityFor(u, abilityId)!;
         if (
           !skillReady(b, u, abilityId) ||
-          orderCost(b, orders, bonus) + ability.cost > b.energy[side]
+          orderCost(b, orders, bonus) + effectiveAbilityCost(u, ability) >
+            b.energy[side]
         )
           return [];
         const targets =
@@ -956,7 +1106,7 @@ export function planAI(
           (preview.heal ?? 0) * 0.65 +
           Math.min(preview.shield ?? 0, incoming) * 0.55 +
           (preview.utility ?? 0) * 0.55 -
-          abilityFor(u, candidate.abilityId)!.cost * 0.65;
+          effectiveAbilityCost(u, abilityFor(u, candidate.abilityId)!) * 0.65;
         if (value > bestValue) {
           bestValue = value;
           best = candidate;
@@ -985,9 +1135,11 @@ export function resolveRound(
   )
     throw new Error("INVALID_ORDERS");
   const b = structuredClone(initial);
+  b.actionLimitBonus = { player: 0, bot: 0 };
   const frames: Frame[] = [];
   const push = (events: BattleEvent[]) =>
     frames.push({ battle: structuredClone(b), events });
+  const resonanceEvents: BattleEvent[] = [];
   for (const [side, bonus] of [
     ["player", playerBonus],
     ["bot", botBonus],
@@ -1003,9 +1155,26 @@ export function resolveRound(
     if (o.type !== "skill") continue;
     const unit = b.units.find((u) => u.id === o.unitId)!;
     const ability = abilityFor(unit, o.abilityId)!;
-    b.energy[unit.side] -= ability.cost;
+    const cost = effectiveAbilityCost(unit, ability);
+    b.energy[unit.side] -= cost;
+    if (
+      cost > 0 &&
+      hasClassRank(unit, "BATTERY", 3) &&
+      !unit.classTriggers?.batteryRefund
+    ) {
+      unit.classTriggers = { ...unit.classTriggers, batteryRefund: true };
+      const amount = Math.max(1, Math.round(cost * 0.5));
+      b.energy[unit.side] += amount;
+      resonanceEvents.push({
+        type: "bonus",
+        unitId: unit.id,
+        amount,
+        abilityId: "resonance-battery",
+      });
+    }
     unit.cooldowns[ability.key] = b.round + ability.cooldown + 1;
   }
+  if (resonanceEvents.length) push(resonanceEvents);
   // Equal initiative uses the same snapshot: attacks can mutually eliminate units.
   const initiative = (u: Fighter) => {
     const o = orders.find((o) => o.unitId === u.id);
@@ -1016,7 +1185,24 @@ export function resolveRound(
   const speeds = new Map(b.units.map((u) => [u.id, initiative(u)]));
   for (const speed of [...new Set(speeds.values())].sort((a, c) => c - a)) {
     const snapshot = structuredClone(b);
-    const actors = alive(snapshot).filter((u) => speeds.get(u.id) === speed);
+    const actors = orders
+      .map((order, index) => ({
+        order,
+        index,
+        unit: snapshot.units.find((u) => u.id === order.unitId),
+      }))
+      .filter(
+        (
+          entry,
+        ): entry is {
+          order: Order;
+          index: number;
+          unit: Fighter;
+        } =>
+          !!entry.unit &&
+          entry.unit.hp > 0 &&
+          speeds.get(entry.unit.id) === speed,
+      );
     const events: BattleEvent[] = [];
     const destinations = new Map<string, Cell>();
     const damage = new Map<string, number>();
@@ -1050,8 +1236,7 @@ export function resolveRound(
           reason: "actorDown",
         });
     }
-    for (const u of actors) {
-      const o = orders.find((o) => o.unitId === u.id);
+    for (const { order: o, unit: u } of actors) {
       if (o?.type === "skill") {
         const ability = abilityFor(u, o.abilityId)!;
         events.push({ type: "skill", unitId: u.id, abilityId: ability.key });
@@ -1079,6 +1264,8 @@ export function resolveRound(
                 power,
                 critical,
                 effect.ignoreCover,
+                snapshot,
+                "skill",
               );
               damage.set(target.id, (damage.get(target.id) ?? 0) + amount);
               events.push({
@@ -1092,15 +1279,53 @@ export function resolveRound(
                   effect.type === "lifesteal" ? effect.ratio : undefined,
               });
             } else if (effect.type === "heal") {
+              const amount = healingPower(target, power, u);
               healContributions.push({
                 sourceId: u.id,
                 targetId: target.id,
-                amount: healingPower(target, power),
+                amount,
               });
-              healing.set(
-                target.id,
-                (healing.get(target.id) ?? 0) + healingPower(target, power),
-              );
+              healing.set(target.id, (healing.get(target.id) ?? 0) + amount);
+              if (hasClassRank(u, "HEALER", 4)) {
+                const extra = healingPower(
+                  target,
+                  Math.max(1, Math.round(stats(u).hp * 0.15)),
+                  u,
+                );
+                healContributions.push({
+                  sourceId: u.id,
+                  targetId: target.id,
+                  amount: extra,
+                });
+                healing.set(target.id, (healing.get(target.id) ?? 0) + extra);
+                events.push({
+                  type: "heal",
+                  unitId: target.id,
+                  amount: extra,
+                  abilityId: "resonance-healer-deep",
+                });
+              }
+              if (hasClassRank(u, "HEALER", 5)) {
+                const fallen = b.units
+                  .filter(
+                    (ally) =>
+                      ally.side === u.side &&
+                      ally.hp <= 0 &&
+                      distance(ally, target) <= effectiveAbilityRadius(u, ability),
+                  )
+                  .sort((a, c) => a.id.localeCompare(c.id))[0];
+                if (fallen) {
+                  const revived = Math.max(1, Math.round(stats(fallen).hp * 0.25));
+                  const live = b.units.find((unit) => unit.id === fallen.id)!;
+                  live.hp = revived;
+                  events.push({
+                    type: "heal",
+                    unitId: live.id,
+                    amount: revived,
+                    abilityId: "resonance-healer-revive",
+                  });
+                }
+              }
             } else if (effect.type === "shield") {
               const previous = shields.get(target.id) ?? 0;
               if (power >= previous) {
@@ -1112,6 +1337,32 @@ export function resolveRound(
                     b.round + (effect.duration ?? 0),
                   ),
                 );
+              }
+              if (hasClassRank(u, "GUARDIAN", 4)) {
+                const amount = Math.max(1, Math.round(stats(u).hp * 0.1));
+                const allies = [u, ...alive(snapshot, u.side)]
+                  .filter((ally, index, list) => list.findIndex((item) => item.id === ally.id) === index)
+                  .sort(
+                    (a, c) =>
+                      (a.id === u.id ? -1 : c.id === u.id ? 1 : 0) ||
+                      distance(a, u) - distance(c, u) ||
+                      a.id.localeCompare(c.id),
+                  )
+                  .slice(0, 2);
+                for (const ally of allies) {
+                  const previous = shields.get(ally.id) ?? 0;
+                  if (amount >= previous) {
+                    shields.set(ally.id, amount);
+                    shieldExpiry.set(ally.id, Math.max(shieldExpiry.get(ally.id) ?? 0, b.round + 1));
+                    events.push({
+                      type: "bonus",
+                      unitId: ally.id,
+                      amount,
+                      effect: "shield",
+                      abilityId: "resonance-guardian-pulse",
+                    });
+                  }
+                }
               }
             } else if (effect.type === "push" || effect.type === "pull") {
               forces.push({
@@ -1132,7 +1383,10 @@ export function resolveRound(
                   amount:
                     effect.type === "buff"
                       ? power
-                      : directDamage(u, target, power),
+                      : Math.round(
+                          directDamage(u, target, power) *
+                            classDamageMultiplier(snapshot, u, target, "skill"),
+                        ),
                   stat: effect.type === "buff" ? effect.stat : undefined,
                   starts: b.round + (effect.delay ?? 1),
                   expires: b.round + (effect.delay ?? 1) + effect.duration - 1,
@@ -1161,7 +1415,15 @@ export function resolveRound(
         if (canAttack(u, target)) {
           const critical =
             roll(u, target, b.round) < criticalChance(u, target) / 100;
-          const amount = hitDamage(u, target, stats(u).attack, critical);
+          const amount = hitDamage(
+            u,
+            target,
+            stats(u).attack,
+            critical,
+            false,
+            snapshot,
+            "attack",
+          );
           damage.set(target.id, (damage.get(target.id) ?? 0) + amount);
           events.push({
             type: "attack",
@@ -1196,6 +1458,38 @@ export function resolveRound(
           to,
         );
         events.push({ type: "move", unitId: id, path });
+        const moved = b.units.find((u) => u.id === id)!;
+        if (hasClassRank(moved, "DUELIST", 4)) {
+          const amount = Math.max(1, Math.round(stats(moved).attack * 0.15));
+          moved.effects.push({
+            type: "buff",
+            sourceId: moved.id,
+            abilityId: "resonance-duelist-step",
+            stat: "attack",
+            amount,
+            starts: b.round + 1,
+            expires: b.round + 1,
+            stacking: "replace",
+          });
+          events.push({
+            type: "bonus",
+            unitId: moved.id,
+            effect: "buff",
+            amount,
+            abilityId: "resonance-duelist-step",
+          });
+        }
+        if (hasClassRank(moved, "SCOUT", 5) && !moved.classTriggers?.scoutWindow) {
+          moved.classTriggers = { ...moved.classTriggers, scoutWindow: true };
+          b.actionLimitBonus ??= { player: 0, bot: 0 };
+          b.actionLimitBonus[moved.side] += 1;
+          events.push({
+            type: "bonus",
+            unitId: moved.id,
+            amount: 1,
+            abilityId: "resonance-scout-window",
+          });
+        }
       }
     }
     for (const [id, amount] of shields) {
@@ -1210,27 +1504,64 @@ export function resolveRound(
     }
     for (const [id, amount] of damage) {
       const u = b.units.find((u) => u.id === id)!;
-      const absorbed = Math.min(u.shield, amount);
-      const healthLost = Math.min(u.hp, amount - absorbed);
+      let effectiveAmount = amount;
+      const protector = alive(b, u.side)
+        .filter(
+          (ally) =>
+            ally.id !== u.id &&
+            hasClassRank(ally, "GUARDIAN", 5) &&
+            !ally.classTriggers?.guardianRedirect &&
+            distance(ally, u) <= 1,
+        )
+        .sort((a, c) => a.hp - c.hp || a.id.localeCompare(c.id))[0];
+      if (protector && amount - u.shield >= u.hp) {
+        const redirected = Math.max(1, Math.round(amount * 0.5));
+        effectiveAmount = Math.max(0, amount - redirected);
+        const protectorAbsorbed = Math.min(protector.shield, redirected);
+        const protectorLost = Math.min(
+          protector.hp,
+          redirected - protectorAbsorbed,
+        );
+        protector.classTriggers = {
+          ...protector.classTriggers,
+          guardianRedirect: true,
+        };
+        protector.shield -= protectorAbsorbed;
+        protector.hp = Math.max(0, protector.hp - protectorLost);
+        b.statistics[protector.id].absorbed += protectorAbsorbed;
+        events.push({
+          type: "bonus",
+          unitId: protector.id,
+          targetId: u.id,
+          amount: redirected,
+          abilityId: "resonance-guardian-redirect",
+        });
+      }
+      const absorbed = Math.min(u.shield, effectiveAmount);
+      const healthLost = Math.min(u.hp, effectiveAmount - absorbed);
       b.statistics[id].absorbed += absorbed;
       u.shield -= absorbed;
-      u.hp = Math.max(0, u.hp - amount + absorbed);
+      u.hp = Math.max(0, u.hp - effectiveAmount + absorbed);
       for (const event of events.filter(
         (e) => e.type === "attack" && e.targetId === id,
       )) {
         // Equal-initiative hits share absorption, so lifesteal never favors array order.
+        event.amount = (event.amount ?? 0) * (amount > 0 ? effectiveAmount / amount : 1);
         event.absorbed =
-          amount > 0 ? absorbed * ((event.amount ?? 0) / amount) : 0;
+          effectiveAmount > 0
+            ? absorbed * ((event.amount ?? 0) / effectiveAmount)
+            : 0;
         event.amount = (event.amount ?? 0) - event.absorbed;
-        if (event.unitId && amount > absorbed) {
+        if (event.unitId && effectiveAmount > absorbed) {
           const actualDamage =
-            healthLost * (event.amount / (amount - absorbed));
+            healthLost * (event.amount / (effectiveAmount - absorbed));
           b.statistics[event.unitId].damage += actualDamage;
           if (event.lifestealRatio) {
             const caster = b.units.find((unit) => unit.id === event.unitId)!;
             const drained = healingPower(
               caster,
               Math.round(actualDamage * event.lifestealRatio),
+              caster,
             );
             healing.set(caster.id, (healing.get(caster.id) ?? 0) + drained);
             healContributions.push({
@@ -1240,6 +1571,193 @@ export function resolveRound(
             });
           }
         }
+      }
+      if (
+        healthLost > 0 &&
+        hasClassRank(u, "GUARDIAN", 3) &&
+        !u.classTriggers?.guardianShield
+      ) {
+        const shield = Math.max(1, Math.round(stats(u).hp * 0.12));
+        u.classTriggers = { ...u.classTriggers, guardianShield: true };
+        u.shield = Math.max(u.shield, shield);
+        u.shieldExpires = Math.max(u.shieldExpires ?? 0, b.round + 1);
+        events.push({
+          type: "bonus",
+          unitId: u.id,
+          amount: shield,
+          effect: "shield",
+          abilityId: "resonance-guardian",
+        });
+      }
+      if (
+        healthLost > 0 &&
+        hasClassRank(u, "PROVOKER", 3) &&
+        !u.classTriggers?.provokerFocus
+      ) {
+        const attackerId = events.find(
+          (event) => event.type === "attack" && event.targetId === id && event.unitId,
+        )?.unitId;
+        const attacker = attackerId ? b.units.find((unit) => unit.id === attackerId) : null;
+        if (attacker && attacker.hp > 0) {
+          const amount = -Math.max(1, Math.round(stats(attacker).attack * 0.15));
+          u.classTriggers = { ...u.classTriggers, provokerFocus: true };
+          attacker.effects.push({
+            type: "buff",
+            sourceId: u.id,
+            abilityId: "resonance-provoker",
+            stat: "attack",
+            amount,
+            starts: b.round + 1,
+            expires: b.round + 1,
+            stacking: "replace",
+          });
+          events.push({
+            type: "bonus",
+            unitId: attacker.id,
+            effect: "buff",
+            amount,
+            abilityId: "resonance-provoker",
+          });
+        }
+      }
+      for (const event of events.filter(
+        (event) => event.type === "attack" && event.targetId === id && event.unitId,
+      )) {
+        const attacker = b.units.find((unit) => unit.id === event.unitId);
+        if (
+          attacker &&
+          event.amount &&
+          event.amount > 0 &&
+          hasClassRank(attacker, "DUELIST", 5) &&
+          !attacker.classTriggers?.duelistExtraAction &&
+          roll(attacker, u, b.round + 0.35) < 0.35
+        ) {
+          attacker.classTriggers = {
+            ...attacker.classTriggers,
+            duelistExtraAction: true,
+          };
+          b.actionLimitBonus ??= { player: 0, bot: 0 };
+          b.actionLimitBonus[attacker.side] += 1;
+          events.push({
+            type: "bonus",
+            unitId: attacker.id,
+            amount: 1,
+            abilityId: "resonance-duelist-extra",
+          });
+        }
+        if (
+          attacker &&
+          event.amount &&
+          event.amount > 0 &&
+          hasClassRank(attacker, "SNIPER", 5) &&
+          distance(attacker, u) > 1 &&
+          !attacker.classTriggers?.sniperMark
+        ) {
+          attacker.classTriggers = { ...attacker.classTriggers, sniperMark: true };
+          u.effects.push({
+            type: "buff",
+            sourceId: attacker.id,
+            abilityId: "resonance-sniper-mark",
+            stat: "luck",
+            amount: 0,
+            starts: b.round + 1,
+            expires: b.round + 2,
+            stacking: "replace",
+          });
+          events.push({
+            type: "bonus",
+            unitId: u.id,
+            effect: "buff",
+            abilityId: "resonance-sniper-mark",
+          });
+        }
+        if (
+          attacker &&
+          event.amount &&
+          event.amount > 0 &&
+          hasClassRank(attacker, "CONTROLLER", 3) &&
+          roll(attacker, u, b.round + 0.25) < 0.25
+        ) {
+          const amount = -Math.max(1, Math.round(stats(u).movement * 0.25));
+          u.effects.push({
+            type: "buff",
+            sourceId: attacker.id,
+            abilityId: "resonance-controller",
+            stat: "movement",
+            amount,
+            starts: b.round + 1,
+            expires: b.round + 1,
+            stacking: "replace",
+          });
+          events.push({
+            type: "bonus",
+            unitId: u.id,
+            effect: "buff",
+            amount,
+            abilityId: "resonance-controller",
+          });
+          if (
+            hasClassRank(attacker, "CONTROLLER", 5) &&
+            !attacker.classTriggers?.controllerBreak
+          ) {
+            attacker.classTriggers = {
+              ...attacker.classTriggers,
+              controllerBreak: true,
+            };
+            b.actionLimitBonus ??= { player: 0, bot: 0 };
+            b.actionLimitBonus[u.side] -= 1;
+            const drain = Math.floor(b.energy[u.side] * 0.2);
+            b.energy[u.side] = Math.max(0, b.energy[u.side] - drain);
+            events.push({
+              type: "bonus",
+              unitId: u.id,
+              amount: drain,
+              abilityId: "resonance-controller-break",
+            });
+          }
+        }
+      }
+      if (healthLost > 0 && u.hp <= 0) {
+        const killerId = events.find(
+          (event) => event.type === "attack" && event.targetId === id && event.unitId,
+        )?.unitId;
+        const killer = killerId ? b.units.find((unit) => unit.id === killerId) : null;
+        if (killer && hasClassRank(killer, "FINISHER", 5)) {
+          b.energy[killer.side] += 1;
+          const amount = Math.max(1, Math.round(stats(killer).attack * 0.12));
+          killer.effects.push({
+            type: "buff",
+            sourceId: killer.id,
+            abilityId: "resonance-finisher-momentum",
+            stat: "attack",
+            amount,
+            starts: b.round + 1,
+            expires: ROUND_LIMIT,
+            stacking: "refresh",
+          });
+          events.push({
+            type: "bonus",
+            unitId: killer.id,
+            effect: "buff",
+            amount,
+            abilityId: "resonance-finisher-momentum",
+          });
+        }
+      }
+      if (
+        healthLost > 0 &&
+        hasClassRank(u, "PROVOKER", 5) &&
+        !u.classTriggers?.provokerExtraAction
+      ) {
+        u.classTriggers = { ...u.classTriggers, provokerExtraAction: true };
+        b.actionLimitBonus ??= { player: 0, bot: 0 };
+        b.actionLimitBonus[u.side] += 1;
+        events.push({
+          type: "bonus",
+          unitId: u.id,
+          amount: 1,
+          abilityId: "resonance-provoker-answer",
+        });
       }
     }
     for (const [id, amount] of healing) {
@@ -1350,9 +1868,20 @@ export function resolveRound(
   }
   if (periodic.length) push(periodic);
   const captures: BattleEvent[] = [];
+  b.captureProgress ??= {
+    player: [...b.points.player],
+    bot: [...b.points.bot],
+  };
+  b.pointFlags ??= {
+    player: [false, false, false],
+    bot: [false, false, false],
+  };
+  const pointFlags = b.pointFlags;
   POINTS.forEach((p, i) => {
     const sides = (["player", "bot"] as Side[]).filter((side) =>
-      alive(b, side).some((u) => distance(u, p) <= 1),
+      alive(b, side).some(
+        (u) => nearPoint(u, p) || (hasClassRank(u, "CONTROLLER", 4) && distance(u, p) <= 2),
+      ) || pointFlags[side][i],
     );
     if (sides.length === 2) {
       captures.push({ type: "contested", point: i });
@@ -1360,18 +1889,100 @@ export function resolveRound(
     }
     if (sides.length !== 1) return;
     const side = sides[0];
-    const amount = Math.min(p.income, POINT_CAP - b.points[side][i]);
+    const contributors = alive(b, side).filter(
+      (u) => nearPoint(u, p) || (hasClassRank(u, "CONTROLLER", 4) && distance(u, p) <= 2),
+    );
+    const flagOnly = pointFlags[side][i] && contributors.length === 0;
+    const captureMultiplier = Math.max(
+      1,
+      ...contributors.map((u) => 1 + (stats(u).captureBonus ?? 0)),
+    );
+    b.captureProgress![side][i] += p.income * captureMultiplier;
+    const amount = Math.min(
+      Math.floor(b.captureProgress![side][i]) - b.points[side][i],
+      POINT_CAP - b.points[side][i],
+    );
     if (!amount) return;
     b.points[side][i] += amount;
     b.energy[side] += amount;
     b.score[side] += amount;
-    const contributors = alive(b, side).filter((u) => distance(u, p) <= 1);
-    for (const u of contributors)
-      b.statistics[u.id].control += amount / contributors.length;
+    if (contributors.length)
+      for (const u of contributors)
+        b.statistics[u.id].control += amount / contributors.length;
     captures.push({ type: "capture", side, point: i, amount });
+    const captor = contributors.find((u) => hasClassRank(u, "CAPTOR", 4));
+    if (captor) {
+      pointFlags[side][i] = true;
+      captures.push({
+        type: "bonus",
+        unitId: captor.id,
+        point: i,
+        abilityId: "resonance-captor-flag",
+      });
+    }
+    const firstCaptor = contributors.find(
+      (u) => hasClassRank(u, "CAPTOR", 5) && !u.classTriggers?.finisherMomentum,
+    );
+    if (firstCaptor && !flagOnly) {
+      firstCaptor.classTriggers = {
+        ...firstCaptor.classTriggers,
+        finisherMomentum: true,
+      };
+      applyTeamBuff(
+        b,
+        side,
+        firstCaptor.id,
+        "attack",
+        0.08,
+        "resonance-captor-rush",
+        captures,
+      );
+    }
     if (b.points[side][i] === POINT_CAP)
       captures.push({ type: "exhausted", side, point: i });
   });
+  for (const unit of alive(b)) {
+    if (
+      hasClassRank(unit, "CAPTOR", 3) &&
+      POINTS.some((point) => distance(unit, point) <= 1)
+    ) {
+      const amount = Math.max(1, Math.round(stats(unit).hp * 0.1));
+      if (amount > unit.shield) {
+        unit.shield = amount;
+        unit.shieldExpires = Math.max(unit.shieldExpires ?? 0, b.round + 1);
+        captures.push({
+          type: "bonus",
+          unitId: unit.id,
+          amount,
+          effect: "shield",
+          abilityId: "resonance-captor",
+        });
+      }
+    }
+    if (hasClassRank(unit, "HEALER", 3)) {
+      const amount = Math.max(1, Math.round(stats(unit).hp * 0.1));
+      const target = alive(b, unit.side)
+        .filter((ally) => ally.id !== unit.id && distance(ally, unit) <= 1 && ally.hp < stats(ally).hp)
+        .sort(
+          (a, c) =>
+            a.hp / stats(a).hp - c.hp / stats(c).hp ||
+            a.hp - c.hp ||
+            a.id.localeCompare(c.id),
+        )[0];
+      if (target) {
+        const restored = Math.min(amount, stats(target).hp - target.hp);
+        target.hp += restored;
+        b.statistics[unit.id].healing += restored;
+        if (restored)
+          captures.push({
+            type: "heal",
+            unitId: target.id,
+            amount: restored,
+            abilityId: "resonance-healer",
+          });
+      }
+    }
+  }
   b.units.forEach((u) => {
     if (b.round >= (u.shieldExpires ?? b.round)) u.shield = 0;
     u.effects = u.effects.filter((e) => e.expires > b.round);

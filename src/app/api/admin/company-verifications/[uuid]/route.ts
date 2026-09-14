@@ -3,7 +3,7 @@ import type { CompanyVerificationStatus } from "@prisma/client";
 import { isAuthResponse, requireAdminSession } from "@/lib/admin/require-admin-session";
 import { requireAdminScope } from "@/lib/admin/require-admin-scope";
 import { persistKycRecordFromApplication } from "@/lib/company-onboarding/kyc-vault";
-import { addUtcDays } from "@/lib/finance/company-billing";
+import { addUtcMonths } from "@/lib/finance/company-billing";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -150,11 +150,12 @@ export async function PATCH(
             where: { companyId: current.companyId },
             create: {
               companyId: current.companyId,
-              status: "TRIAL",
-              trialStartedAt: reviewedAt,
-              trialEndsAt: addUtcDays(reviewedAt, 30),
+              status: "ACTIVE",
+              plan: "GO",
+              trialStartedAt: null,
+              trialEndsAt: null,
               currentPeriodStartsAt: reviewedAt,
-              currentPeriodEndsAt: addUtcDays(reviewedAt, 30),
+              currentPeriodEndsAt: addUtcMonths(reviewedAt),
             },
             update: {},
           });

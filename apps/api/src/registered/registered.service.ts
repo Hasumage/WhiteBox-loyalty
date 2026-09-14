@@ -88,7 +88,7 @@ export class RegisteredService {
     return createHash("sha256").update(code).digest("hex");
   }
 
-  private publicCompanyWhere(now = new Date()): Prisma.CompanyWhereInput {
+  private publicCompanyWhere(): Prisma.CompanyWhereInput {
     return {
       isActive: true,
     };
@@ -102,14 +102,14 @@ export class RegisteredService {
     return process.env.NODE_ENV !== "production" && process.env.LOCAL_MAP_SHOW_UNPAID_PARTNERS !== "false";
   }
 
-  private companyWhereForClientSurface(options: ListCompaniesOptions = {}, now = new Date()): Prisma.CompanyWhereInput {
+  private companyWhereForClientSurface(options: ListCompaniesOptions = {}): Prisma.CompanyWhereInput {
     if (options.surface === "wallet") {
       return { isActive: true };
     }
     if (options.surface === "map" && this.canShowUnpaidMapPartnersLocally()) {
       return { isActive: true };
     }
-    return this.publicCompanyWhere(now);
+    return this.publicCompanyWhere();
   }
 
   private companyRecommendationOrderBy(): Prisma.CompanyOrderByWithRelationInput[] {
@@ -724,7 +724,7 @@ export class RegisteredService {
       },
       create: {
         userId,
-        profileVisibility: dto.profileVisibility ?? "PRIVATE",
+        profileVisibility: dto.profileVisibility ?? "PUBLIC",
         marketingOptIn: dto.marketingOptIn ?? false,
         showActivityStats: dto.showActivityStats ?? true,
         browserNotificationsEnabled: dto.browserNotificationsEnabled ?? false,
@@ -871,8 +871,7 @@ export class RegisteredService {
   }
 
   private async listMarketplaceCategories(userId: number) {
-    const now = new Date();
-    const publicCompanyWhere = this.publicCompanyWhere(now);
+    const publicCompanyWhere = this.publicCompanyWhere();
     const [categories, favorites] = await Promise.all([
       this.prisma.category.findMany({
         where: {
@@ -962,8 +961,7 @@ export class RegisteredService {
   async marketplace(userId: number, categorySlug?: string) {
     assertSubscriptionsEnabled();
 
-    const now = new Date();
-    const publicCompanyWhere = this.publicCompanyWhere(now);
+    const publicCompanyWhere = this.publicCompanyWhere();
     const categories = await this.listMarketplaceCategories(userId);
     const [subscriptions, bundles, activeRows, activeBundleRows] = await Promise.all([
       this.prisma.subscription.findMany({
@@ -1037,10 +1035,9 @@ export class RegisteredService {
   }
 
   async listCompanies(userId: number, options: ListCompaniesOptions = {}) {
-    const now = new Date();
     const [companies, transactions] = await Promise.all([
       this.prisma.company.findMany({
-        where: this.companyWhereForClientSurface(options, now),
+        where: this.companyWhereForClientSurface(options),
         orderBy: this.companyRecommendationOrderBy(),
         include: {
           category: { select: { id: true, slug: true, name: true, icon: true } },

@@ -1,0 +1,56 @@
+[
+  {
+    "slug": "coupon-wisp",
+    "name": "Coupon Wisp",
+    "description": "Small cosmic coupon creature with starry receipt ribbon and floating Nearloy coin sparks.",
+    "element": "WIND",
+    "baseRarity": "RARE",
+    "baseStats": {
+      "luck": 11,
+      "charm": 7,
+      "focus": 8,
+      "spark": 12
+    },
+    "traitPool": [
+      "Lucky shelf",
+      "Secret promo",
+      "Cart orbit"
+    ],
+    "visualPrompt": "Small cosmic coupon creature with starry receipt ribbon and floating Nearloy coin sparks.",
+    "isActive": false,
+    "sortOrder": 140,
+    "imageUrl": "/hunt-assets/cards/creatures/coupon-wisp.png",
+    "nameRu": "Виспи",
+    "nameEn": "Coupon Wisp",
+    "descriptionRu": null,
+    "descriptionEn": null,
+    "categorySlug": "retail"
+  },
+  {
+    "slug": "metro-pebble",
+    "name": "Metro Pebble",
+    "description": "Small rounded metro-token creature with metal paws, cyan turnstile glow and curious eyes.",
+    "element": "WIND",
+    "baseRarity": "COMMON",
+    "baseStats": {
+      "luck": 6,
+      "attack": 2,
+      "health": 5,
+      "evasion": 3
+    },
+    "traitPool": [
+      "Fast transfer",
+      "Ticket shine",
+      "Platform calm"
+    ],
+    "visualPrompt": "Small rounded metro-token creature with metal paws, cyan turnstile glow and curious eyes.",
+    "isActive": false,
+    "sortOrder": 90,
+    "imageUrl": "/hunt-assets/cards/creatures/metro-pebble.png",
+    "nameRu": "Пеббл",
+    "nameEn": "Metro Pebble",
+    "descriptionRu": null,
+    "descriptionEn": null,
+    "categorySlug": "services"
+  }
+]

@@ -110,9 +110,10 @@ describe("admin company verification detail route", () => {
       where: { companyId: 42 },
       create: expect.objectContaining({
         companyId: 42,
-        status: "TRIAL",
-        trialStartedAt: expect.any(Date),
-        trialEndsAt: expect.any(Date),
+        status: "ACTIVE",
+        plan: "GO",
+        trialStartedAt: null,
+        trialEndsAt: null,
       }),
       update: {},
     });

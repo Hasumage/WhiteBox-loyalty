@@ -10,13 +10,40 @@ Base path:
 
 ## Endpoints
 
-### `POST /api/hunt/training` (Next.js, not Nest)
+### `POST /api/hunt/battle/match` (Next.js, not Nest)
 
-Independent reward-free tactical arena. Start: `{ "action": "start" }`. Optionally send three `teamUuids` (authenticated owner required), or `previewSpeciesId` (HUNT administrator required). Submit a turn: `{ "action": "round", "token": "<signed snapshot>", "orders": [...] }`. Response: `{ battle, token, frames }`. The wire field `round` counts turns. Modified, expired, terminal or pre-v7 snapshots and invalid orders return HTTP 400. Missing ability content returns 503. Legacy `bonus` values are rejected.
+Unified match route for training, random PvP and private-code PvP. All actions require an authenticated user.
 
-The server validates ownership, path, range, targets, cooldown and shared resonance budget, plans the AI without player orders and resolves all effects. Snapshot HMAC namespace: `hunt-training-v7`; two-hour lifetime. Set the same `JWT_SECRET` on all instances. Critical rolls use a separate HMAC domain plus match nonce, turn and attacker/target IDs; repeat submissions cannot reroll that pair. No random seed or next-roll value is returned to the client.
+Actions:
 
-Frames include optional `critical` and `covered` on attacks, `absorbed` shield damage, and `displace` events with `targetId`, `path`, `amount` (cells), `displacement: "push" | "pull"`. `Battle.statistics` accumulates damage, healing, absorption and control per unit. Spent resonance and control score remain separate. Battle starts read ability definitions from DB and snapshot them; turns remain transient, with no economic rewards. Apply the ability migration and seed before serving starts. Rewarded PvP still needs persistent matches and atomic turn submission. See [Tactical Arena](./tactical-arena.md).
+- Training: `{ "action": "training", "teamUuids": ["...", "...", "..."] }`.
+- Guided tutorial training: `{ "action": "tutorial_training", "cardUuid": "..." }`. This is only for first-run onboarding and builds a training match around the player's first owned card without requiring a full 3-card squad.
+- Random PvP search: `{ "action": "random", "teamUuids": [...] }`.
+- Create private PvP code: `{ "action": "create_private", "teamUuids": [...] }`.
+- Join private PvP code: `{ "action": "join_private", "code": "NH-ABCD", "teamUuids": [...] }`.
+- Read/reconnect: `{ "action": "read", "matchId": "<uuid>" }`.
+- Cancel waiting search: `{ "action": "cancel", "matchId": "<uuid>" }`.
+- Submit turn: `{ "action": "turn", "matchId": "<uuid>", "orders": [...] }`.
+
+Response: `{ battle, matchId, token, mode, status, code?, controlledSide, frames, waitingForOpponent?, pendingSides?, botDisplayName?, reward? }`; `token` currently aliases `matchId` for old client compatibility. `reward` appears only for the submitting side when a rewarded PvP match finishes and contains `{ currency, trophies, dailyCap }`. The wire field `round` counts turns. Expired, terminal and invalid-order matches return HTTP 400. Missing ability content returns 503. Legacy `bonus` values are rejected.
+
+The server stores the match in `HuntBattleMatch`, validates ownership, path, range, targets, cooldown and shared resonance budget. Training plans the AI without player orders and resolves immediately. Random PvP first searches waiting matches and compares average team power; hopeless gaps are rejected even after the window expands. If no player is found, the match stays `WAITING`; after a randomized 20-30 second deadline, reconnect/read fills the opponent side with a scaled bot and a human-like display name. Private PvP stores the first submitted side in `pendingOrders`, returns `waitingForOpponent`, and resolves atomically once both sides have submitted the same turn. Critical rolls use `JWT_SECRET`, match seed, turn and attacker/target IDs; repeat submissions cannot reroll that pair. No random seed or next-roll value is returned to the client. Training opponents are random active species with three assigned abilities and scaled to roughly 92% of the player's average team power.
+
+The mobile random-flow UI routes through `/hunt/battle/loading` before `/hunt/battle/arena`. The loading screen owns the visible search state: elapsed timer, current matching phase, reconnect polling and cancellation through the back button. It is designed to fit one standard mobile viewport without a page scrollbar. The player-facing copy must not disclose bot fallback; it should only say that matchmaking and arena preparation are in progress. A constrained bottom banner ad may be shown there, clipped to the loading slot so RSYA content cannot push or cover the core matching UI. Arena should only be used for `ACTIVE` matches; a `WAITING` match on the arena is treated as a fallback state, not the primary UX.
+
+Frames include optional `critical` and `covered` on attacks, `absorbed` shield damage, and `displace` events with `targetId`, `path`, `amount` (cells), `displacement: "push" | "pull"`. `Battle.statistics` accumulates damage, healing, absorption and control per unit. Spent resonance and control score remain separate. Battle starts read ability definitions from DB and snapshot them; turns persist on the server. Apply the battle match and matchmaking reward migrations plus the ability seed before serving starts. Timers/autoforfeit and production websocket transport are still future work. See [Tactical Arena](./tactical-arena.md).
+
+### `GET /api/hunt/leaderboard` (Next.js)
+
+Returns the current Hunt trophy season leaderboard for authenticated users. Before reading, the route resets profiles whose trophy season is older than 60 days.
+
+Response: `{ seasonDays, seasonStartedAt, resetsAt, players }`, where each player has `rank`, `userUuid`, `name`, `level`, `huntTrophies`, `huntLifetimeTrophies`, `cardsOwnedCount` and `postsCount`.
+
+PvP rewards are settled once per match side. Current values: win `+45 NearCoin` and `+24` trophies, loss `+18 NearCoin` and `-12` trophies, draw `+26 NearCoin` and `+4` trophies. Battle currency is capped at `300 NearCoin` per user per local server day through `HuntCurrencyLedger` reason `BATTLE_REWARD`; trophies still change after the daily currency cap is reached.
+
+### `POST /api/hunt/training` (legacy admin preview)
+
+Backward-compatible training endpoint kept for the admin ability preview flow. User-facing battle UI should use `/api/hunt/battle/match`. Admin preview can still send `{ "action": "start", "previewSpeciesId": "<speciesId>" }` and then `{ "action": "round", "token": "<matchId>", "orders": [...] }`; internally it now also stores state in `HuntBattleMatch`.
 
 ### `GET /api/admin/hunt/characters/:uuid/abilities`
 
@@ -41,9 +68,40 @@ Returns the user's Hunt home state:
 
 If the profile does not exist, the server creates it.
 
+### `GET /api/hunt/tutorial`
+
+Returns the current guided Hunt onboarding state for an authenticated player.
+
+Response: `{ step, state, cardCount, completedAt, profile }`.
+
+Steps:
+
+- `WELCOME`
+- `OPEN_FIRST_BOX`
+- `FIRST_BATTLE`
+- `TACTICS`
+- `UPGRADE`
+- `COMPLETE`
+
+`state` stores one-time reward flags. The client must treat the server step as authoritative.
+
+### `POST /api/hunt/tutorial/advance`
+
+Advances the guided Hunt onboarding and grants one-time rewards inside a transaction. Body: `{ "action": "start" | "box_opened" | "battle_finished" | "tactics_seen" | "upgrade_done" | "complete" }`.
+
+Server rewards:
+
+- `start`: grants starter NearCoin for the first cheap box.
+- `box_opened`: verifies that the player owns at least one Hunt card and moves to the first battle.
+- `battle_finished`: grants the second tutorial card.
+- `tactics_seen`: grants upgrade currency.
+- `upgrade_done`: grants the third tutorial card, marks the tutorial complete and advances onboarding mission progress.
+
+Rewards use `HuntCurrencyLedger` reason `TUTORIAL_REWARD` and cannot be replayed by repeating the action.
+
 ### `POST /api/hunt/tutorial/complete`
 
-Marks the first-run tutorial as completed and grants onboarding rewards when eligible.
+Backward-compatible endpoint. It now marks the guided tutorial complete through the same server state machine.
 
 Server rules:
 

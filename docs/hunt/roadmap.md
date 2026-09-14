@@ -2,9 +2,11 @@
 
 ## Tactical Training: September 7
 
-Implemented in `/hunt/battle/arena`: mobile-only mirrored 3v3, server validation, finite resonance points, separate control score, database-backed composable abilities, lifesteal, elemental counters, crits, cover, knockback/pull, previews, action camera, character status inspection and result statistics. All 21 species have three abilities editable with history in the unified character admin. See [v7 rules](./tactical-arena.md) and [ability framework](./ability-framework.md).
+Implemented in `/hunt/battle/arena`: mobile-only 3v3, server validation, finite resonance points, separate control score, database-backed composable abilities, lifesteal, elemental counters, crits, cover, knockback/pull, previews, action camera, character status inspection and result statistics. All 21 species have three abilities editable with history in the unified character admin. First-run players now enter a guided Hunt onboarding led by Lira Knox: starter currency, first cheap box, tutorial battle from the first card, tactics explanation, first upgrade and a complete 3-card deck. See [v7 rules](./tactical-arena.md) and [ability framework](./ability-framework.md).
 
-Still pending: human mobile playtesting, individual ability balance telemetry, map/AI tuning (explicitly deferred in this update), persisted authenticated multiplayer and atomic rewarded settlement. Species selection is normalized to mirrored level-one profiles; collection progression is not competitive input. Training stays reward-free, but now requires the ability migration and initializer.
+Current server foundation: `HuntBattleMatch` persists battle state, selected teams, team power, match seed, private code, pending orders, fallback bot data, reward settlement markers and last frames. Training uses the player's real cards and a random AI team scaled slightly below the player's average power. Private-code PvP supports create, join, reconnect, submit-turn and wait-for-opponent over polling; both sides resolve through the same engine once both submitted orders. Random PvP now searches compatible waiting players by team power and falls back to a scaled bot with a human-like nickname after a randomized 20-30 second wait.
+
+PvP settlement grants capped daily NearCoin and seasonal trophies. The Hunt leaderboard reads the top trophy profiles and seasons reset every 60 days. Still pending: human mobile playtesting, individual ability balance telemetry, map/AI tuning (explicitly deferred in this update), timers/autoforfeit, production websocket transport and full PvP UX polish. Training stays reward-free, but now requires the ability, battle-match and matchmaking reward migrations plus the initializer.
 
 ## Phase 1: Local Foundation
 
@@ -44,7 +46,7 @@ Next:
 
 Add:
 
-- Local leaderboards by city/district/category.
+- Local leaderboards by city/district/category on top of the current global trophy leaderboard.
 - Weekly city events.
 - Streaks and seasonal collections.
 - Friend/referral missions.

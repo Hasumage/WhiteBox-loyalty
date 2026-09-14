@@ -32,7 +32,7 @@ const fallbackProfile: TwaProfile = {
     onboardingCompletedAt: null,
     onboardingSkippedAt: null,
     geolocationPromptedAt: null,
-    profileVisibility: "PRIVATE",
+    profileVisibility: "PUBLIC",
     marketingOptIn: false,
     showActivityStats: true,
     browserNotificationsEnabled: false,

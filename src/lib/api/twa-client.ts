@@ -2,6 +2,7 @@ import { getAccessToken } from "./auth-client";
 import { fetchWithAuthRecovery } from "./authenticated-fetch";
 import { clearTwaCache, readTwaCache, writeTwaCache } from "./twa-cache";
 import type { ApiCategory } from "./categories-client";
+import type { Battle, Frame, Order, Side } from "@/lib/hunt/tactics";
 
 export type TwaCompanyLevel = {
   current: {
@@ -227,6 +228,7 @@ export type TwaLookupCode = {
 
 export type HuntRarity = "COMMON" | "UNCOMMON" | "RARE" | "EPIC" | "LEGENDARY";
 export type HuntElement = "FLAME" | "WATER" | "NATURE" | "WIND" | "MUSIC" | "LIGHT" | "SHADOW";
+export type HuntBattleClass = "GUARDIAN" | "DUELIST" | "FINISHER" | "HEALER" | "CONTROLLER" | "CAPTOR" | "BATTERY" | "SNIPER" | "PROVOKER" | "SCOUT";
 export type HuntBoxType = "DAILY" | "PROMO" | "POST" | "TRENDING" | "CATEGORY" | "DISTRICT" | "ELEMENTAL" | "FOUNDER" | "PARTNER";
 export type HuntCardStatKey = "health" | "attack" | "luck" | "evasion";
 export type HuntReportReason = "SPAM" | "OFFENSIVE" | "FALSE_PLACE" | "DUPLICATE" | "PRIVATE_DATA" | "COPYRIGHT" | "OTHER";
@@ -240,7 +242,55 @@ export type HuntProfile = {
   likesReceivedCount: number;
   boxesOpenedCount: number;
   cardsOwnedCount: number;
+  huntTrophies: number;
+  huntLifetimeTrophies: number;
+  huntTrophySeasonStartedAt: string | null;
+  huntTutorialStep: HuntTutorialStep;
+  huntTutorialState: HuntTutorialState | null;
   tutorialCompletedAt: string | null;
+};
+
+export type HuntTutorialStep = "WELCOME" | "OPEN_FIRST_BOX" | "FIRST_BATTLE" | "SECOND_BATTLE" | "TACTICS" | "UPGRADE" | "COMPLETE";
+export type HuntTutorialState = {
+  started?: boolean;
+  firstCoinsGranted?: boolean;
+  firstBoxOpened?: boolean;
+  firstBattleFinished?: boolean;
+  secondCardGranted?: boolean;
+  secondBattleFinished?: boolean;
+  upgradeCoinsGranted?: boolean;
+  upgradeDone?: boolean;
+  finalCardGranted?: boolean;
+};
+
+export type HuntTutorialStatus = {
+  success?: true;
+  step: HuntTutorialStep;
+  state: HuntTutorialState;
+  cardCount: number;
+  completedAt: string | null;
+  profile: HuntProfile;
+  grantedCards?: HuntCard[];
+};
+
+export type HuntLeaderboard = {
+  seasonDays: number;
+  seasonStartedAt: string | null;
+  resetsAt: string | null;
+  currentUser: {
+    profileVisibility: "PRIVATE" | "FRIENDS" | "PUBLIC";
+    participates: boolean;
+  };
+  players: Array<{
+    rank: number;
+    userUuid: string;
+    name: string;
+    level: number;
+    huntTrophies: number;
+    huntLifetimeTrophies: number;
+    cardsOwnedCount: number;
+    postsCount: number;
+  }>;
 };
 
 export type HuntMission = {
@@ -299,6 +349,7 @@ export type HuntCard = {
   rarity: HuntRarity;
   element: HuntElement;
   level: number;
+  fusionRank: number;
   xp: number;
   stats: Record<string, number>;
   trait: string;
@@ -314,6 +365,8 @@ export type HuntCard = {
     descriptionEn?: string | null;
     element: HuntElement;
     baseRarity?: HuntRarity;
+    battleClass?: HuntBattleClass;
+    awakeningPhrase?: string | null;
     baseStats?: Record<string, number>;
     visualPrompt: string;
     imageUrl?: string | null;
@@ -352,6 +405,8 @@ export type HuntCatalogSpecies = {
   descriptionEn?: string | null;
   element: HuntElement;
   baseRarity: HuntRarity;
+  battleClass: HuntBattleClass;
+  awakeningPhrase?: string | null;
   category: ApiCategory | null;
   baseStats: Record<string, number>;
   visualPrompt: string;
@@ -404,6 +459,15 @@ export type HuntOverview = {
   boxes: HuntBox[];
   boxOffers?: HuntBoxOffer[];
   cards: HuntCard[];
+  dailyLikeReward: {
+    id: string;
+    postsCount: number;
+    likes: number;
+    amount: number;
+    from: string;
+    to: string;
+    artUrl: string;
+  } | null;
   recentPosts: Array<{
     uuid: string;
     caption: string;
@@ -450,6 +514,26 @@ export type HuntBattleCode = {
   code: string;
   expiresAt: string;
   playerCard: HuntCard;
+};
+
+export type HuntBattleMatchResponse = {
+  battle: Battle;
+  token: string;
+  matchId: string;
+  mode?: "TRAINING" | "PVP_RANDOM" | "PVP_PRIVATE";
+  status?: "WAITING" | "ACTIVE" | "FINISHED" | "EXPIRED" | "CANCELLED";
+  code?: string | null;
+  controlledSide: Side;
+  frames: Frame[];
+  waitingForOpponent?: boolean;
+  pendingSides?: string[];
+  botDisplayName?: string | null;
+  reward?: {
+    currency: number;
+    trophies: number;
+    dailyCap: number;
+  };
+  error?: string;
 };
 
 export type HuntGrowthPlace = HuntPlace & {
@@ -905,11 +989,17 @@ const huntOverviewFallback: HuntOverview = {
     likesReceivedCount: 0,
     boxesOpenedCount: 0,
     cardsOwnedCount: 0,
+    huntTrophies: 0,
+    huntLifetimeTrophies: 0,
+    huntTrophySeasonStartedAt: null,
+    huntTutorialStep: "WELCOME",
+    huntTutorialState: null,
     tutorialCompletedAt: null,
   },
   missions: [],
   boxes: [],
   cards: [],
+  dailyLikeReward: null,
   recentPosts: [],
   economy: {
     postCreateReward: 35,
@@ -921,12 +1011,21 @@ const huntOverviewFallback: HuntOverview = {
   },
 };
 
-export function getCachedHuntOverview() {
+export function getCachedHuntOverview(useBrowserCache = true) {
+  if (!useBrowserCache) return huntOverviewFallback;
   return readCachedJson<HuntOverview>("/hunt/overview", huntOverviewFallback);
 }
 
 export function getHuntOverview(force = false) {
   return getJson<HuntOverview>("/hunt/overview", huntOverviewFallback, TWA_CACHE_TTL_MS, force);
+}
+
+export function getHuntLeaderboard() {
+  return nextApiJson<HuntLeaderboard>(
+    "/api/hunt/leaderboard",
+    { method: "GET" },
+    "Failed to load Hunt leaderboard",
+  );
 }
 
 export type HuntCollectionMeta = { total: number; filteredTotal: number; page: number; pages: number; speciesCounts: Record<string, number> };
@@ -941,6 +1040,15 @@ export async function getHuntCollectionOverview(force = false, params: { page?: 
   const { cards, ...collection } = (await res.json()) as HuntCollectionMeta & { cards: HuntCard[] };
   const overview = await getHuntOverview(force);
   return { ...overview, cards, collection };
+}
+
+export function getHuntCard(uuid: string) {
+  return getJson<{ card: HuntCard; duplicateCount: number; availableDuplicates: number } | null>(
+    `/hunt/cards/${encodeURIComponent(uuid)}`,
+    null,
+    0,
+    true,
+  );
 }
 
 export function getHuntFeed(force = false) {
@@ -988,7 +1096,7 @@ export async function getHuntCardCatalogResult(force = false) {
     const data = (await res.json()) as HuntCatalogSpecies[];
     writeTwaCache(cacheKey(path), data, TWA_CACHE_TTL_MS);
     return { ok: true as const, data };
-  } catch (error) {
+  } catch {
     return cached.hit
       ? { ok: true as const, data: cached.data }
       : { ok: false as const, message: "Не удалось подключиться к API. Проверьте, что backend запущен на localhost:3001." };
@@ -1002,6 +1110,27 @@ export function getHuntPlaces(query?: string, force = false) {
 
 export async function completeHuntTutorial() {
   const result = await postJson<{ success: true; profile: HuntProfile }>("/hunt/tutorial/complete", {}, "Failed to complete Hunt tutorial");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export function getHuntTutorialStatus() {
+  return getJson<HuntTutorialStatus>(
+    "/hunt/tutorial",
+    {
+      step: "WELCOME",
+      state: {},
+      cardCount: 0,
+      completedAt: null,
+      profile: huntOverviewFallback.profile,
+    },
+    0,
+    true,
+  );
+}
+
+export async function advanceHuntTutorial(action: "start" | "welcome" | "box_opened" | "battle_finished" | "second_battle_finished" | "tactics_seen" | "upgrade_done" | "complete") {
+  const result = await postJson<HuntTutorialStatus>("/hunt/tutorial/advance", { action }, "Failed to advance Hunt tutorial");
   if (result.ok) clearTwaCache();
   return result;
 }
@@ -1061,6 +1190,12 @@ export async function likeHuntPost(uuid: string) {
   return result;
 }
 
+export async function markHuntDailyRewardsSeen() {
+  const result = await postJson<{ success: true }>("/hunt/daily-rewards/seen", {}, "Failed to mark Hunt rewards as seen");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
 export async function reportHuntPost(uuid: string, input: { reason: HuntReportReason; details?: string }) {
   return postJson<{ success: true }>(`/hunt/posts/${uuid}/report`, input, "Failed to report Hunt post");
 }
@@ -1073,6 +1208,22 @@ export async function openHuntBox(boxUuid?: string, boxType?: HuntBoxType, boxCo
 
 export async function upgradeHuntCard(cardUuid?: string, focusStat?: HuntCardStatKey) {
   const result = await postJson<{ success: true; cost: number; card: HuntCard; upgrade?: HuntCardUpgrade }>("/hunt/cards/upgrade", { cardUuid, focusStat }, "Failed to upgrade Hunt card");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function sellHuntCard(cardUuid: string) {
+  const result = await postJson<{ success: true; reward: number; soldCardUuid: string; profile: HuntProfile }>(`/hunt/cards/${cardUuid}/sell`, {}, "Failed to sell Hunt card");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function awakenHuntCard(cardUuid: string) {
+  const result = await postJson<{ success: true; card: HuntCard; spentDuplicateUuids: string[]; duplicateCount: number; availableDuplicates: number }>(
+    `/hunt/cards/${cardUuid}/awaken`,
+    {},
+    "Failed to awaken Hunt card",
+  );
   if (result.ok) clearTwaCache();
   return result;
 }
@@ -1091,13 +1242,109 @@ export async function createHuntBattleCode(cardUuid?: string) {
   return postJson<HuntBattleCode>("/hunt/battle/code", { cardUuid }, "Failed to create Hunt battle code");
 }
 
+export async function startHuntTrainingMatch(teamUuids: string[]) {
+  return nextApiJson<HuntBattleMatchResponse>(
+    "/api/hunt/battle/match",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "training", teamUuids }),
+    },
+    "Failed to start Hunt training match",
+  );
+}
+
+export async function startHuntTutorialTrainingMatch(cardUuid: string, teamUuids?: string[]) {
+  return nextApiJson<HuntBattleMatchResponse>(
+    "/api/hunt/battle/match",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "tutorial_training", cardUuid, teamUuids }),
+    },
+    "Failed to start Hunt tutorial match",
+  );
+}
+
+export async function startHuntRandomMatch(teamUuids: string[]) {
+  return nextApiJson<HuntBattleMatchResponse>(
+    "/api/hunt/battle/match",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "random", teamUuids }),
+    },
+    "Failed to start Hunt random match",
+  );
+}
+
+export async function createHuntPrivateMatch(teamUuids: string[]) {
+  return nextApiJson<HuntBattleMatchResponse>(
+    "/api/hunt/battle/match",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create_private", teamUuids }),
+    },
+    "Failed to create Hunt private match",
+  );
+}
+
+export async function joinHuntPrivateMatch(code: string, teamUuids: string[]) {
+  return nextApiJson<HuntBattleMatchResponse>(
+    "/api/hunt/battle/match",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "join_private", code, teamUuids }),
+    },
+    "Failed to join Hunt private match",
+  );
+}
+
+export async function readHuntBattleMatch(matchId: string) {
+  return nextApiJson<HuntBattleMatchResponse>(
+    "/api/hunt/battle/match",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "read", matchId }),
+    },
+    "Failed to read Hunt battle match",
+  );
+}
+
+export async function cancelHuntBattleMatch(matchId: string) {
+  return nextApiJson<{ matchId: string; status: "CANCELLED" }>(
+    "/api/hunt/battle/match",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cancel", matchId }),
+    },
+    "Failed to cancel Hunt battle match",
+  );
+}
+
+export async function submitHuntBattleTurn(matchId: string, orders: Order[]) {
+  return nextApiJson<HuntBattleMatchResponse>(
+    "/api/hunt/battle/match",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "turn", matchId, orders }),
+    },
+    "Failed to submit Hunt battle turn",
+  );
+}
+
 const profileFallback: TwaProfile = {
   user: { uuid: "", name: "", email: "", birthDate: null, birthDateChangedAt: null, birthDateNextChangeAt: null, createdAt: "" },
   preferences: {
     onboardingCompletedAt: null,
     onboardingSkippedAt: null,
     geolocationPromptedAt: null,
-    profileVisibility: "PRIVATE",
+    profileVisibility: "PUBLIC",
     marketingOptIn: false,
     showActivityStats: true,
     browserNotificationsEnabled: false,

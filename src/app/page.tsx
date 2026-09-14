@@ -12,8 +12,16 @@ import { OpenNearLoyDemo } from "@/components/landing/OpenNearLoyDemo";
 import { SUBSCRIPTIONS_ENABLED } from "@/lib/features/subscriptions";
 
 export const metadata: Metadata = {
-  title: "NearLoy — бонусы, уровни и сервис для клиентов",
-  description: "NearLoy помогает клиентам хранить бонусы, статусы, любимые компании и историю операций в одном удобном интерфейсе.",
+  title: "NearLoy — бонусная система, карта партнёров и Nearloy Hunt",
+  description: "NearLoy — сервис лояльности для клиентов и компаний: бонусы, статусы, QR-профиль, карта партнёров, подписки и игровая ветка Nearloy Hunt.",
+  keywords: ["NearLoy", "Nearloy", "бонусная система", "сервис лояльности", "карта партнёров", "QR бонусы", "Nearloy Hunt"],
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "NearLoy — бонусная система, карта партнёров и Nearloy Hunt",
+    description: "Бонусы, статусы, QR-профиль, партнёрские предложения и игровая ветка Nearloy Hunt в одном сервисе.",
+    url: "/",
+    images: [{ url: "/landing/user-rewards-status.png", width: 1200, height: 630, alt: "NearLoy: бонусы и статусы клиента" }],
+  },
 };
 
 type IconItem = {

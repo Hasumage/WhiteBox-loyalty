@@ -59,7 +59,6 @@ const MANAGEMENT_ROLES = new Set<CompanyMemberRole>([
 ]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINIMUM_PAYOUT_RUB = 5_000;
-const COMPANY_TRIAL_DAYS = 30;
 const COMPANY_BILLING_GRACE_DAYS = 3;
 const COMPANY_MONTHLY_REFERRAL_SHARE_PERCENT = 30;
 const PAYMENT_CHECKOUT_TTL_MS = 15 * 60 * 1000;
@@ -1686,16 +1685,15 @@ export class CompanyService {
       include: { appliedPromoCode: true },
     });
     if (!account) {
-      const trialStartedAt = now;
-      const trialEndsAt = this.addDays(trialStartedAt, COMPANY_TRIAL_DAYS);
       account = await this.prisma.companyBillingAccount.create({
         data: {
           companyId,
-          status: trialEndsAt > now ? "TRIAL" : "ACTIVE",
-          trialStartedAt,
-          trialEndsAt,
-          currentPeriodStartsAt: trialEndsAt > now ? trialStartedAt : now,
-          currentPeriodEndsAt: trialEndsAt > now ? trialEndsAt : this.addMonths(now),
+          status: "ACTIVE",
+          plan: CompanyBillingPlan.GO,
+          trialStartedAt: null,
+          trialEndsAt: null,
+          currentPeriodStartsAt: now,
+          currentPeriodEndsAt: this.addMonths(now),
         },
         include: { appliedPromoCode: true },
       });

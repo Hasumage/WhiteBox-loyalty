@@ -3,6 +3,7 @@ import { seedHuntAbilities } from "./seed-hunt-abilities.mjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import {
   HuntBoxType,
+  HuntBattleClass,
   HuntCardRarity,
   HuntElement,
   HuntMissionKind,
@@ -249,6 +250,18 @@ const speciesSeeds = [
     visualPrompt: "Legendary cute shadow creature with crescent ears, smoky ribbon tail, cyan Nearloy star core and violet-gold eclipse aura.",
     imageUrl: "/hunt-assets/cards/creatures/velvet-eclipse.png",
   },
+  {
+    slug: "coin-tail",
+    name: "Coin Tail",
+    element: HuntElement.LIGHT,
+    categorySlug: "services",
+    baseRarity: HuntCardRarity.RARE,
+    sortOrder: 190,
+    baseStats: { health: 5, attack: 4, luck: 7, evasion: 5 },
+    traitPool: ["Daily sparkle", "Lucky payout", "Soft jingle"],
+    visualPrompt: "Cute fluffy reward creature with a curled tail holding glowing Nearloy coins, big cyan eyes and playful celebration energy.",
+    imageUrl: "/hunt-assets/cards/creatures/coin-tail.png",
+  },
 ];
 
 const speciesLocalization = {
@@ -271,6 +284,30 @@ const speciesLocalization = {
   "berry-loop": { nameRu: "Берри", descriptionRu: "Яркий десертный персонаж с ягодными кольцами и привычкой находить вкусные места." },
   "aurora-ticket": { nameRu: "Аврора", descriptionRu: "Легендарный билет с северным сиянием, который открывает редкие городские маршруты." },
   "velvet-eclipse": { nameRu: "Вельвет", descriptionRu: "Легендарная тень сцены, тихих аплодисментов и мест с особенной атмосферой." },
+  "coin-tail": { nameRu: "Коинтейл", descriptionRu: "Хвостатый спутник ежедневных наград, который радостно приносит NearCoin за хорошие городские истории." },
+};
+
+const speciesAwakening = {
+  "coffee-ember": { battleClass: HuntBattleClass.GUARDIAN, phrase: "Тёплая защита держится дольше, чем первый страх." },
+  "map-tide": { battleClass: HuntBattleClass.SCOUT, phrase: "Тихий маршрут всегда знает, где начнётся преимущество." },
+  "bloom-sprout": { battleClass: HuntBattleClass.CAPTOR, phrase: "Корни держат точку крепче любого шума." },
+  "neon-echo": { battleClass: HuntBattleClass.BATTERY, phrase: "Ритм команды начинается с первого импульса." },
+  "receipt-munch": { battleClass: HuntBattleClass.CONTROLLER, phrase: "Полезная деталь ломает самый уверенный план." },
+  "sweet-orbit": { battleClass: HuntBattleClass.HEALER, phrase: "Сладкий след возвращает силы тем, кто почти сдался." },
+  "district-lumen": { battleClass: HuntBattleClass.BATTERY, phrase: "Район светится ярче, когда команда дышит в один такт." },
+  "chai-flare": { battleClass: HuntBattleClass.FINISHER, phrase: "Последняя искра решает исход всего боя." },
+  "metro-breeze": { battleClass: HuntBattleClass.SCOUT, phrase: "Короткий путь открывает длинную победу." },
+  "rainy-pin": { battleClass: HuntBattleClass.DUELIST, phrase: "Один точный поворот превращает каплю в удар." },
+  "moss-button": { battleClass: HuntBattleClass.HEALER, phrase: "Тихая зелень лечит тех, кто остался рядом." },
+  "karaoke-puff": { battleClass: HuntBattleClass.PROVOKER, phrase: "Громкий припев сбивает фокус даже у самых смелых." },
+  "rhythm-moth": { battleClass: HuntBattleClass.BATTERY, phrase: "Когда крылья ловят бас, резонанс отвечает первым." },
+  "mirror-spritz": { battleClass: HuntBattleClass.GUARDIAN, phrase: "Блеск отражает удар раньше, чем он станет бедой." },
+  "coupon-gust": { battleClass: HuntBattleClass.CONTROLLER, phrase: "Выгодный порыв меняет правила прямо на ходу." },
+  "latte-moon": { battleClass: HuntBattleClass.SNIPER, phrase: "Тишина видит цель раньше света." },
+  "berry-loop": { battleClass: HuntBattleClass.FINISHER, phrase: "Яркая орбита замыкается там, где враг ослаб." },
+  "aurora-ticket": { battleClass: HuntBattleClass.SNIPER, phrase: "Даже в самой тёмной ночи она находит путь к звёздам." },
+  "velvet-eclipse": { battleClass: HuntBattleClass.CONTROLLER, phrase: "Тень сцены знает, когда погасить чужой ход." },
+  "coin-tail": { battleClass: HuntBattleClass.SCOUT, phrase: "Удача звенит громче, когда история нашла своих людей." },
 };
 
 function normalizeCardStats(stats) {
@@ -630,6 +667,7 @@ async function main() {
 
     for (const seed of speciesSeeds) {
       const localized = speciesLocalization[seed.slug] ?? {};
+      const awakening = speciesAwakening[seed.slug] ?? { battleClass: HuntBattleClass.DUELIST, phrase: null };
       await prisma.huntCreatureSpecies.upsert({
         where: { slug: seed.slug },
         update: {
@@ -641,6 +679,8 @@ async function main() {
           descriptionRu: localized.descriptionRu ?? seed.visualPrompt,
           element: seed.element,
           baseRarity: seed.baseRarity,
+          battleClass: awakening.battleClass,
+          awakeningPhrase: awakening.phrase,
           categoryId: categoryBySlug.get(seed.categorySlug)?.id,
           baseStats: seed.baseStats,
           traitPool: seed.traitPool,
@@ -659,6 +699,8 @@ async function main() {
           descriptionRu: localized.descriptionRu ?? seed.visualPrompt,
           element: seed.element,
           baseRarity: seed.baseRarity,
+          battleClass: awakening.battleClass,
+          awakeningPhrase: awakening.phrase,
           categoryId: categoryBySlug.get(seed.categorySlug)?.id,
           baseStats: seed.baseStats,
           traitPool: seed.traitPool,

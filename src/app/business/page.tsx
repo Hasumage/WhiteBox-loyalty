@@ -27,8 +27,16 @@ import { MarketingHeader } from "@/components/landing/MarketingHeader";
 import { MarketingPageReveal } from "@/components/landing/MarketingPageReveal";
 
 export const metadata: Metadata = {
-  title: "NearLoy для бизнеса — подписки, бонусы и возврат клиентов",
-  description: "NearLoy помогает компаниям запускать подписки, начислять бонусы, управлять клиентами, ролями, финансами и партнёрскими предложениями.",
+  title: "NearLoy для бизнеса — программа лояльности, бонусы и QR для клиентов",
+  description: "NearLoy помогает компаниям запускать программу лояльности: бонусы, QR-профили клиентов, статусы, подписки, роли сотрудников, финансы и партнёрские предложения.",
+  keywords: ["NearLoy для бизнеса", "программа лояльности", "бонусная система для бизнеса", "QR лояльность", "подписки для клиентов", "сервис для партнёров"],
+  alternates: { canonical: "/business" },
+  openGraph: {
+    title: "NearLoy для бизнеса — программа лояльности и возврат клиентов",
+    description: "Бонусы, QR-профили, статусы, подписки, роли сотрудников и финансы в кабинете NearLoy.",
+    url: "/business",
+    images: [{ url: "/landing/business-hero-dashboard.png", width: 1200, height: 630, alt: "Кабинет NearLoy для бизнеса" }],
+  },
 };
 
 type IconItem = {

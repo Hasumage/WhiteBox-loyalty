@@ -1,12 +1,44 @@
 # Боевая система Nearloy Hunt
 
+## PvP matchmaking, rewards and trophies
+
+`/hunt/battle` starts server-owned matches through `POST /api/hunt/battle/match`.
+The random battle button now creates or joins `PVP_RANDOM` instead of silently
+starting training. The server estimates each selected squad with
+`estimateOwnedTeamPower()` and accepts a pair only when the power gap is inside
+the matchmaking window. Very weak teams are protected from hopeless pairings:
+even after waiting, a squad below roughly 68% of the stronger squad is rejected.
+The acceptable window expands while the waiting match ages, so close opponents
+connect quickly and slightly wider matches become possible later.
+
+If random search cannot find a real player, the match remains `WAITING` for a
+randomized 20-30 seconds. A later read/reconnect fills the opponent side with an
+AI squad scaled to about 94% of the player's average power and assigns a
+human-like temporary nickname. This is a temporary production bridge until real
+concurrent population is enough. Training remains reward-free and uses a weaker
+AI target; random PvP and private-code PvP can grant rewards.
+
+Reward settlement is server-only and idempotent per match side:
+
+- win: `+45 NearCoin`, `+24` trophies;
+- loss: `+18 NearCoin`, `-12` trophies;
+- draw: `+26 NearCoin`, `+4` trophies.
+
+Battle NearCoin has a daily cap of `300` per user through
+`HuntCurrencyLedger.reason = BATTLE_REWARD`. Trophy changes still apply after
+the daily currency cap is exhausted. Seasonal trophies reset every 60 days;
+lifetime trophies are kept. `/hunt/leaderboard` shows the current global
+trophy table with the custom Nearloy cup icon.
+
 ## Реализованный Бой: Сентябрь 2026
 
-Актуальная арена `/hunt/battle/arena` описана в [Tactical Arena v7](./tactical-arena.md). Это мобильная тренировка 3 на 3 с зеркальными отрядами первого уровня, без экономических наград. Можно выбрать виды персонажей из своего отряда; прокачка коллекции не даёт преимущества. Раунд означает весь бой, ход означает один цикл приказов. Движение, атаки и способности разрешает сервер; высокая скорость даёт инициативу, а не случайное уклонение.
+Актуальная арена `/hunt/battle/arena` описана в [Tactical Arena v7](./tactical-arena.md). Это мобильная тренировка 3 на 3 без экономических наград. Отряд игрока собирается из его `HuntCard`: уровень и постоянные `stats` карты участвуют в боевом профиле. Противник в тренировке собирается сервером из случайных активных персонажей с полным набором способностей и примерно 92% средней силы отряда игрока. Раунд означает весь бой, ход означает один цикл приказов. Движение, атаки и способности разрешает сервер; высокая скорость даёт инициативу, а не случайное уклонение.
 
 В админке `/admin/hunt/characters` каждому из 21 персонажа назначены три способности (63 определения). Стоимость, цель, радиус, ограничения, формулы и составные эффекты редактируются с историей версий. Похищение жизни восстанавливает здоровье от фактически снятого HP, без учёта щита и избыточного урона; оно не воскрешает и подчиняется снижению лечения ядом. [Полный фреймворк и миграция](./ability-framework.md).
 
-Камера плавно сопровождает действия, крит выделяется, отбрасывание идёт после попадания. По кнопке информации или удержанию персонажа открывается нижняя панель состояния. Итог боя показывает урон, эффективное лечение, поглощение щитом и вклад в контроль для каждого персонажа. Стратегия ИИ в этом обновлении не менялась.
+Камера плавно сопровождает действия, крит выделяется, отбрасывание идёт после попадания. По кнопке информации или удержанию персонажа открывается нижняя панель состояния. Итог боя показывает урон, эффективное лечение, поглощение щитом и вклад в контроль для каждого персонажа.
+
+Состояние тренировочного боя хранится в `HuntBattleMatch`, а не в подписанном клиентском snapshot. Клиент получает `matchId` и отправляет только намерения игрока. Сервер валидирует владельца, текущий статус матча, срок жизни, путь, дальность, цели, кулдауны и общий бюджет резонанса; затем планирует ход ИИ, считает результат через общий движок `src/lib/hunt/tactics.ts`, сохраняет новый `battleState` и возвращает `frames` для анимации. Это первый слой для будущего PvP: та же таблица уже имеет режимы `TRAINING`, `PVP_RANDOM`, `PVP_PRIVATE`, слоты команд, код матча и pending orders.
 
 Крит: `clamp(5 + 0.75 × (удача атакующего − удача цели), 1, 25)%`. Его множитель: `1 + 0.03 × удача атакующего`. При 10 против 10 это 5% и x1.30. Бросок отдельный для каждой цели; горение и яд не критуют. Стихийное преимущество усиливает урон на 20%, но не гарантирует крит. Свет и Тьма взаимно усиливают урон друг по другу, без отдельного «взаимокрита».
 
