@@ -4,6 +4,7 @@ import {
   HuntBoxStatus,
   HuntBoxType,
   HuntBoxRewardKind,
+  HuntCardGiftStatus,
   HuntCardUpgradeStatus,
   HuntCardRarity,
   HuntCurrencyReason,
@@ -28,7 +29,7 @@ import { HUNT_CARD_STAT_KEYS, type HuntCardStatKey } from "./dto/upgrade-hunt-ca
 import { UploadHuntMediaDto } from "./dto/upload-hunt-media.dto";
 
 const POST_CREATE_REWARD = 35;
-const LIKE_AUTHOR_REWARD = 8;
+const LIKE_AUTHOR_REWARD = 1;
 const POST_BOX_COST = 120;
 const DEFAULT_BOX_CONFIGS: Record<string, {
   slug: string;
@@ -212,6 +213,7 @@ const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
 const DAILY_POST_REWARD_HOUR_MSK = 10;
 const POST_REWARD_ACTIVE_DAYS = 10;
 const SYNTHETIC_LIKE_TOTALS = [0, 50, 60, 70, 80, 100] as const;
+const SYNTHETIC_LIKE_LIFETIME_CAP_PER_POST = 50;
 const TAG_LIMIT = 8;
 const MEDIA_LIMIT = 3;
 const MOOD_TAG_LIMIT = 5;
@@ -686,14 +688,18 @@ export class HuntService {
 
     await this.prisma.$transaction(async (tx) => {
       for (const [authorId, authorPosts] of postsByUser) {
-        const syntheticLikes = this.distributeSyntheticLikes(authorPosts.length);
+        const syntheticTargets = this.distributeSyntheticLikes(authorPosts.length);
 
         for (let index = 0; index < authorPosts.length; index += 1) {
           const post = authorPosts[index];
           const previousOrganicLikes = post.dailyRewards.reduce((sum, reward) => sum + reward.organicLikes, 0);
           const currentOrganicLikes = Math.max(0, post.likeCount - post.syntheticLikeCount);
           const organicLikes = Math.max(0, currentOrganicLikes - previousOrganicLikes);
-          const bonusLikes = syntheticLikes[index] ?? 0;
+          const desiredSyntheticLikes = Math.min(
+            SYNTHETIC_LIKE_LIFETIME_CAP_PER_POST,
+            syntheticTargets[index] ?? 0,
+          );
+          const bonusLikes = Math.max(0, desiredSyntheticLikes - post.syntheticLikeCount);
           const likesForReward = organicLikes + bonusLikes;
           const finalReward = likesForReward * LIKE_AUTHOR_REWARD;
 
@@ -751,19 +757,7 @@ export class HuntService {
 
   private async settleDuePostRewards(userId?: number, now = new Date()) {
     const latestRewardDate = this.latestPostRewardDate(now);
-    const firstRewardDate = new Date(latestRewardDate.getTime() - (POST_REWARD_ACTIVE_DAYS - 1) * DAY_MS);
-    let settledPosts = 0;
-    let totalLikes = 0;
-    let rewardAmount = 0;
-
-    for (let cursor = firstRewardDate; cursor.getTime() <= latestRewardDate.getTime(); cursor = new Date(cursor.getTime() + DAY_MS)) {
-      const result = await this.settlePostRewardDate(cursor, userId);
-      settledPosts += result.settledPosts;
-      totalLikes += result.totalLikes;
-      rewardAmount += result.rewardAmount;
-    }
-
-    return { settledPosts, totalLikes, rewardAmount };
+    return this.settlePostRewardDate(latestRewardDate, userId);
   }
 
   private async dailyLikeRewardSummary(userId: number) {
@@ -796,6 +790,71 @@ export class HuntService {
       data: { notifiedAt: new Date() },
     });
     return { success: true };
+  }
+
+  private giftPayload(gift: Prisma.HuntCardGiftGetPayload<{ include: { species: true; actor: { select: { name: true; email: true } } } }>) {
+    return {
+      uuid: gift.uuid,
+      status: gift.status,
+      note: gift.note,
+      rarity: gift.rarity ?? gift.species.baseRarity,
+      level: gift.level,
+      createdAt: gift.createdAt,
+      actor: gift.actor ? { name: gift.actor.name, email: gift.actor.email } : null,
+      species: {
+        id: gift.species.id,
+        slug: gift.species.slug,
+        name: gift.species.name,
+        nameRu: gift.species.nameRu,
+        nameEn: gift.species.nameEn,
+        element: gift.species.element,
+        baseRarity: gift.species.baseRarity,
+        imageUrl: gift.species.imageUrl,
+      },
+    };
+  }
+
+  async pendingGifts(userId: number) {
+    const gifts = await this.prisma.huntCardGift.findMany({
+      where: { userId, status: HuntCardGiftStatus.PENDING },
+      include: {
+        species: true,
+        actor: { select: { name: true, email: true } },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 5,
+    });
+    return gifts.map((gift) => this.giftPayload(gift));
+  }
+
+  async acceptGift(userId: number, giftUuid: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const gift = await tx.huntCardGift.findFirst({
+        where: { uuid: giftUuid, userId },
+        include: { species: true },
+      });
+      if (!gift) throw new NotFoundException("Hunt gift not found.");
+      if (gift.status !== HuntCardGiftStatus.PENDING) throw new ConflictException("This Hunt gift is already processed.");
+
+      await this.ensureProfile(userId, tx);
+      const card = await this.createCardFromSpecies(tx, userId, gift.species, {
+        rarity: gift.rarity,
+        level: gift.level,
+      });
+      await tx.huntCardGift.update({
+        where: { id: gift.id },
+        data: {
+          status: HuntCardGiftStatus.ACCEPTED,
+          acceptedAt: new Date(),
+          acceptedCardId: card.id,
+        },
+      });
+      await tx.huntPlayerProfile.update({
+        where: { userId },
+        data: { cardsOwnedCount: { increment: 1 } },
+      });
+      return { success: true, card };
+    });
   }
 
   private toPostPayload(post: Prisma.HuntPostGetPayload<{
@@ -1096,6 +1155,31 @@ export class HuntService {
     return Math.max(1, base + rarityBonus + randomInt(-2, 5));
   }
 
+  private async createCardFromSpecies(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    species: HuntCreatureSpecies,
+    options?: { rarity?: HuntCardRarity | null; level?: number },
+  ) {
+    const cardRarity = options?.rarity ?? (species.baseRarity as HuntCardRarity);
+    const baseStats = species.baseStats as Record<string, number>;
+    const traitPool = Array.isArray(species.traitPool) ? species.traitPool as string[] : ["Fresh find"];
+    const level = Math.max(1, Math.min(MAX_CARD_LEVEL, Math.floor(options?.level ?? 1)));
+    return tx.huntCard.create({
+      data: {
+        ownerId: userId,
+        speciesId: species.id,
+        rarity: cardRarity,
+        element: species.element as HuntElement,
+        level,
+        stats: Object.fromEntries(Object.entries(baseStats).map(([key, value]) => [key, this.randomStat(Number(value), cardRarity)])),
+        trait: traitPool[randomInt(0, traitPool.length)] ?? "Fresh find",
+        visualSeed: randomUUID(),
+      },
+      include: { species: true },
+    });
+  }
+
   private tutorialState(value: unknown): HuntTutorialState {
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
     return value as HuntTutorialState;
@@ -1110,21 +1194,7 @@ export class HuntService {
       where: { slug, isActive: true },
     });
     if (!species) throw new BadRequestException("Tutorial Hunt creature species is not seeded.");
-    const cardRarity = species.baseRarity as HuntCardRarity;
-    const baseStats = species.baseStats as Record<string, number>;
-    const traitPool = Array.isArray(species.traitPool) ? species.traitPool as string[] : ["Tutorial ally"];
-    const card = await tx.huntCard.create({
-      data: {
-        ownerId: userId,
-        speciesId: species.id,
-        rarity: cardRarity,
-        element: species.element as HuntElement,
-        stats: Object.fromEntries(Object.entries(baseStats).map(([key, value]) => [key, this.randomStat(Number(value), cardRarity)])),
-        trait: traitPool[randomInt(0, traitPool.length)] ?? "Tutorial ally",
-        visualSeed: randomUUID(),
-      },
-      include: { species: true },
-    });
+    const card = await this.createCardFromSpecies(tx, userId, species);
     await tx.huntPlayerProfile.update({
       where: { userId },
       data: { cardsOwnedCount: { increment: 1 } },
@@ -1251,7 +1321,7 @@ export class HuntService {
   async overview(userId: number) {
     await this.settleDuePostRewards(userId).catch(() => undefined);
     const profile = await this.ensureProfile(userId);
-    const [missions, boxes, cards, posts, boxConfigs, dailyLikeReward] = await Promise.all([
+    const [missions, boxes, cards, posts, boxConfigs, dailyLikeReward, pendingGifts] = await Promise.all([
       this.prisma.huntMission.findMany({
         where: { isActive: true },
         orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
@@ -1285,6 +1355,7 @@ export class HuntService {
         orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
       }),
       this.dailyLikeRewardSummary(userId),
+      this.pendingGifts(userId),
     ]);
     const visibleBoxConfigs = boxConfigs.filter((config) => this.isCurrentRotatingBox(config));
     const configuredTypes = new Set(visibleBoxConfigs.map((config) => config.type));
@@ -1318,6 +1389,7 @@ export class HuntService {
       cards,
       recentPosts: posts,
       dailyLikeReward,
+      pendingGifts,
       economy: {
         postCreateReward: POST_CREATE_REWARD,
         likeAuthorReward: LIKE_AUTHOR_REWARD,
@@ -2314,21 +2386,7 @@ export class HuntService {
         );
         if (!species) throw new BadRequestException("No Hunt creature species are seeded.");
 
-        const cardRarity = species.baseRarity as HuntCardRarity;
-        const baseStats = species.baseStats as Record<string, number>;
-        const traitPool = Array.isArray(species.traitPool) ? species.traitPool as string[] : ["Fresh find"];
-        const card = await tx.huntCard.create({
-          data: {
-            ownerId: userId,
-            speciesId: species.id,
-            rarity: cardRarity,
-            element: species.element as HuntElement,
-            stats: Object.fromEntries(Object.entries(baseStats).map(([key, value]) => [key, this.randomStat(Number(value), cardRarity)])),
-            trait: traitPool[randomInt(0, traitPool.length)] ?? "Fresh find",
-            visualSeed: randomUUID(),
-          },
-          include: { species: true },
-        });
+        const card = await this.createCardFromSpecies(tx, userId, species);
         const rewardRow = await tx.huntBoxReward.create({
           data: {
             boxId: box.id,

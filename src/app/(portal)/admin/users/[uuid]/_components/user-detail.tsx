@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState, type ComponentType } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, BarChart3, History, Link2, ShieldCheck, UserCircle2 } from "lucide-react";
+import { ArrowLeft, BarChart3, History, Link2, ShieldCheck, Sparkles, UserCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { adminGetUser, type AdminUserDetail } from "@/lib/api/admin-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
-export type UserProfilePageKey = "overview" | "relations" | "activity" | "security";
+export type UserProfilePageKey = "overview" | "relations" | "activity" | "security" | "hunt";
 
 export function useAdminUserProfile() {
   const params = useParams<{ uuid: string }>();
@@ -98,6 +98,7 @@ export function UserPageHeader({
     { key: "relations", href: `/admin/users/${user.uuid}/relations`, label: t("admin.userDetail.relations"), icon: Link2 },
     { key: "activity", href: `/admin/users/${user.uuid}/activity`, label: t("admin.userDetail.activity"), icon: History },
     { key: "security", href: `/admin/users/${user.uuid}/security`, label: t("admin.userDetail.security"), icon: ShieldCheck },
+    { key: "hunt", href: `/admin/users/${user.uuid}/hunt`, label: "Hunt", icon: Sparkles },
   ];
 
   return (
@@ -158,6 +159,7 @@ export function UserPageShellHeader({
     { key: "relations", href: `/admin/users/${user.uuid}/relations`, label: t("admin.userDetail.relations"), icon: Link2 },
     { key: "activity", href: `/admin/users/${user.uuid}/activity`, label: t("admin.userDetail.activity"), icon: History },
     { key: "security", href: `/admin/users/${user.uuid}/security`, label: t("admin.userDetail.security"), icon: ShieldCheck },
+    { key: "hunt", href: `/admin/users/${user.uuid}/hunt`, label: "Hunt", icon: Sparkles },
   ];
 
   return (

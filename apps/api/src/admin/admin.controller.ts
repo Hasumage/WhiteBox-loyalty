@@ -120,6 +120,57 @@ export class AdminController {
     return this.adminService.getUserByUuid(uuid);
   }
 
+  @Get("users/:uuid/hunt")
+  @ApiOperation({ summary: "Get user's Nearloy Hunt wallet, gifts and card collection" })
+  async getUserHunt(@Param("uuid") uuid: string, @CurrentUser() actor: RequestUser) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canView");
+    return this.adminService.getUserHuntAdmin(uuid);
+  }
+
+  @Post("users/:uuid/hunt/currency")
+  @ApiOperation({ summary: "Adjust user's Hunt NearCoin balance through the ledger" })
+  async adjustUserHuntCurrency(
+    @Param("uuid") uuid: string,
+    @Body() body: { amount?: number; note?: string },
+    @CurrentUser() actor: RequestUser,
+  ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
+    return this.adminService.adjustUserHuntCurrency(uuid, Number(body.amount), body.note, actor.userId);
+  }
+
+  @Post("users/:uuid/hunt/gifts")
+  @ApiOperation({ summary: "Create a pending Hunt card gift for the user" })
+  async createUserHuntGift(
+    @Param("uuid") uuid: string,
+    @Body() body: { speciesId?: string; speciesSlug?: string; rarity?: string; level?: number; note?: string },
+    @CurrentUser() actor: RequestUser,
+  ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
+    return this.adminService.createUserHuntGift(uuid, body, actor.userId);
+  }
+
+  @Patch("users/:uuid/hunt/gifts/:giftUuid/cancel")
+  @ApiOperation({ summary: "Cancel a pending Hunt card gift" })
+  async cancelUserHuntGift(
+    @Param("uuid") uuid: string,
+    @Param("giftUuid") giftUuid: string,
+    @CurrentUser() actor: RequestUser,
+  ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
+    return this.adminService.cancelUserHuntGift(uuid, giftUuid);
+  }
+
+  @Delete("users/:uuid/hunt/cards/:cardUuid")
+  @ApiOperation({ summary: "Delete a Hunt card from user's collection" })
+  async deleteUserHuntCard(
+    @Param("uuid") uuid: string,
+    @Param("cardUuid") cardUuid: string,
+    @CurrentUser() actor: RequestUser,
+  ) {
+    await this.adminService.assertAdminPermission(actor.userId, PermissionScope.USERS, "canEdit");
+    return this.adminService.deleteUserHuntCard(uuid, cardUuid);
+  }
+
   @Patch("users/:uuid")
   @ApiOperation({ summary: "Update user fields by UUID (admin CRUD)" })
   @ApiBody({ type: UpdateUserDto })

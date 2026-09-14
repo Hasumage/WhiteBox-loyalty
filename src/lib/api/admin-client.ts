@@ -1670,6 +1670,86 @@ export type AdminProfileStatusResponse = {
   userFound: boolean | null;
 };
 
+export type AdminUserHuntCard = {
+  uuid: string;
+  rarity: string;
+  element: string;
+  level: number;
+  fusionRank: number;
+  xp: number;
+  stats: Record<string, number>;
+  trait: string;
+  isLocked: boolean;
+  createdAt: string;
+  species: {
+    id: string;
+    slug: string;
+    name: string;
+    nameRu: string | null;
+    nameEn: string | null;
+    element: string;
+    baseRarity: string;
+    imageUrl: string | null;
+  };
+  giftSource?: { uuid: string; note: string | null; createdAt: string } | null;
+};
+
+export type AdminUserHuntGift = {
+  uuid: string;
+  status: "PENDING" | "ACCEPTED" | "CANCELED";
+  rarity: string | null;
+  level: number;
+  note: string | null;
+  acceptedAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  species: AdminUserHuntCard["species"];
+  actor: { uuid: string; name: string; email: string } | null;
+  acceptedCard: { uuid: string } | null;
+};
+
+export type AdminUserHuntSpecies = {
+  id: string;
+  slug: string;
+  name: string;
+  nameRu: string | null;
+  nameEn: string | null;
+  baseRarity: string;
+  element: string;
+  imageUrl: string | null;
+  isActive: boolean;
+};
+
+export type AdminUserHuntLedgerRow = {
+  uuid: string;
+  amount: number;
+  reason: string;
+  sourceType: string | null;
+  sourceId: string | null;
+  balanceAfter: number;
+  metadata: unknown;
+  createdAt: string;
+};
+
+export type AdminUserHuntResponse = {
+  user: { id: number; uuid: string; name: string; email: string };
+  profile: {
+    influenceBalance: number;
+    lifetimeInfluence: number;
+    xp: number;
+    level: number;
+    postsCount: number;
+    likesReceivedCount: number;
+    boxesOpenedCount: number;
+    cardsOwnedCount: number;
+    huntTrophies: number;
+  };
+  cards: AdminUserHuntCard[];
+  gifts: AdminUserHuntGift[];
+  species: AdminUserHuntSpecies[];
+  ledger: AdminUserHuntLedgerRow[];
+};
+
 export type AdminUpdateUserInput = {
   name?: string;
   role?: AdminRole;
@@ -1901,6 +1981,58 @@ export async function adminGetUser(uuid: string): Promise<
     return { ok: false, status: res.status, message };
   }
   return { ok: true, data: (await res.json()) as AdminUserDetail };
+}
+
+export async function adminGetUserHunt(uuid: string) {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/hunt`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to load Hunt layer" };
+  return { ok: true as const, data: data as AdminUserHuntResponse };
+}
+
+export async function adminAdjustUserHuntCurrency(uuid: string, input: { amount: number; note?: string }) {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/hunt/currency`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to adjust Hunt currency" };
+  return { ok: true as const, data: data as AdminUserHuntResponse };
+}
+
+export async function adminCreateUserHuntGift(uuid: string, input: { speciesId: string; rarity?: string; level?: number; note?: string }) {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/hunt/gifts`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to create Hunt gift" };
+  return { ok: true as const, data: data as AdminUserHuntResponse };
+}
+
+export async function adminCancelUserHuntGift(uuid: string, giftUuid: string) {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/hunt/gifts/${giftUuid}/cancel`, {
+    method: "PATCH",
+    headers: authHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to cancel Hunt gift" };
+  return { ok: true as const, data: data as AdminUserHuntResponse };
+}
+
+export async function adminDeleteUserHuntCard(uuid: string, cardUuid: string) {
+  const res = await fetchWithAuthRecovery(`${apiBase()}/admin/users/${uuid}/hunt/cards/${cardUuid}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false as const, message: data.message ?? "Failed to delete Hunt card" };
+  return { ok: true as const, data: data as AdminUserHuntResponse };
 }
 
 export async function adminUpdateUser(uuid: string, input: AdminUpdateUserInput) {

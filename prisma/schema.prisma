@@ -361,6 +361,12 @@ enum HuntCardUpgradeStatus {
   COMPLETED
 }
 
+enum HuntCardGiftStatus {
+  PENDING
+  ACCEPTED
+  CANCELED
+}
+
 enum HuntBoxStatus {
   GRANTED
   OPENED
@@ -520,6 +526,8 @@ model User {
   moderatedHuntPostReports               HuntPostReport[]                @relation("HuntPostReportModerator")
   huntCurrencyLedger                     HuntCurrencyLedger[]
   huntPostDailyRewards                   HuntPostDailyReward[]
+  huntCardGifts                          HuntCardGift[]                  @relation("HuntCardGiftUser")
+  createdHuntCardGifts                   HuntCardGift[]                  @relation("HuntCardGiftActor")
   huntBoxes                              HuntBox[]
   huntCards                              HuntCard[]
   huntCardUpgrades                       HuntCardUpgrade[]
@@ -2050,6 +2058,7 @@ model HuntCreatureSpecies {
 
   category  Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   cards     HuntCard[]
+  gifts     HuntCardGift[]
   boxRules  HuntBoxSpeciesRule[]
   abilities HuntSpeciesAbility[]
 
@@ -2257,10 +2266,37 @@ model HuntCard {
   species    HuntCreatureSpecies @relation(fields: [speciesId], references: [id], onDelete: Restrict)
   upgrades   HuntCardUpgrade[]
   boxRewards HuntBoxReward[]
+  giftSource HuntCardGift?
 
   @@index([ownerId, rarity, createdAt])
   @@index([speciesId])
   @@index([element, rarity])
+}
+
+model HuntCardGift {
+  id             String             @id @default(cuid())
+  uuid           String             @unique @default(uuid())
+  userId         Int
+  speciesId      String
+  actorUserId    Int?
+  acceptedCardId String?            @unique
+  rarity         HuntCardRarity?
+  level          Int                @default(1)
+  note           String?            @db.Text
+  status         HuntCardGiftStatus @default(PENDING)
+  acceptedAt     DateTime?
+  canceledAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  user         User                @relation("HuntCardGiftUser", fields: [userId], references: [id], onDelete: Cascade)
+  actor        User?               @relation("HuntCardGiftActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  species      HuntCreatureSpecies @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+  acceptedCard HuntCard?           @relation(fields: [acceptedCardId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, createdAt])
+  @@index([speciesId])
+  @@index([actorUserId, createdAt])
 }
 
 model HuntCardUpgrade {

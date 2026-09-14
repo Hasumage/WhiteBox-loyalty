@@ -373,6 +373,26 @@ export type HuntCard = {
   };
 };
 
+export type HuntPendingGift = {
+  uuid: string;
+  status: "PENDING" | "ACCEPTED" | "CANCELED";
+  note: string | null;
+  rarity: HuntRarity;
+  level: number;
+  createdAt: string;
+  actor: { name: string | null; email: string } | null;
+  species: {
+    id: string;
+    slug: string;
+    name: string;
+    nameRu?: string | null;
+    nameEn?: string | null;
+    element: HuntElement;
+    baseRarity: HuntRarity;
+    imageUrl?: string | null;
+  };
+};
+
 export type HuntBoxReward =
   | { uuid: string; kind: "CARD"; rarity: HuntRarity | string; position: number; card: HuntCard }
   | {
@@ -459,6 +479,7 @@ export type HuntOverview = {
   boxes: HuntBox[];
   boxOffers?: HuntBoxOffer[];
   cards: HuntCard[];
+  pendingGifts: HuntPendingGift[];
   dailyLikeReward: {
     id: string;
     postsCount: number;
@@ -999,11 +1020,12 @@ const huntOverviewFallback: HuntOverview = {
   missions: [],
   boxes: [],
   cards: [],
+  pendingGifts: [],
   dailyLikeReward: null,
   recentPosts: [],
   economy: {
     postCreateReward: 35,
-    likeAuthorReward: 8,
+    likeAuthorReward: 1,
     postBoxCost: 120,
     dailyPostLimit: 8,
     dailyPostRewardCap: 175,
@@ -1192,6 +1214,16 @@ export async function likeHuntPost(uuid: string) {
 
 export async function markHuntDailyRewardsSeen() {
   const result = await postJson<{ success: true }>("/hunt/daily-rewards/seen", {}, "Failed to mark Hunt rewards as seen");
+  if (result.ok) clearTwaCache();
+  return result;
+}
+
+export async function acceptHuntGift(giftUuid: string) {
+  const result = await postJson<{ success: true; card: HuntCard }>(
+    `/hunt/gifts/${encodeURIComponent(giftUuid)}/accept`,
+    {},
+    "Failed to accept Hunt gift",
+  );
   if (result.ok) clearTwaCache();
   return result;
 }
