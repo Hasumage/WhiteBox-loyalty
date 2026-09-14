@@ -27,7 +27,7 @@ function formatTime(seconds: number) {
 
 export default function HuntBattleLoadingPage() {
   const router = useRouter();
-  const startedAt = useRef(Date.now());
+  const startedAt = useRef<number | null>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
@@ -58,8 +58,10 @@ export default function HuntBattleLoadingPage() {
   }, [router]);
 
   useEffect(() => {
+    startedAt.current = Date.now();
     const timer = window.setInterval(() => {
-      setSeconds(Math.floor((Date.now() - startedAt.current) / 1000));
+      const start = startedAt.current ?? Date.now();
+      setSeconds(Math.floor((Date.now() - start) / 1000));
     }, 250);
     return () => window.clearInterval(timer);
   }, []);
@@ -77,7 +79,8 @@ export default function HuntBattleLoadingPage() {
       }
       if (result.data.status === "ACTIVE" || result.data.status === "FINISHED") {
         redirecting = true;
-        const delay = Math.max(0, MIN_VISIBLE_MS - (Date.now() - startedAt.current));
+        const start = startedAt.current ?? Date.now();
+        const delay = Math.max(0, MIN_VISIBLE_MS - (Date.now() - start));
         window.setTimeout(() => {
           if (active) router.replace("/hunt/battle/arena");
         }, delay);
