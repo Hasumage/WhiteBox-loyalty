@@ -207,10 +207,22 @@ const DEFAULT_BOX_CONFIGS: Record<string, {
 const DAILY_POST_LIMIT = 8;
 const DAILY_POST_REWARD_CAP = 175;
 const DAILY_LIKE_REWARD_CAP = 800;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
+const DAILY_POST_REWARD_HOUR_MSK = 10;
+const POST_REWARD_ACTIVE_DAYS = 10;
+const SYNTHETIC_LIKE_TOTALS = [0, 50, 60, 70, 80, 100] as const;
 const TAG_LIMIT = 8;
 const MEDIA_LIMIT = 3;
 const MOOD_TAG_LIMIT = 5;
 const MAX_CARD_LEVEL = 30;
+const MAX_CARD_FUSION_RANK = 5;
+const FUSION_DUPLICATES_BY_TARGET_RANK: Record<number, number> = {
+  2: 1,
+  3: 1,
+  4: 2,
+  5: 3,
+};
 const ELEMENTAL_ROTATION_GROUP = "elemental-weekly";
 const ELEMENTAL_ROTATION_ANCHOR_UTC = Date.UTC(2026, 8, 7, 8, 0, 0, 0);
 const ELEMENTAL_ROTATION_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -245,6 +257,28 @@ const RARITY_ROLLS: Array<{ rarity: HuntCardRarity; threshold: number }> = [
   { rarity: HuntCardRarity.UNCOMMON, threshold: 520 },
   { rarity: HuntCardRarity.COMMON, threshold: 0 },
 ];
+
+const HUNT_TUTORIAL_STEPS = [
+  "WELCOME",
+  "OPEN_FIRST_BOX",
+  "FIRST_BATTLE",
+  "SECOND_BATTLE",
+  "TACTICS",
+  "UPGRADE",
+  "COMPLETE",
+] as const;
+type HuntTutorialStep = typeof HUNT_TUTORIAL_STEPS[number];
+type HuntTutorialState = {
+  started?: boolean;
+  firstCoinsGranted?: boolean;
+  firstBoxOpened?: boolean;
+  firstBattleFinished?: boolean;
+  secondCardGranted?: boolean;
+  secondBattleFinished?: boolean;
+  upgradeCoinsGranted?: boolean;
+  upgradeDone?: boolean;
+  finalCardGranted?: boolean;
+};
 
 @Injectable()
 export class HuntService {
@@ -359,6 +393,57 @@ export class HuntService {
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   }
 
+  private moscowDayStart(now = new Date()) {
+    const moscow = new Date(now.getTime() + MOSCOW_UTC_OFFSET_MS);
+    return new Date(Date.UTC(moscow.getUTCFullYear(), moscow.getUTCMonth(), moscow.getUTCDate()) - MOSCOW_UTC_OFFSET_MS);
+  }
+
+  private latestPostRewardDate(now = new Date()) {
+    const today = this.moscowDayStart(now);
+    const moscowHour = new Date(now.getTime() + MOSCOW_UTC_OFFSET_MS).getUTCHours();
+    return new Date(today.getTime() - (moscowHour >= DAILY_POST_REWARD_HOUR_MSK ? DAY_MS : 2 * DAY_MS));
+  }
+
+  private activePostCutoff(now = new Date()) {
+    return new Date(this.moscowDayStart(now).getTime() - (POST_REWARD_ACTIVE_DAYS - 1) * DAY_MS);
+  }
+
+  private syntheticLikeBudget(postCount: number) {
+    if (postCount <= 0) return 0;
+    const target = SYNTHETIC_LIKE_TOTALS[Math.min(postCount, SYNTHETIC_LIKE_TOTALS.length - 1)];
+    const maxJitter = Math.max(0, Math.floor(target * 0.12));
+    return Math.max(0, target - (maxJitter > 0 ? randomInt(maxJitter + 1) : 0));
+  }
+
+  private distributeSyntheticLikes(postCount: number) {
+    const budget = this.syntheticLikeBudget(postCount);
+    if (postCount <= 0 || budget <= 0) return [];
+
+    const minimum = postCount * 5 <= budget ? 5 : 0;
+    const result = Array.from({ length: postCount }, () => minimum);
+    let remaining = budget - minimum * postCount;
+    if (remaining <= 0) return result;
+
+    const weights = Array.from({ length: postCount }, () => randomInt(1, 101));
+    const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+    const fractional: Array<{ index: number; fraction: number }> = [];
+
+    for (let index = 0; index < postCount; index += 1) {
+      const exact = (remaining * weights[index]) / weightTotal;
+      const whole = Math.floor(exact);
+      result[index] += whole;
+      fractional.push({ index, fraction: exact - whole });
+    }
+
+    remaining = budget - result.reduce((sum, value) => sum + value, 0);
+    fractional.sort((a, b) => b.fraction - a.fraction);
+    for (let index = 0; index < remaining; index += 1) {
+      result[fractional[index % fractional.length].index] += 1;
+    }
+
+    return result;
+  }
+
   private levelFromXp(xp: number) {
     return Math.max(1, Math.floor(Math.sqrt(xp / 120)) + 1);
   }
@@ -436,6 +521,13 @@ export class HuntService {
 
   private upgradeCost(card: { level: number; rarity: HuntCardRarity }) {
     return card.level * 45 + RARITY_ORDER.indexOf(card.rarity) * 25;
+  }
+
+  private cardSellValue(card: { level: number; rarity: HuntCardRarity }) {
+    const rarityIndex = RARITY_ORDER.indexOf(card.rarity);
+    const baseValue = 18 + rarityIndex * 22;
+    const levelValue = Math.max(0, card.level - 1) * (10 + rarityIndex * 5);
+    return Math.max(10, Math.floor(baseValue + levelValue));
   }
 
   private normalizeCardStats(stats: unknown) {
@@ -559,6 +651,151 @@ export class HuntService {
         }
       }
     }
+  }
+
+  private async settlePostRewardDate(rewardDate: Date, userId?: number) {
+    const rewardDateEnd = new Date(rewardDate.getTime() + DAY_MS);
+    const createdAfter = new Date(rewardDate.getTime() - (POST_REWARD_ACTIVE_DAYS - 1) * DAY_MS);
+    const posts = await this.prisma.huntPost.findMany({
+      where: {
+        ...(userId ? { userId } : {}),
+        status: HuntPostStatus.PUBLISHED,
+        moderationStatus: "CLEAR",
+        createdAt: { gte: createdAfter, lt: rewardDateEnd },
+        dailyRewards: { none: { rewardDate } },
+      },
+      orderBy: [{ userId: "asc" }, { createdAt: "asc" }],
+      include: {
+        dailyRewards: {
+          select: { organicLikes: true },
+        },
+      },
+    });
+    if (posts.length === 0) return { settledPosts: 0, totalLikes: 0, rewardAmount: 0 };
+
+    const postsByUser = new Map<number, typeof posts>();
+    for (const post of posts) {
+      const group = postsByUser.get(post.userId) ?? [];
+      group.push(post);
+      postsByUser.set(post.userId, group);
+    }
+
+    let settledPosts = 0;
+    let totalLikes = 0;
+    let rewardAmount = 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const [authorId, authorPosts] of postsByUser) {
+        const syntheticLikes = this.distributeSyntheticLikes(authorPosts.length);
+
+        for (let index = 0; index < authorPosts.length; index += 1) {
+          const post = authorPosts[index];
+          const previousOrganicLikes = post.dailyRewards.reduce((sum, reward) => sum + reward.organicLikes, 0);
+          const currentOrganicLikes = Math.max(0, post.likeCount - post.syntheticLikeCount);
+          const organicLikes = Math.max(0, currentOrganicLikes - previousOrganicLikes);
+          const bonusLikes = syntheticLikes[index] ?? 0;
+          const likesForReward = organicLikes + bonusLikes;
+          const finalReward = likesForReward * LIKE_AUTHOR_REWARD;
+
+          await tx.huntPostDailyReward.create({
+            data: {
+              userId: authorId,
+              postId: post.id,
+              rewardDate,
+              organicLikes,
+              bonusLikes,
+              totalLikes: likesForReward,
+              rewardAmount: finalReward,
+            },
+          });
+
+          if (bonusLikes > 0 || finalReward > 0) {
+            await tx.huntPost.update({
+              where: { id: post.id },
+              data: {
+                likeCount: bonusLikes > 0 ? { increment: bonusLikes } : undefined,
+                syntheticLikeCount: bonusLikes > 0 ? { increment: bonusLikes } : undefined,
+                score: finalReward > 0 ? { increment: finalReward } : undefined,
+              },
+            });
+          }
+
+          if (bonusLikes > 0) {
+            await tx.huntPlace.update({
+              where: { id: post.placeId },
+              data: { likeCount: { increment: bonusLikes }, wantedCount: { increment: bonusLikes } },
+            });
+            await tx.huntPlayerProfile.upsert({
+              where: { userId: authorId },
+              update: { likesReceivedCount: { increment: bonusLikes } },
+              create: { userId: authorId, likesReceivedCount: bonusLikes },
+            });
+          }
+
+          if (finalReward > 0) {
+            await this.addInfluence(tx, authorId, finalReward, HuntCurrencyReason.POST_DAILY_LIKES, "post", post.id, {
+              rewardDate: rewardDate.toISOString(),
+              likesForReward,
+            });
+          }
+
+          settledPosts += 1;
+          totalLikes += likesForReward;
+          rewardAmount += finalReward;
+        }
+      }
+    });
+
+    return { settledPosts, totalLikes, rewardAmount };
+  }
+
+  private async settleDuePostRewards(userId?: number, now = new Date()) {
+    const latestRewardDate = this.latestPostRewardDate(now);
+    const firstRewardDate = new Date(latestRewardDate.getTime() - (POST_REWARD_ACTIVE_DAYS - 1) * DAY_MS);
+    let settledPosts = 0;
+    let totalLikes = 0;
+    let rewardAmount = 0;
+
+    for (let cursor = firstRewardDate; cursor.getTime() <= latestRewardDate.getTime(); cursor = new Date(cursor.getTime() + DAY_MS)) {
+      const result = await this.settlePostRewardDate(cursor, userId);
+      settledPosts += result.settledPosts;
+      totalLikes += result.totalLikes;
+      rewardAmount += result.rewardAmount;
+    }
+
+    return { settledPosts, totalLikes, rewardAmount };
+  }
+
+  private async dailyLikeRewardSummary(userId: number) {
+    const rewards = await this.prisma.huntPostDailyReward.findMany({
+      where: { userId, rewardAmount: { gt: 0 }, notifiedAt: null },
+      orderBy: [{ rewardDate: "asc" }, { createdAt: "asc" }],
+      select: {
+        rewardDate: true,
+        totalLikes: true,
+        rewardAmount: true,
+        postId: true,
+      },
+    });
+    if (rewards.length === 0) return null;
+
+    return {
+      id: `${rewards[0].rewardDate.toISOString()}-${rewards.length}`,
+      postsCount: new Set(rewards.map((reward) => reward.postId)).size,
+      likes: rewards.reduce((sum, reward) => sum + reward.totalLikes, 0),
+      amount: rewards.reduce((sum, reward) => sum + reward.rewardAmount, 0),
+      from: rewards[0].rewardDate.toISOString(),
+      to: rewards[rewards.length - 1].rewardDate.toISOString(),
+      artUrl: "/hunt-assets/ui/daily-like-reward.png",
+    };
+  }
+
+  async markDailyLikeRewardsSeen(userId: number) {
+    await this.prisma.huntPostDailyReward.updateMany({
+      where: { userId, rewardAmount: { gt: 0 }, notifiedAt: null },
+      data: { notifiedAt: new Date() },
+    });
+    return { success: true };
   }
 
   private toPostPayload(post: Prisma.HuntPostGetPayload<{
@@ -768,8 +1005,13 @@ export class HuntService {
     return this.rarityBounds(raw, minRarity, maxRarity);
   }
 
-  private async pickSpeciesForRarity(tx: Prisma.TransactionClient, targetRarity: HuntCardRarity, config?: Awaited<ReturnType<HuntService["getBoxConfig"]>> | null) {
-    const rotationElement = config?.rotationElement ?? null;
+  private async pickSpeciesForRarity(
+    tx: Prisma.TransactionClient,
+    targetRarity: HuntCardRarity,
+    config?: Awaited<ReturnType<HuntService["getBoxConfig"]>> | null,
+    preferredElement?: HuntElement | null,
+  ) {
+    const rotationElement = preferredElement ?? config?.rotationElement ?? null;
     const maxRarity = config?.maxRarity ?? null;
     const pickFromRules = async (baseRarity: HuntCardRarity) => {
       if (maxRarity && RARITY_ORDER.indexOf(baseRarity) > RARITY_ORDER.indexOf(maxRarity)) return null;
@@ -854,9 +1096,162 @@ export class HuntService {
     return Math.max(1, base + rarityBonus + randomInt(-2, 5));
   }
 
-  async overview(userId: number) {
+  private tutorialState(value: unknown): HuntTutorialState {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return value as HuntTutorialState;
+  }
+
+  private isTutorialStep(value: unknown): value is HuntTutorialStep {
+    return typeof value === "string" && (HUNT_TUTORIAL_STEPS as readonly string[]).includes(value);
+  }
+
+  private async createTutorialCard(tx: Prisma.TransactionClient, userId: number, slug: string) {
+    const species = await tx.huntCreatureSpecies.findFirst({
+      where: { slug, isActive: true },
+    });
+    if (!species) throw new BadRequestException("Tutorial Hunt creature species is not seeded.");
+    const cardRarity = species.baseRarity as HuntCardRarity;
+    const baseStats = species.baseStats as Record<string, number>;
+    const traitPool = Array.isArray(species.traitPool) ? species.traitPool as string[] : ["Tutorial ally"];
+    const card = await tx.huntCard.create({
+      data: {
+        ownerId: userId,
+        speciesId: species.id,
+        rarity: cardRarity,
+        element: species.element as HuntElement,
+        stats: Object.fromEntries(Object.entries(baseStats).map(([key, value]) => [key, this.randomStat(Number(value), cardRarity)])),
+        trait: traitPool[randomInt(0, traitPool.length)] ?? "Tutorial ally",
+        visualSeed: randomUUID(),
+      },
+      include: { species: true },
+    });
+    await tx.huntPlayerProfile.update({
+      where: { userId },
+      data: { cardsOwnedCount: { increment: 1 } },
+    });
+    return card;
+  }
+
+  private async grantTutorialInfluenceOnce(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    state: HuntTutorialState,
+    key: keyof HuntTutorialState,
+    amount: number,
+    sourceId: string,
+  ) {
+    if (state[key]) return state;
+    await this.addInfluence(tx, userId, amount, HuntCurrencyReason.TUTORIAL_REWARD, "tutorial", sourceId);
+    return { ...state, [key]: true };
+  }
+
+  private async grantTutorialCardOnce(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    state: HuntTutorialState,
+    key: keyof HuntTutorialState,
+    slug: string,
+  ) {
+    if (state[key]) return { state, card: null };
+    const card = await this.createTutorialCard(tx, userId, slug);
+    return { state: { ...state, [key]: true }, card };
+  }
+
+  async tutorialStatus(userId: number) {
     const profile = await this.ensureProfile(userId);
-    const [missions, boxes, cards, posts, boxConfigs] = await Promise.all([
+    const state = this.tutorialState(profile.huntTutorialState);
+    const cardCount = await this.prisma.huntCard.count({ where: { ownerId: userId } });
+    const step = profile.tutorialCompletedAt
+      ? "COMPLETE"
+      : this.isTutorialStep(profile.huntTutorialStep)
+        ? profile.huntTutorialStep
+        : "WELCOME";
+    return {
+      step,
+      state,
+      cardCount,
+      completedAt: profile.tutorialCompletedAt,
+      profile,
+    };
+  }
+
+  async advanceTutorial(userId: number, action?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const profile = await this.ensureProfile(userId, tx);
+      let state = this.tutorialState(profile.huntTutorialState);
+      let step: HuntTutorialStep = this.isTutorialStep(profile.huntTutorialStep)
+        ? profile.huntTutorialStep
+        : "WELCOME";
+      const grantedCards: Array<Prisma.HuntCardGetPayload<{ include: { species: true } }>> = [];
+
+      if (profile.tutorialCompletedAt) {
+        return {
+          success: true,
+          step: "COMPLETE" as HuntTutorialStep,
+          state,
+          profile,
+          grantedCards,
+        };
+      }
+
+      if (action === "start" || action === "welcome") {
+        state = await this.grantTutorialInfluenceOnce(tx, userId, state, "firstCoinsGranted", 160, "first-box-coins");
+        state = { ...state, started: true };
+        step = "OPEN_FIRST_BOX";
+      } else if (action === "box_opened") {
+        const cards = await tx.huntCard.count({ where: { ownerId: userId } });
+        if (cards < 1) throw new BadRequestException("Open your first Hunt box before continuing tutorial.");
+        state = { ...state, firstBoxOpened: true };
+        step = "FIRST_BATTLE";
+      } else if (action === "battle_finished") {
+        state = { ...state, firstBattleFinished: true };
+        const grant = await this.grantTutorialCardOnce(tx, userId, state, "secondCardGranted", "map-tide");
+        state = grant.state;
+        if (grant.card) grantedCards.push(grant.card);
+        step = "SECOND_BATTLE";
+      } else if (action === "second_battle_finished") {
+        state = { ...state, secondBattleFinished: true };
+        const grant = await this.grantTutorialCardOnce(tx, userId, state, "finalCardGranted", "bloom-sprout");
+        state = grant.state;
+        if (grant.card) grantedCards.push(grant.card);
+        step = "TACTICS";
+      } else if (action === "tactics_seen") {
+        state = await this.grantTutorialInfluenceOnce(tx, userId, state, "upgradeCoinsGranted", 160, "upgrade-coins");
+        step = "UPGRADE";
+      } else if (action === "upgrade_done") {
+        const upgraded = await tx.huntCard.count({ where: { ownerId: userId, level: { gt: 1 } } });
+        state = { ...state, upgradeDone: upgraded > 0 || state.upgradeDone };
+        await this.advanceMission(tx, userId, "TUTORIAL_COMPLETED");
+        step = "COMPLETE";
+      } else if (action === "complete") {
+        step = "COMPLETE";
+      } else {
+        throw new BadRequestException("Unknown Hunt tutorial action.");
+      }
+
+      const updated = await tx.huntPlayerProfile.update({
+        where: { userId },
+        data: {
+          huntTutorialStep: step,
+          huntTutorialState: state as Prisma.InputJsonValue,
+          tutorialCompletedAt: step === "COMPLETE" ? new Date() : undefined,
+        },
+      });
+
+      return {
+        success: true,
+        step,
+        state,
+        profile: updated,
+        grantedCards,
+      };
+    });
+  }
+
+  async overview(userId: number) {
+    await this.settleDuePostRewards(userId).catch(() => undefined);
+    const profile = await this.ensureProfile(userId);
+    const [missions, boxes, cards, posts, boxConfigs, dailyLikeReward] = await Promise.all([
       this.prisma.huntMission.findMany({
         where: { isActive: true },
         orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
@@ -875,7 +1270,7 @@ export class HuntService {
         take: 12,
       }),
       this.prisma.huntPost.findMany({
-        where: { userId, status: HuntPostStatus.PUBLISHED },
+        where: { userId, status: HuntPostStatus.PUBLISHED, createdAt: { gte: this.activePostCutoff() } },
         orderBy: { createdAt: "desc" },
         take: 3,
         include: { place: true },
@@ -889,6 +1284,7 @@ export class HuntService {
         },
         orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
       }),
+      this.dailyLikeRewardSummary(userId),
     ]);
     const visibleBoxConfigs = boxConfigs.filter((config) => this.isCurrentRotatingBox(config));
     const configuredTypes = new Set(visibleBoxConfigs.map((config) => config.type));
@@ -921,6 +1317,7 @@ export class HuntService {
       ].sort((a, b) => a.sortOrder - b.sortOrder),
       cards,
       recentPosts: posts,
+      dailyLikeReward,
       economy: {
         postCreateReward: POST_CREATE_REWARD,
         likeAuthorReward: LIKE_AUTHOR_REWARD,
@@ -933,25 +1330,13 @@ export class HuntService {
   }
 
   async completeTutorial(userId: number) {
-    const profile = await this.prisma.$transaction(async (tx) => {
-      const current = await this.ensureProfile(userId, tx);
-      if (current.tutorialCompletedAt) return current;
-      const updated = await this.addInfluence(tx, userId, 50, HuntCurrencyReason.MISSION_REWARD, "tutorial", "onboarding");
-      await tx.huntBox.create({
-        data: { userId, type: HuntBoxType.FOUNDER, rarity: HuntCardRarity.UNCOMMON },
-      });
-      await this.advanceMission(tx, userId, "TUTORIAL_COMPLETED");
-      return tx.huntPlayerProfile.update({
-        where: { userId },
-        data: { tutorialCompletedAt: new Date(), influenceBalance: updated.influenceBalance, xp: updated.xp, level: updated.level },
-      });
-    });
-    return { success: true, profile };
+    const result = await this.advanceTutorial(userId, "complete");
+    return { success: true, profile: result.profile };
   }
 
   async feed(userId: number) {
     const posts = await this.prisma.huntPost.findMany({
-      where: { status: HuntPostStatus.PUBLISHED, moderationStatus: "CLEAR" },
+      where: { status: HuntPostStatus.PUBLISHED, moderationStatus: "CLEAR", createdAt: { gte: this.activePostCutoff() } },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       take: 40,
       include: {
@@ -966,7 +1351,7 @@ export class HuntService {
 
   async publicFeed() {
     const posts = await this.prisma.huntPost.findMany({
-      where: { status: HuntPostStatus.PUBLISHED, moderationStatus: "CLEAR" },
+      where: { status: HuntPostStatus.PUBLISHED, moderationStatus: "CLEAR", createdAt: { gte: this.activePostCutoff() } },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       take: 60,
       include: {
@@ -1055,6 +1440,18 @@ export class HuntService {
     });
   }
 
+  async card(userId: number, uuid: string) {
+    const card = await this.prisma.huntCard.findFirst({
+      where: { ownerId: userId, uuid },
+      include: { species: true },
+    });
+    if (!card) throw new NotFoundException("Hunt card not found.");
+    const duplicateCount = await this.prisma.huntCard.count({
+      where: { ownerId: userId, speciesId: card.speciesId },
+    });
+    return { card, duplicateCount, availableDuplicates: Math.max(0, duplicateCount - 1) };
+  }
+
   async cardCatalog(userId: number) {
     const [species, ownedCounts] = await Promise.all([
       this.prisma.huntCreatureSpecies.findMany({
@@ -1080,6 +1477,8 @@ export class HuntService {
       descriptionEn: item.descriptionEn,
       element: item.element,
       baseRarity: item.baseRarity,
+      battleClass: item.battleClass,
+      awakeningPhrase: item.awakeningPhrase,
       category: item.category,
       baseStats: item.baseStats,
       visualPrompt: item.visualPrompt,
@@ -1117,6 +1516,8 @@ export class HuntService {
       descriptionEn: species.descriptionEn,
       element: species.element,
       baseRarity: species.baseRarity,
+      battleClass: species.battleClass,
+      awakeningPhrase: species.awakeningPhrase,
       category: null,
       baseStats: species.baseStats,
       visualPrompt: species.visualPrompt,
@@ -1577,17 +1978,10 @@ export class HuntService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
-        const likeReward = await this.cappedInfluenceAmount(
-          tx,
-          post.userId,
-          LIKE_AUTHOR_REWARD,
-          [HuntCurrencyReason.POST_LIKED],
-          DAILY_LIKE_REWARD_CAP,
-        );
         await tx.huntPostReaction.create({ data: { postId: post.id, userId } });
         await tx.huntPost.update({
           where: { id: post.id },
-          data: { likeCount: { increment: 1 }, score: { increment: LIKE_AUTHOR_REWARD } },
+          data: { likeCount: { increment: 1 }, score: { increment: 1 } },
         });
         await tx.huntPlace.update({
           where: { id: post.placeId },
@@ -1598,11 +1992,6 @@ export class HuntService {
           update: { likesReceivedCount: { increment: 1 } },
           create: { userId: post.userId, likesReceivedCount: 1 },
         });
-        if (likeReward > 0) {
-          await this.addInfluence(tx, post.userId, likeReward, HuntCurrencyReason.POST_LIKED, "post", post.id, {
-            likedByUserId: userId,
-          });
-        }
         await this.advanceMission(tx, post.userId, "LIKE_RECEIVED");
       });
     } catch (error) {
@@ -1697,6 +2086,98 @@ export class HuntService {
     });
   }
 
+  async sellCard(userId: number, cardUuid: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const card = await tx.huntCard.findFirst({
+        where: { uuid: cardUuid, ownerId: userId },
+        include: { species: true },
+      });
+      if (!card) throw new NotFoundException("Hunt card not found.");
+      if (card.isLocked) throw new BadRequestException("Locked Hunt cards cannot be sold.");
+
+      const totalCards = await tx.huntCard.count({ where: { ownerId: userId } });
+      if (totalCards <= 1) throw new BadRequestException("You cannot sell your last Hunt card.");
+
+      const reward = this.cardSellValue(card);
+      await tx.huntCard.delete({ where: { id: card.id } });
+      await this.addInfluence(tx, userId, reward, HuntCurrencyReason.CARD_SOLD, "card", card.id, {
+        cardUuid: card.uuid,
+        speciesSlug: card.species.slug,
+        rarity: card.rarity,
+        level: card.level,
+      });
+      const profile = await tx.huntPlayerProfile.update({
+        where: { userId },
+        data: { cardsOwnedCount: { decrement: 1 } },
+      });
+
+      return { success: true, reward, soldCardUuid: card.uuid, profile };
+    });
+  }
+
+  async awakenCard(userId: number, cardUuid: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const card = await tx.huntCard.findFirst({
+        where: { uuid: cardUuid, ownerId: userId },
+        include: { species: true },
+      });
+      if (!card) throw new NotFoundException("Hunt card not found.");
+      if (card.isLocked) throw new BadRequestException("Locked Hunt cards cannot be awakened.");
+
+      const rank = Math.max(1, Math.min(MAX_CARD_FUSION_RANK, card.fusionRank ?? 1));
+      if (rank >= MAX_CARD_FUSION_RANK) throw new BadRequestException("Hunt card is already at max resonance rank.");
+
+      const targetRank = rank + 1;
+      const requiredDuplicates = FUSION_DUPLICATES_BY_TARGET_RANK[targetRank] ?? 0;
+      const duplicates = await tx.huntCard.findMany({
+        where: {
+          ownerId: userId,
+          speciesId: card.speciesId,
+          id: { not: card.id },
+          isLocked: false,
+        },
+        orderBy: [
+          { fusionRank: "asc" },
+          { level: "asc" },
+          { rarity: "asc" },
+          { createdAt: "asc" },
+          { uuid: "asc" },
+        ],
+        take: requiredDuplicates,
+      });
+      if (duplicates.length < requiredDuplicates) {
+        throw new BadRequestException("Not enough duplicate Hunt cards for awakening.");
+      }
+
+      if (duplicates.length > 0) {
+        await tx.huntCard.deleteMany({
+          where: { id: { in: duplicates.map((duplicate) => duplicate.id) }, ownerId: userId },
+        });
+        await tx.huntPlayerProfile.update({
+          where: { userId },
+          data: { cardsOwnedCount: { decrement: duplicates.length } },
+        });
+      }
+
+      const updated = await tx.huntCard.update({
+        where: { id: card.id },
+        data: { fusionRank: targetRank },
+        include: { species: true },
+      });
+      const duplicateCount = await tx.huntCard.count({
+        where: { ownerId: userId, speciesId: card.speciesId },
+      });
+
+      return {
+        success: true,
+        card: updated,
+        spentDuplicateUuids: duplicates.map((duplicate) => duplicate.uuid),
+        duplicateCount,
+        availableDuplicates: Math.max(0, duplicateCount - 1),
+      };
+    });
+  }
+
   private async applyUpgradeBonusInTransaction(tx: Prisma.TransactionClient, userId: number, upgradeUuid: string, focusStat: HuntCardStatKey) {
     const upgrade = await tx.huntCardUpgrade.findFirst({
       where: { uuid: upgradeUuid, userId },
@@ -1748,7 +2229,7 @@ export class HuntService {
 
   async openBox(userId: number, boxUuid?: string, boxType: HuntBoxType = HuntBoxType.POST, boxConfigId?: string) {
     return this.prisma.$transaction(async (tx) => {
-      await this.ensureProfile(userId, tx);
+      let profile = await this.ensureProfile(userId, tx);
       let box = boxUuid
         ? await tx.huntBox.findFirst({ where: { uuid: boxUuid, userId, status: HuntBoxStatus.GRANTED } })
         : null;
@@ -1766,7 +2247,7 @@ export class HuntService {
         if (!this.isCurrentRotatingBox(offer)) {
           throw new BadRequestException("This weekly Hunt box has already rotated.");
         }
-        const profile = await this.ensureProfile(userId, tx);
+        profile = await this.ensureProfile(userId, tx);
         if (profile.influenceBalance < offer.cost) {
           throw new BadRequestException("Not enough NearCoin to open a Hunt box.");
         }
@@ -1809,12 +2290,28 @@ export class HuntService {
       const guaranteedRarity = activeConfig?.guaranteedRarity ?? fallback.guaranteedRarity ?? null;
       const cards: Array<Prisma.HuntCardGetPayload<{ include: { species: true } }>> = [];
       const rewards: Array<Record<string, unknown>> = [];
+      const ownedCardsBeforeOpen =
+        box.type === HuntBoxType.POST &&
+        !profile.tutorialCompletedAt &&
+        profile.huntTutorialStep === "OPEN_FIRST_BOX"
+          ? await tx.huntCard.count({ where: { ownerId: userId } })
+          : 1;
+      const forceTutorialFlameFirstCard =
+        box.type === HuntBoxType.POST &&
+        !profile.tutorialCompletedAt &&
+        profile.huntTutorialStep === "OPEN_FIRST_BOX" &&
+        ownedCardsBeforeOpen === 0;
 
       for (let index = 0; index < itemCount; index += 1) {
         const targetRarity = guaranteedRarity && index < guaranteedCount
           ? this.rarityBounds(guaranteedRarity, activeConfig?.minRarity ?? fallback.minRarity, activeConfig?.maxRarity ?? fallback.maxRarity)
           : this.rollRarityFromConfig(activeConfig, box.type, box.rarity);
-        const species = await this.pickSpeciesForRarity(tx, targetRarity, activeConfig);
+        const species = await this.pickSpeciesForRarity(
+          tx,
+          targetRarity,
+          activeConfig,
+          forceTutorialFlameFirstCard && index === 0 ? HuntElement.FLAME : null,
+        );
         if (!species) throw new BadRequestException("No Hunt creature species are seeded.");
 
         const cardRarity = species.baseRarity as HuntCardRarity;

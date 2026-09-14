@@ -3008,6 +3008,21 @@ export async function adminGetDashboard() {
   return { ok: true as const, data: (await res.json()) as AdminDashboardResponse };
 }
 
+export async function adminSendDailyReport() {
+  const res = await fetchWithAuthRecovery("/api/admin/reports/daily", {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { ok: false as const, message: data.message ?? data.errors?.join("; ") ?? "Failed to send daily report" };
+  }
+  return {
+    ok: true as const,
+    data: data as { ok: boolean; recipients: number; sent: number; failed: number; errors: string[] },
+  };
+}
+
 export async function adminClosePrMonth() {
   const res = await fetchWithAuthRecovery("/api/admin/pr/monthly-close", {
     method: "POST",

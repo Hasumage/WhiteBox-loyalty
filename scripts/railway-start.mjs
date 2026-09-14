@@ -108,7 +108,11 @@ if (isApiService) {
 } else {
   console.log(serviceName ? `Starting web service "${serviceName}".` : "Starting local Next.js app.");
   npmRun("web", ["run", "start:web"]);
-  npmRun("daily-report", ["run", "reports:daily:scheduler"], process.env, { exitOnClose: false });
+  if (process.env.DAILY_REPORT_SCHEDULER_ENABLED === "true") {
+    npmRun("daily-report", ["run", "reports:daily:scheduler"], process.env, { exitOnClose: false });
+  } else {
+    console.log("Daily report scheduler is disabled. Use the admin dashboard to send reports manually.");
+  }
 }
 
 process.on("SIGINT", () => {

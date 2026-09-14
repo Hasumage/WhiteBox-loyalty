@@ -24,7 +24,7 @@ import { AdminPrCompactCard } from "@/components/admin/AdminPrDashboardSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { adminGetDashboard, type AdminDashboardResponse, type AdminTaskPriority, type AdminTaskRow, type AdminTaskSource } from "@/lib/api/admin-client";
+import { adminGetDashboard, adminSendDailyReport, type AdminDashboardResponse, type AdminTaskPriority, type AdminTaskRow, type AdminTaskSource } from "@/lib/api/admin-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import type { TranslationKey } from "@/lib/i18n/dictionary";
 import type { Locale } from "@/lib/i18n/shared";
@@ -127,6 +127,8 @@ export default function AdminPortalPage() {
   const [dashboard, setDashboard] = useState<AdminDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [dailyReportSending, setDailyReportSending] = useState(false);
+  const [dailyReportMessage, setDailyReportMessage] = useState("");
 
   async function load() {
     setLoading(true);
@@ -140,6 +142,18 @@ export default function AdminPortalPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function sendDailyReport() {
+    setDailyReportSending(true);
+    setDailyReportMessage("");
+    const result = await adminSendDailyReport();
+    if (result.ok) {
+      setDailyReportMessage(`Отчёт отправлен: ${result.data.sent}/${result.data.recipients}`);
+    } else {
+      setDailyReportMessage(result.message);
+    }
+    setDailyReportSending(false);
+  }
 
   const maxEvents = useMemo(() => Math.max(1, ...(dashboard?.trend.map((entry) => entry.events) ?? [1])), [dashboard]);
   const metrics = dashboard?.metrics;
@@ -275,6 +289,20 @@ export default function AdminPortalPage() {
                   <span className="text-sm">{t("admin.dashboard.pendingFinance")}: {metrics?.pendingFinance ?? 0}</span>
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
                 </Link>
+              )}
+              <button
+                type="button"
+                onClick={() => void sendDailyReport()}
+                disabled={dailyReportSending}
+                className="flex w-full items-center justify-between rounded-2xl border border-cyan-200/15 bg-cyan-300/[0.06] p-4 text-left transition hover:bg-cyan-300/[0.1] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-sm">{dailyReportSending ? "Отправляем ежедневный отчёт..." : "Отправить ежедневный отчёт"}</span>
+                <BellRing className={cn("h-4 w-4 text-cyan-100", dailyReportSending && "animate-pulse")} />
+              </button>
+              {dailyReportMessage && (
+                <div className="rounded-2xl border border-white/10 bg-black/15 p-3 text-xs text-muted-foreground">
+                  {dailyReportMessage}
+                </div>
               )}
               <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/15 p-4 text-xs text-muted-foreground">
                 <Clock3 className="h-4 w-4 shrink-0 text-cyan-100" />

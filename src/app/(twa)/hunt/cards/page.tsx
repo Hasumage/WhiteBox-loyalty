@@ -1,17 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Copy, Gift, Heart, Leaf, MoreHorizontal, Search, Share2, SlidersHorizontal, Sparkles, Star, TrendingUp, WalletCards, X, Zap } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Copy, Gift, Heart, Leaf, MoreHorizontal, Search, SlidersHorizontal, Sparkles, Star, TrendingUp, WalletCards, X, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { applyHuntCardUpgradeBonus, getCachedHuntOverview, getHuntCollectionOverview, upgradeHuntCard, type HuntCard, type HuntCardStatKey, type HuntCardUpgrade, type HuntOverview, type HuntRarity } from "@/lib/api/twa-client";
+import { advanceHuntTutorial, applyHuntCardUpgradeBonus, getCachedHuntOverview, getHuntCollectionOverview, sellHuntCard, upgradeHuntCard, type HuntCard, type HuntCardStatKey, type HuntCardUpgrade, type HuntOverview, type HuntRarity } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
-import { ElementBadge, elementMeta, huntInteractiveClass, huntRarityLabel, huntSpeciesDescription, huntSpeciesName, huntStatEntries, huntStatMeta, rarityBadgeClass, rarityClass, StatValueBar } from "../_components/hunt-ui";
+import { ElementBadge, elementMeta, huntCreatureImageClass, huntInteractiveClass, huntRarityLabel, huntSpeciesDescription, huntSpeciesName, huntStatEntries, huntStatMeta, rarityBadgeClass, rarityClass, StatValueBar } from "../_components/hunt-ui";
 
 const rarityIndex: Record<HuntRarity, number> = {
   COMMON: 0,
@@ -33,6 +34,11 @@ const sortOptions = [
 type ElementFilter = (typeof elementOptions)[number];
 type SortMode = (typeof sortOptions)[number]["value"];
 type UpgradeView = { card: HuntCard; upgrade: HuntCardUpgrade; cost: number };
+type TutorialReward = {
+  title: string;
+  body: string;
+  image: string;
+};
 
 function mediaSrc(url?: string | null) {
   if (!url) return "/hunt-assets/cards/compass-light.webp";
@@ -42,6 +48,13 @@ function mediaSrc(url?: string | null) {
 
 function upgradeCost(card: HuntCard) {
   return card.level * 45 + rarityIndex[card.rarity] * 25;
+}
+
+function sellValue(card: HuntCard) {
+  const rarity = rarityIndex[card.rarity];
+  const baseValue = 18 + rarity * 22;
+  const levelValue = Math.max(0, card.level - 1) * (10 + rarity * 5);
+  return Math.max(10, Math.floor(baseValue + levelValue));
 }
 
 function cardImageScale(slug: string) {
@@ -56,8 +69,34 @@ function revealImageScale(slug: string) {
   return "scale-[0.98]";
 }
 
+function TutorialRewardDialog({ reward, onClose }: { reward: TutorialReward; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 px-4 pb-[calc(88px+env(safe-area-inset-bottom))] pt-5 backdrop-brightness-75">
+      <div className="absolute inset-0" aria-hidden="true" />
+      <section className="relative w-full max-w-[430px] overflow-hidden rounded-[30px] border border-cyan-300/25 bg-[radial-gradient(circle_at_72%_10%,rgba(103,232,249,0.18),transparent_38%),linear-gradient(150deg,rgba(8,13,22,0.98),rgba(3,7,18,0.99))] p-4 shadow-[0_22px_80px_rgba(0,0,0,0.62),0_0_45px_rgba(103,232,249,0.14)]">
+        <div className="pointer-events-none absolute -bottom-5 -left-9 h-[270px] w-[215px]">
+          <img src={reward.image} alt="" className="h-full w-full object-contain object-bottom drop-shadow-[0_22px_42px_rgba(0,0,0,0.48)]" />
+        </div>
+        <div className="relative ml-[108px] flex min-h-[218px] flex-col">
+          <div className="relative rounded-[24px] border border-white/14 bg-white/[0.07] px-4 py-4 shadow-[0_18px_46px_rgba(0,0,0,0.28)] backdrop-blur">
+            <span className="absolute -left-3 bottom-10 h-6 w-6 rotate-45 border-b border-l border-white/14 bg-[#111827]/90" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-100/72">Лира Нокс</p>
+            <h2 className="mt-1 text-[22px] font-semibold leading-tight text-white">{reward.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-white/70">{reward.body}</p>
+          </div>
+          <Button onClick={onClose} className={cn("mt-3 ml-auto h-12 rounded-2xl bg-cyan-200 px-5 text-slate-950 hover:bg-cyan-100", huntInteractiveClass)}>
+            Продолжить
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function HuntCardsPage() {
   const { locale, t } = useI18n("ru");
+  const router = useRouter();
   const [overview, setOverview] = useState<HuntOverview>(() => ({ ...getCachedHuntOverview(), cards: [] }));
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -72,7 +111,10 @@ export default function HuntCardsPage() {
   const [busyUuid, setBusyUuid] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
+  const [detailMenuOpen, setDetailMenuOpen] = useState(false);
+  const [sellConfirmCard, setSellConfirmCard] = useState<HuntCard | null>(null);
   const [upgradeView, setUpgradeView] = useState<UpgradeView | null>(null);
+  const [tutorialReward, setTutorialReward] = useState<TutorialReward | null>(null);
 
   const refresh = useCallback(async (force = false) => {
     const id = ++requestId.current;
@@ -107,20 +149,15 @@ export default function HuntCardsPage() {
 
   const selectedCard = selectedUuid ? overview.cards.find((card) => card.uuid === selectedUuid) ?? null : null;
   const currentSort = sortOptions.find((option) => option.value === sortMode) ?? sortOptions[0];
+  const forceUpgradeTutorial = !overview.profile.tutorialCompletedAt && overview.profile.huntTutorialStep === "UPGRADE";
+  const tutorialFirstCardUuid = forceUpgradeTutorial ? cards[0]?.uuid : null;
 
-  async function shareCard(card: HuntCard) {
-    const url = `${window.location.origin}/hunt-share/card/${card.uuid}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: `${huntSpeciesName(card.species, locale)} in Nearloy Hunt`, url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      setNotice(t("client.hunt.shareCopied"));
-    } catch {
-      setNotice(t("client.hunt.shareCancelled"));
-    }
-  }
+  useEffect(() => {
+    if (!forceUpgradeTutorial) return;
+    if (page !== 1) setPage(1);
+    if (elementFilter !== "all") setElementFilter("all");
+    if (query) setQuery("");
+  }, [forceUpgradeTutorial, page, elementFilter, query]);
 
   async function upgradeCard(card: HuntCard) {
     if (busyUuid || card.level >= 30) return;
@@ -146,6 +183,19 @@ export default function HuntCardsPage() {
     if (result.ok) {
       setUpgradeView({ card: result.data.card, upgrade: result.data.upgrade, cost: upgradeView.cost });
       setNotice(`Дополнительная вкачка: +${result.data.upgrade.bonusDelta ?? 1} к ${huntStatMeta[stat].label}.`);
+      if (!overview.profile.tutorialCompletedAt && overview.profile.huntTutorialStep === "UPGRADE") {
+        const tutorial = await advanceHuntTutorial("upgrade_done");
+        if (tutorial.ok) {
+          setTutorialReward({
+            image: "/hunt-assets/tutorial/lira-bloomy.png",
+            title: "Смотри, какой милашка",
+            body: "Я нашла Блуми в кусту. Он пытался выглядеть загадочно, но выдал себя тем, что радостно шуршал листьями. Теперь у нас три героя: огонь, вода и природа. Стихия влияет на урон по другим стихиям, так что команда уже начинает играть головой.",
+          });
+        } else {
+          router.push("/hunt");
+        }
+        setUpgradeView(null);
+      }
       await refresh(true);
     } else {
       setNotice(result.message);
@@ -154,6 +204,31 @@ export default function HuntCardsPage() {
   }
 
   const selectedUpgradeCost = selectedCard ? upgradeCost(selectedCard) : 0;
+  const selectedSellValue = selectedCard ? sellValue(selectedCard) : 0;
+
+  useEffect(() => {
+    setDetailMenuOpen(false);
+  }, [selectedUuid]);
+
+  async function sellCard(card: HuntCard) {
+    if (busyUuid) return;
+    setBusyUuid(card.uuid);
+    const result = await sellHuntCard(card.uuid);
+    if (result.ok) {
+      setSellConfirmCard(null);
+      setSelectedUuid(null);
+      setOverview((current) => ({
+        ...current,
+        profile: result.data.profile,
+        cards: current.cards.filter((item) => item.uuid !== result.data.soldCardUuid),
+      }));
+      setNotice(`Карта продана за ${result.data.reward} NearCoin.`);
+      await refresh(true);
+    } else {
+      setNotice(result.message);
+    }
+    setBusyUuid(null);
+  }
 
   return (
     <main className="min-h-full px-4 pb-24 pt-5 text-white">
@@ -267,16 +342,24 @@ export default function HuntCardsPage() {
         {cards.map((card, index) => {
           const ElementIcon = elementMeta[card.element].icon;
           const duplicateCount = duplicateCounts.get(card.species.slug) ?? 1;
+          const tutorialTarget = forceUpgradeTutorial && !upgradeView && card.uuid === tutorialFirstCardUuid && !selectedCard;
 
           return (
             <button
               key={card.uuid}
               type="button"
+              disabled={forceUpgradeTutorial && !tutorialTarget}
               onClick={() => setSelectedUuid(card.uuid)}
-              className={cn("group relative aspect-[3/4] overflow-hidden rounded-2xl border bg-slate-950 p-0 text-left shadow-[0_18px_42px_rgba(0,0,0,0.22)]", huntInteractiveClass, rarityClass[card.rarity])}
+              className={cn(
+                "group relative aspect-[3/4] overflow-hidden rounded-2xl border bg-slate-950 p-0 text-left shadow-[0_18px_42px_rgba(0,0,0,0.22)]",
+                huntInteractiveClass,
+                rarityClass[card.rarity],
+                tutorialTarget && "z-[55] shadow-[0_0_0_3px_rgba(165,243,252,0.72),0_0_44px_rgba(103,232,249,0.34)]",
+                forceUpgradeTutorial && !tutorialTarget && "pointer-events-none",
+              )}
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_55%,rgba(103,232,249,0.12),rgba(2,6,12,0.25)_52%,rgba(2,6,12,0.62))]">
-                <img src={mediaSrc(card.species.imageUrl)} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center transition", cardImageScale(card.species.slug))} />
+                <img src={mediaSrc(card.species.imageUrl)} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center transition", cardImageScale(card.species.slug), huntCreatureImageClass(card.species.slug))} />
                 <span className="absolute left-2 top-2 rounded-full border border-black/30 bg-black/44 px-2 py-1 text-[11px] font-semibold text-white/74 backdrop-blur">
                   #{String((page - 1) * 20 + index + 1).padStart(3, "0")}
                 </span>
@@ -314,15 +397,31 @@ export default function HuntCardsPage() {
         </div>
       )}
 
-      <Dialog open={Boolean(selectedCard)} onOpenChange={(open) => !open && setSelectedUuid(null)}>
-        <DialogContent showClose={false} className="hide-scrollbar max-h-[92dvh] w-[calc(100vw-1.25rem)] max-w-[760px] overflow-y-auto rounded-[24px] border-white/10 bg-[#030812] p-3 text-white shadow-[0_30px_90px_rgba(0,0,0,0.72)] sm:p-4 lg:max-w-4xl">
+      {forceUpgradeTutorial && !selectedCard && !upgradeView && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/30 backdrop-brightness-75" aria-hidden="true" />
+          <div className="fixed inset-x-0 bottom-[calc(88px+env(safe-area-inset-bottom))] z-[60] mx-auto w-full max-w-[430px] px-4">
+            <div className="relative min-h-[184px]">
+              <img src="/hunt-assets/tutorial/lira-point.png" alt="" className="pointer-events-none absolute -bottom-2 -left-5 h-48 w-36 object-contain object-bottom drop-shadow-[0_18px_34px_rgba(0,0,0,0.5)]" />
+              <div className="ml-24 rounded-[24px] border border-cyan-200/24 bg-slate-950/96 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.58)] backdrop-blur">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-100/70">Лира Нокс</p>
+                <h2 className="mt-1 text-xl font-semibold text-white">Выбери этого героя</h2>
+                <p className="mt-2 text-sm leading-5 text-white/68">Наш боец уже ждёт апгрейд. Тапни по карте, посмотрим его силу и поднимем уровень перед следующим матчем.</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      <Dialog open={Boolean(selectedCard)} onOpenChange={(open) => !open && !forceUpgradeTutorial && setSelectedUuid(null)}>
+        <DialogContent showClose={false} className={cn("hide-scrollbar max-h-[92dvh] w-[calc(100vw-1.25rem)] max-w-[430px] overflow-y-auto rounded-[24px] border-white/10 bg-[#030812] p-3 text-white shadow-[0_30px_90px_rgba(0,0,0,0.72)]", forceUpgradeTutorial && "z-[65]")}>
           {selectedCard && (
             <>
               <div className="absolute inset-0 rounded-[24px] bg-[radial-gradient(circle_at_15%_10%,rgba(52,211,153,0.16),transparent_32%),radial-gradient(circle_at_92%_5%,rgba(103,232,249,0.12),transparent_28%)] pointer-events-none" />
               <DialogTitle className="sr-only">{huntSpeciesName(selectedCard.species, locale)}</DialogTitle>
 
               <div className="relative flex items-center justify-between gap-2">
-                <button type="button" onClick={() => setSelectedUuid(null)} className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-white/78", huntInteractiveClass)} aria-label="Назад">
+                <button type="button" onClick={() => { if (!forceUpgradeTutorial) setSelectedUuid(null); }} disabled={forceUpgradeTutorial} className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-white/78", huntInteractiveClass, forceUpgradeTutorial && "opacity-35")} aria-label="Назад">
                   <ArrowLeft className="h-4 w-4" />
                 </button>
                 <div className="flex min-w-0 items-center gap-2">
@@ -330,82 +429,91 @@ export default function HuntCardsPage() {
                     <Zap className="h-4 w-4 text-cyan-100" />
                     <span className="truncate text-sm font-semibold text-cyan-50">{overview.profile.influenceBalance} NearCoin</span>
                   </div>
-                  <button type="button" className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-white/78", huntInteractiveClass)} aria-label="Меню">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </button>
+                  <div className="relative">
+                    <button type="button" onClick={() => setDetailMenuOpen((open) => !open)} disabled={forceUpgradeTutorial} className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-white/78", huntInteractiveClass, forceUpgradeTutorial && "opacity-35")} aria-label="Меню">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                    {detailMenuOpen && (
+                      <div className="absolute right-0 top-12 z-[85] w-52 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/96 p-1 shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur">
+                        <button
+                          type="button"
+                          disabled={busyUuid === selectedCard.uuid || total <= 1}
+                          onClick={() => {
+                            setDetailMenuOpen(false);
+                            setSellConfirmCard(selectedCard);
+                            setSelectedUuid(null);
+                          }}
+                          className={cn(
+                            "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-amber-50 transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-45",
+                            huntInteractiveClass,
+                          )}
+                        >
+                          <span className="flex items-center gap-2">
+                            <WalletCards className="h-4 w-4 text-amber-200" />
+                            Продать
+                          </span>
+                          <span className="text-xs text-cyan-100">{selectedSellValue} NC</span>
+                        </button>
+                        {total <= 1 && <p className="px-3 pb-2 text-[11px] leading-4 text-white/45">Последнюю карту продать нельзя.</p>}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="relative grid gap-4 sm:grid-cols-[minmax(220px,0.95fr)_minmax(250px,1fr)] lg:grid-cols-[minmax(260px,0.95fr)_minmax(300px,1fr)]">
-                <div className={cn("overflow-hidden rounded-[24px] border bg-[radial-gradient(circle_at_50%_42%,rgba(103,232,249,0.18),rgba(2,6,12,0.72)_58%,rgba(2,6,12,0.96))]", rarityClass[selectedCard.rarity])}>
-                  <div className="relative h-[260px] sm:h-[380px] lg:h-[500px]">
-                    <img src={mediaSrc(selectedCard.species.imageUrl)} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center", revealImageScale(selectedCard.species.slug))} />
-                    <div className="absolute left-3 top-3">
-                      <ElementBadge element={selectedCard.element} />
-                    </div>
-                    <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 bg-gradient-to-t from-black/82 via-black/42 to-transparent p-4 pt-20">
-                      <Badge className={cn("px-3 py-1.5 text-xs", rarityBadgeClass[selectedCard.rarity])}>{huntRarityLabel(selectedCard.rarity, t)}</Badge>
-                      <div className="flex items-center gap-2">
-                        <Badge className="border-white/10 bg-white/[0.08] px-3 py-1.5 text-xs text-white">
-                          <Star className="mr-1 h-3.5 w-3.5 fill-amber-200 text-amber-200" />
+              <div className="relative grid gap-3">
+                <div className="grid grid-cols-[minmax(0,52%)_1fr] gap-2">
+                  <div className={cn("overflow-hidden rounded-[22px] border bg-[radial-gradient(circle_at_50%_42%,rgba(103,232,249,0.18),rgba(2,6,12,0.72)_58%,rgba(2,6,12,0.96))]", rarityClass[selectedCard.rarity])}>
+                    <div className="relative aspect-square min-h-[190px]">
+                      <img src={mediaSrc(selectedCard.species.imageUrl)} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center", revealImageScale(selectedCard.species.slug), huntCreatureImageClass(selectedCard.species.slug))} />
+                      <div className="absolute left-2 top-2">
+                        <ElementBadge element={selectedCard.element} />
+                      </div>
+                      <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-center gap-1 bg-gradient-to-t from-black/86 via-black/50 to-transparent px-2 pb-2 pt-12">
+                        <Badge className={cn("px-2 py-1 text-[10px]", rarityBadgeClass[selectedCard.rarity])}>{huntRarityLabel(selectedCard.rarity, t)}</Badge>
+                        <Badge className="border-white/10 bg-white/[0.08] px-2 py-1 text-[10px] text-white">
+                          <Star className="mr-1 h-3 w-3 fill-amber-200 text-amber-200" />
                           {t("client.hunt.levelShort")} {selectedCard.level}
-                        </Badge>
-                        <Badge className="border-white/10 bg-white/[0.08] px-3 py-1.5 text-xs text-white">
-                          <Copy className="mr-1 h-3.5 w-3.5" />
-                          x{duplicateCounts.get(selectedCard.species.slug) ?? 1}
                         </Badge>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {huntStatEntries(selectedCard.stats).map(([key, value]) => <StatValueBar key={key} label={key} value={value} />)}
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3 sm:justify-center">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="text-2xl font-semibold leading-tight text-white lg:text-3xl">{huntSpeciesName(selectedCard.species, locale)}</h2>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <Badge className={cn("px-2.5 py-1 text-xs", rarityBadgeClass[selectedCard.rarity])}>{huntRarityLabel(selectedCard.rarity, t)}</Badge>
-                        <ElementBadge element={selectedCard.element} />
-                      </div>
-                    </div>
-                    <button type="button" className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-rose-200/18 bg-white/[0.05] text-rose-200", huntInteractiveClass)} aria-label="Любимая карточка">
-                      <Heart className="h-5 w-5" />
-                    </button>
-                  </div>
-
-                  <p className="text-sm leading-6 text-white/62">{huntSpeciesDescription(selectedCard.species, locale)}</p>
-
-                  <div className="flex items-center gap-2">
-                    <span className="h-px flex-1 bg-white/10" />
-                    <span className="text-[11px] uppercase tracking-[0.18em] text-white/45">Характеристики</span>
-                    <span className="h-px flex-1 bg-white/10" />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    {huntStatEntries(selectedCard.stats).map(([key, value]) => <StatValueBar key={key} label={key} value={value} />)}
-                  </div>
-
-                  <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                    <Leaf className="absolute right-3 top-1/2 h-12 w-12 -translate-y-1/2 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-white/10" />
-                    <div className="relative">
-                      <p className="flex items-center gap-2 text-base font-semibold text-white">
-                        <Sparkles className="h-4 w-4 text-cyan-100" />
-                        О существе
-                      </p>
-                      <p className="mt-1 text-sm leading-5 text-white/62">{selectedCard.trait}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-2xl font-semibold leading-tight text-white">{huntSpeciesName(selectedCard.species, locale)}</h2>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge className={cn("px-2.5 py-1 text-xs", rarityBadgeClass[selectedCard.rarity])}>{huntRarityLabel(selectedCard.rarity, t)}</Badge>
+                      <ElementBadge element={selectedCard.element} />
+                      <Badge className="border-white/10 bg-white/[0.08] px-2.5 py-1 text-xs text-white">
+                        <Copy className="mr-1 h-3.5 w-3.5" />
+                        x{duplicateCounts.get(selectedCard.species.slug) ?? 1}
+                      </Badge>
                     </div>
                   </div>
+                  <button type="button" className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-rose-200/18 bg-white/[0.05] text-rose-200", huntInteractiveClass)} aria-label="Любимая карточка">
+                    <Heart className="h-5 w-5" />
+                  </button>
+                </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button disabled={busyUuid === selectedCard.uuid || selectedCard.level >= 30 || overview.profile.influenceBalance < selectedUpgradeCost} className={cn("h-11 rounded-2xl bg-cyan-200 text-sm font-semibold text-slate-950 hover:bg-cyan-100", huntInteractiveClass)} onClick={() => void upgradeCard(selectedCard)}>
-                      <TrendingUp className="mr-2 h-4 w-4" />
-                      {selectedCard.level >= 30 ? "Макс. уровень" : `${t("client.hunt.cards.upgrade")} · ${selectedCard.level >= 30 ? "Максимум" : `${selectedUpgradeCost} NC`}`}
-                    </Button>
-                    <Button variant="secondary" className={cn("h-11 rounded-2xl border-white/10 bg-white/[0.06] text-sm font-semibold", huntInteractiveClass)} onClick={() => void shareCard(selectedCard)}>
-                      <Share2 className="mr-2 h-4 w-4" />
-                      {t("client.hunt.cards.share")}
-                    </Button>
-                  </div>
+                <p className="line-clamp-3 text-sm leading-5 text-white/62">{huntSpeciesDescription(selectedCard.species, locale)}</p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button disabled={busyUuid === selectedCard.uuid || selectedCard.level >= 30 || overview.profile.influenceBalance < selectedUpgradeCost} className={cn("h-12 rounded-2xl bg-cyan-200 text-sm font-semibold text-slate-950 hover:bg-cyan-100", huntInteractiveClass, forceUpgradeTutorial && "relative z-[80] shadow-[0_0_0_3px_rgba(165,243,252,0.85),0_0_44px_rgba(103,232,249,0.48)]")} onClick={() => void upgradeCard(selectedCard)}>
+                    <TrendingUp className="mr-2 h-4 w-4" />
+                    {selectedCard.level >= 30 ? "Макс. уровень" : `${t("client.hunt.cards.upgrade")} · ${selectedUpgradeCost} NC`}
+                  </Button>
+                  <Button asChild variant="secondary" className={cn("h-12 rounded-2xl border-white/10 bg-white/[0.06] text-sm font-semibold", huntInteractiveClass, forceUpgradeTutorial && "pointer-events-none opacity-35")}>
+                    <Link href={`/hunt/cards/${selectedCard.uuid}/awaken`}>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Пробудить
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </>
@@ -413,8 +521,58 @@ export default function HuntCardsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(upgradeView)} onOpenChange={(open) => !open && setUpgradeView(null)}>
-        <DialogContent showClose={false} className="hide-scrollbar max-h-[92dvh] w-[calc(100vw-1.25rem)] max-w-[760px] overflow-y-auto rounded-[24px] border-emerald-300/20 bg-[#030812] p-3 text-white shadow-[0_30px_90px_rgba(0,0,0,0.72)] sm:p-4 lg:max-w-4xl">
+      <Dialog open={Boolean(sellConfirmCard)} onOpenChange={(open) => !open && setSellConfirmCard(null)}>
+        <DialogContent showClose={false} className="w-[calc(100vw-1.5rem)] max-w-[390px] rounded-[24px] border-amber-200/18 bg-[#050914] p-5 text-white shadow-[0_26px_80px_rgba(0,0,0,0.7)]">
+          {sellConfirmCard && (
+            <>
+              <DialogTitle className="text-xl font-semibold">Продать карту?</DialogTitle>
+              <p className="mt-2 text-sm leading-5 text-white/62">
+                {huntSpeciesName(sellConfirmCard.species, locale)} исчезнет из коллекции. За продажу ты получишь {sellValue(sellConfirmCard)} NearCoin.
+              </p>
+              <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                <div className={cn("h-16 w-16 shrink-0 overflow-hidden rounded-2xl border bg-slate-950", rarityClass[sellConfirmCard.rarity])}>
+                  <img src={mediaSrc(sellConfirmCard.species.imageUrl)} alt="" className={cn("h-full w-full object-contain object-center", revealImageScale(sellConfirmCard.species.slug), huntCreatureImageClass(sellConfirmCard.species.slug))} />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-white">{huntSpeciesName(sellConfirmCard.species, locale)}</p>
+                  <p className="mt-1 text-xs text-white/50">
+                    {huntRarityLabel(sellConfirmCard.rarity, t)} · Ур. {sellConfirmCard.level}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-cyan-100">+{sellValue(sellConfirmCard)} NC</p>
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <Button variant="secondary" disabled={busyUuid === sellConfirmCard.uuid} onClick={() => setSellConfirmCard(null)} className={cn("h-12 rounded-2xl border-white/10 bg-white/[0.06] text-sm font-semibold", huntInteractiveClass)}>
+                  Отмена
+                </Button>
+                <Button disabled={busyUuid === sellConfirmCard.uuid} onClick={() => void sellCard(sellConfirmCard)} className={cn("h-12 rounded-2xl bg-amber-200 text-sm font-semibold text-slate-950 hover:bg-amber-100", huntInteractiveClass)}>
+                  <WalletCards className="mr-2 h-4 w-4" />
+                  Продать
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {forceUpgradeTutorial && selectedCard && !upgradeView && (
+        <>
+          <div className="fixed inset-0 z-[55] bg-black/30 backdrop-brightness-75" aria-hidden="true" />
+          <div className="fixed inset-x-0 top-[calc(74px+env(safe-area-inset-top))] z-[75] mx-auto w-full max-w-[430px] px-4">
+            <div className="relative min-h-[172px]">
+              <img src="/hunt-assets/tutorial/lira-reward.png" alt="" className="pointer-events-none absolute -bottom-2 -left-5 h-40 w-32 object-contain object-bottom drop-shadow-[0_18px_34px_rgba(0,0,0,0.5)]" />
+              <div className="ml-24 rounded-[24px] border border-cyan-200/24 bg-slate-950/96 p-4 shadow-[0_22px_70px_rgba(0,0,0,0.58)] backdrop-blur">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-100/70">Лира Нокс</p>
+                <h2 className="mt-1 text-xl font-semibold text-white">Подними уровень</h2>
+                <p className="mt-2 text-sm leading-5 text-white/68">Жми улучшение. После этого герой станет крепче, быстрее или опаснее, а в бою это сразу почувствуется.</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      <Dialog open={Boolean(upgradeView)} onOpenChange={(open) => !open && !(forceUpgradeTutorial && upgradeView?.upgrade.status === "PENDING_BONUS") && setUpgradeView(null)}>
+        <DialogContent showClose={false} className="hide-scrollbar max-h-[92dvh] w-[calc(100vw-1.25rem)] max-w-[430px] overflow-y-auto rounded-[24px] border-emerald-300/20 bg-[#030812] p-3 text-white shadow-[0_30px_90px_rgba(0,0,0,0.72)]">
           {upgradeView && (
             <>
               <div className="absolute inset-0 rounded-[24px] bg-[radial-gradient(circle_at_14%_10%,rgba(132,204,22,0.16),transparent_32%),radial-gradient(circle_at_90%_6%,rgba(103,232,249,0.12),transparent_28%)] pointer-events-none" />
@@ -432,21 +590,33 @@ export default function HuntCardsPage() {
                     <Zap className="h-4 w-4 text-cyan-100" />
                     <span className="truncate text-sm font-semibold text-cyan-50">{overview.profile.influenceBalance} NearCoin</span>
                   </div>
-                  <button type="button" onClick={() => setUpgradeView(null)} className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-white/78", huntInteractiveClass)} aria-label="Закрыть">
+                  <button type="button" onClick={() => { if (!(forceUpgradeTutorial && upgradeView.upgrade.status === "PENDING_BONUS")) setUpgradeView(null); }} disabled={forceUpgradeTutorial && upgradeView.upgrade.status === "PENDING_BONUS"} className={cn("flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-white/78", huntInteractiveClass, forceUpgradeTutorial && upgradeView.upgrade.status === "PENDING_BONUS" && "opacity-35")} aria-label="Закрыть">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               </div>
 
-              <div className="relative grid gap-4 sm:grid-cols-[minmax(220px,0.95fr)_minmax(260px,1fr)]">
-                <div className={cn("overflow-hidden rounded-[24px] border bg-[radial-gradient(circle_at_50%_42%,rgba(132,204,22,0.18),rgba(2,6,12,0.72)_58%,rgba(2,6,12,0.96))]", rarityClass[upgradeView.card.rarity])}>
-                  <div className="relative h-[260px] sm:h-[380px]">
-                    <img src={mediaSrc(upgradeView.card.species.imageUrl)} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center", revealImageScale(upgradeView.card.species.slug))} />
+              {forceUpgradeTutorial && upgradeView.upgrade.status === "PENDING_BONUS" && (
+                <div className="relative grid min-h-[134px] grid-cols-[82px_minmax(0,1fr)] items-end rounded-[22px] border border-cyan-200/24 bg-[linear-gradient(135deg,rgba(20,45,52,0.92),rgba(8,15,27,0.96))] p-3 shadow-[0_16px_44px_rgba(0,0,0,0.28)]">
+                  <img src="/hunt-assets/tutorial/lira-reward.png" alt="" className="pointer-events-none h-[118px] w-[92px] self-end object-contain object-bottom drop-shadow-[0_14px_24px_rgba(0,0,0,0.46)]" />
+                  <div className="relative mb-1 rounded-[20px] border border-white/12 bg-slate-950/58 px-4 py-3">
+                    <span className="absolute -left-2 bottom-8 h-4 w-4 rotate-45 border-b border-l border-white/12 bg-[#10202f]" aria-hidden="true" />
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-100/70">Лира Нокс</p>
+                    <h2 className="mt-0.5 text-base font-semibold text-white">Выбери бонусную стату</h2>
+                    <p className="mt-1 text-xs leading-5 text-white/68">После апгрейда можно добавить ещё один плюс. Для первого раза советую атаку или здоровье, но выбор за тобой.</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="relative grid gap-3">
+                <div className="grid grid-cols-[38%_1fr] gap-3">
+                <div className={cn("overflow-hidden rounded-[22px] border bg-[radial-gradient(circle_at_50%_42%,rgba(132,204,22,0.18),rgba(2,6,12,0.72)_58%,rgba(2,6,12,0.96))]", rarityClass[upgradeView.card.rarity])}>
+                  <div className="relative h-[160px]">
+                    <img src={mediaSrc(upgradeView.card.species.imageUrl)} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center", revealImageScale(upgradeView.card.species.slug), huntCreatureImageClass(upgradeView.card.species.slug))} />
                     <div className="absolute left-3 top-3">
                       <Badge className={rarityBadgeClass[upgradeView.card.rarity]}>{huntRarityLabel(upgradeView.card.rarity, t)}</Badge>
                     </div>
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/84 via-black/48 to-transparent p-4 pt-20 text-center">
-                      <h2 className="text-2xl font-semibold text-white">{huntSpeciesName(upgradeView.card.species, locale)}</h2>
                       <div className="mt-2 flex items-center justify-center gap-2">
                         <Badge className="border-white/10 bg-white/[0.08] px-3 py-1.5 text-xs text-white">
                           <Star className="mr-1 h-3.5 w-3.5 fill-amber-200 text-amber-200" />
@@ -461,7 +631,7 @@ export default function HuntCardsPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
                   <div>
                     <p className="flex items-center gap-2 text-lg font-semibold text-white">
                       <TrendingUp className="h-5 w-5 text-lime-200" />
@@ -486,6 +656,8 @@ export default function HuntCardsPage() {
                       {upgradeView.card.level >= 30 ? "Максимальный уровень" : `Улучшить ещё · ${upgradeCost(upgradeView.card)} NC`}
                     </Button>
                   )}
+                </div>
+                </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     {huntStatEntries(upgradeView.card.stats).map(([key, value]) => {
@@ -504,7 +676,7 @@ export default function HuntCardsPage() {
                           type="button"
                           disabled={busyUuid === upgradeView.card.uuid || !pending}
                           onClick={() => void applyBonus(key)}
-                          className={cn("min-h-[112px] rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left", pending && huntInteractiveClass, bonusActive && "border-lime-200/35 bg-lime-300/10")}
+                          className={cn("min-h-[92px] rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left", pending && huntInteractiveClass, pending && forceUpgradeTutorial && "shadow-[0_0_0_1px_rgba(190,242,100,0.35),0_0_20px_rgba(190,242,100,0.14)]", bonusActive && "border-lime-200/35 bg-lime-300/10")}
                         >
                           <span className="flex min-w-0 items-center gap-2">
                             <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", meta.className)}>
@@ -537,12 +709,20 @@ export default function HuntCardsPage() {
                       );
                     })}
                   </div>
-                </div>
               </div>
             </>
           )}
         </DialogContent>
       </Dialog>
+      {tutorialReward && (
+        <TutorialRewardDialog
+          reward={tutorialReward}
+          onClose={() => {
+            setTutorialReward(null);
+            router.push("/hunt");
+          }}
+        />
+      )}
     </main>
   );
 }

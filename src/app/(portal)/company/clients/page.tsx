@@ -177,7 +177,7 @@ export default function CompanyClientsPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [commentSaving, setCommentSaving] = useState(false);
-  const [workspaceMode, setWorkspaceMode] = useState<"registry" | "cashier">("registry");
+  const [workspaceMode, setWorkspaceMode] = useState<"registry" | "cashier">("cashier");
   const [registry, setRegistry] = useState<CompanyClientRegistryResponse | null>(null);
   const [registryQuery, setRegistryQuery] = useState("");
   const [registrySegment, setRegistrySegment] = useState<CompanyClientRegistrySegment>("all");
@@ -471,7 +471,7 @@ export default function CompanyClientsPage() {
     totalSpend: 0,
     averageSpend: 0,
   };
-  const visibleWorkspaceMode = hydrated ? workspaceMode : "registry";
+  const visibleWorkspaceMode = hydrated ? workspaceMode : "cashier";
   const maxAudienceStat = Math.max(registryStats.all, registryStats.active, registryStats.withBalance, registryStats.vip, 1);
   const audiencePercent = (value: number) => `${Math.max(6, Math.round((value / maxAudienceStat) * 100))}%`;
 

@@ -26,7 +26,7 @@ export function MarketingHeader({ active }: MarketingHeaderProps) {
   const navItems = [
     { label: t("marketing.header.users"), href: "/", active: active === "users" },
     { label: t("marketing.header.business"), href: "/business", active: active === "business" },
-    { label: t("marketing.header.game"), href: "/hunt/public", active: active === "hunt" },
+    { label: t("marketing.header.game"), href: "/nearloy-hunt", active: active === "hunt" },
     { label: t("marketing.header.contacts"), href: "/contact", sectionId: "contact", active: active === "contact" },
   ];
 

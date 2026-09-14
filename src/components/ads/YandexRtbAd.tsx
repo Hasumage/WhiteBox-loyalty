@@ -39,8 +39,16 @@ function shouldKeepFallbackVisible() {
   return ["localhost", "127.0.0.1"].includes(window.location.hostname);
 }
 
+function shouldSkipRtbRuntime() {
+  if (process.env.NEXT_PUBLIC_YANDEX_RSYA_RUN_LOCAL === "true") return false;
+  if (process.env.NODE_ENV !== "production") return true;
+  if (typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1"].includes(window.location.hostname);
+}
+
 export function YandexRtbAd({ blockId, pageNumber, placement, className, type = "feed" }: YandexRtbAdProps) {
   const enabled = isRtbEnabled(blockId);
+  const skipRuntime = shouldSkipRtbRuntime();
   const [hidden, setHidden] = useState(false);
   const renderTo = useMemo(
     () => `yandex_rtb_${safeIdPart(placement)}_${safeIdPart(blockId ?? "disabled")}_${pageNumber}`,
@@ -48,10 +56,11 @@ export function YandexRtbAd({ blockId, pageNumber, placement, className, type = 
   );
 
   useEffect(() => {
-    if (!enabled || !blockId) return;
+    if (!enabled || !blockId || skipRuntime) return;
     setHidden(false);
     const target = document.getElementById(renderTo);
     if (!target) return;
+    let mounted = true;
     let settled = false;
     const hasRenderedAd = () => target.children.length > 0 || target.textContent?.trim();
     const markRendered = () => {
@@ -65,6 +74,7 @@ export function YandexRtbAd({ blockId, pageNumber, placement, className, type = 
     }, 4200);
 
     const render = () => {
+      if (!mounted || !document.getElementById(renderTo)) return;
       const renderOptions: { blockId: string; renderTo: string; async: boolean; pageNumber: number; type?: "feed" } = {
         blockId,
         renderTo,
@@ -84,21 +94,24 @@ export function YandexRtbAd({ blockId, pageNumber, placement, className, type = 
     }
 
     return () => {
+      mounted = false;
       window.clearTimeout(fallbackTimer);
       observer.disconnect();
     };
-  }, [blockId, enabled, pageNumber, renderTo, type]);
+  }, [blockId, enabled, pageNumber, renderTo, skipRuntime, type]);
 
   if (!enabled || hidden) return null;
 
   return (
-    <aside className={cn("rounded-3xl border border-cyan-200/12 bg-white/[0.025] p-3", className)} aria-label="Реклама">
+    <aside className={cn("min-w-0 max-w-full rounded-3xl border border-cyan-200/12 bg-white/[0.025] p-3", className)} aria-label="Реклама">
       <div className="mb-2 flex items-center justify-between px-1 text-[10px] uppercase tracking-[0.18em] text-white/34">
         <span>Реклама</span>
         <span>РСЯ</span>
       </div>
-      <Script id="nearloy-yandex-rsya" src="https://yandex.ru/ads/system/context.js" strategy="afterInteractive" async />
-      <div id={renderTo} className="min-h-[96px] overflow-hidden rounded-2xl" />
+      {!skipRuntime && <Script id="nearloy-yandex-rsya" src="https://yandex.ru/ads/system/context.js" strategy="afterInteractive" async />}
+      <div className="w-full min-w-0 max-w-full rounded-2xl" style={{ maxHeight: 300, overflow: "clip" }}>
+        <div id={renderTo} className="min-h-[96px]" />
+      </div>
     </aside>
   );
 }

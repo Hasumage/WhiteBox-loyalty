@@ -105,9 +105,13 @@ export const huntArenaDictionary = {
       "У персонажа три способности. Каждая заменяет обычное действие и тратит резонанс. Сила рассчитывается от текущих характеристик в момент применения. Все приказы делят общий запас команды. Стоимость и перезарядка фиксируются при подтверждении, даже если цель затем ушла или персонаж выбыл.",
     "arena.title": "Парк резонанса",
     "arena.training": "Тренировка · 3 на 3",
+    "arena.pvp": "PvP · 3 на 3",
     "arena.turn": "Ход",
     "arena.you": "Вы",
     "arena.bot": "ИИ",
+    "arena.opponent": "Соперник",
+    "arena.waitSecondPlayer": "Ждём второго игрока",
+    "arena.waitOpponent": "Ждём ход соперника",
     "arena.energy": "Резонанс",
     "arena.score": "Очки контроля",
     "arena.confirm": "Завершить ход",
@@ -169,7 +173,7 @@ export const huntArenaDictionary = {
     "arena.rulesBonus":
       "Резонанс и очки контроля независимы. Точки начисляют оба ресурса, способности расходуют только резонанс. В начале его нет. Победитель определяется по очкам контроля, а не по оставшемуся резонансу.",
     "arena.rulesWin":
-      "Уничтожьте отряд противника или наберите больше очков контроля за 10 ходов. При равном счёте ничья. Оба отряда одинаковые, первого уровня. ИИ подчиняется тем же правилам, платит за способности и не видит ваши приказы.",
+      "Уничтожьте отряд противника или наберите больше очков контроля за 10 ходов. При равном счёте ничья. В тренировке ИИ получает случайный отряд, подстроенный немного ниже силы ваших карт, и не видит ваши приказы.",
   },
   en: {
     "arena.characterState": "Character state",
@@ -277,9 +281,13 @@ export const huntArenaDictionary = {
       "Each character has three abilities. Each replaces the normal action and spends resonance. Power scales from current stats when cast. Orders share the team's budget. Costs and cooldowns commit on confirmation, even if the target escapes or the caster is eliminated.",
     "arena.title": "Resonance Park",
     "arena.training": "Training · 3 vs 3",
+    "arena.pvp": "PvP · 3 vs 3",
     "arena.turn": "Turn",
     "arena.you": "You",
     "arena.bot": "AI",
+    "arena.opponent": "Opponent",
+    "arena.waitSecondPlayer": "Waiting for the second player",
+    "arena.waitOpponent": "Waiting for opponent turn",
     "arena.energy": "Resonance",
     "arena.score": "Control score",
     "arena.confirm": "End turn",
@@ -341,6 +349,6 @@ export const huntArenaDictionary = {
     "arena.rulesBonus":
       "Resonance and control score are independent. Points generate both; abilities spend only resonance. Starting resonance is zero. Victory uses control score, not unspent resonance.",
     "arena.rulesWin":
-      "Eliminate the opposing team or earn more control score over 10 turns. Equal score is a draw. Identical level-one teams. AI follows the same rules, pays for abilities and cannot see your orders.",
+      "Eliminate the opposing team or earn more control score over 10 turns. Equal score is a draw. In training, AI receives a random team scaled slightly below your cards and cannot see your orders.",
   },
 } as const;

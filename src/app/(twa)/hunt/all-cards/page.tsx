@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { getHuntCardCatalogResult, type HuntCatalogSpecies, type HuntElement } from "@/lib/api/twa-client";
 import { useI18n } from "@/lib/i18n/use-i18n";
 import { cn } from "@/lib/utils";
-import { ElementBadge, elementMeta, huntInteractiveClass, huntRarityLabel, huntSpeciesDescription, huntSpeciesName, huntStatEntries, rarityBadgeClass, rarityClass, StatAffinityBar } from "../_components/hunt-ui";
+import { ElementBadge, elementMeta, huntCreatureImageClass, huntInteractiveClass, huntRarityLabel, huntSpeciesDescription, huntSpeciesName, huntStatEntries, rarityBadgeClass, rarityClass, StatAffinityBar } from "../_components/hunt-ui";
 
 type SortMode = "rarity" | "owned" | "name";
 type ElementFilter = "all" | HuntElement;
@@ -243,7 +243,7 @@ export default function HuntAllCardsPage() {
               className={cn("group relative aspect-[3/4] overflow-hidden rounded-2xl border bg-slate-950 p-0 text-left shadow-[0_18px_42px_rgba(0,0,0,0.22)]", huntInteractiveClass, owned ? rarityClass[item.baseRarity] : "border-white/10 text-white/55")}
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_55%,rgba(103,232,249,0.12),rgba(2,6,12,0.25)_52%,rgba(2,6,12,0.62))]">
-                <img src={item.imageUrl ?? "/hunt-assets/cards/compass-light.webp"} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center transition", cardImageScale(item.slug), owned ? "opacity-95" : "opacity-35 grayscale")} />
+                <img src={item.imageUrl ?? "/hunt-assets/cards/compass-light.webp"} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center transition", cardImageScale(item.slug), huntCreatureImageClass(item.slug), owned ? "opacity-95" : "opacity-35 grayscale")} />
                 <span className="absolute left-2 top-2 rounded-full border border-black/30 bg-black/44 px-2 py-1 text-[11px] font-semibold text-white/74 backdrop-blur">
                   #{String(index + 1).padStart(3, "0")}
                 </span>
@@ -276,7 +276,7 @@ export default function HuntAllCardsPage() {
               </DialogHeader>
               <div className="mx-auto w-full max-w-[360px] overflow-hidden rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_50%_46%,rgba(103,232,249,0.18),rgba(2,6,12,0.72)_58%,rgba(2,6,12,0.95))]">
                 <div className="relative h-[min(48vh,360px)] min-h-[260px]">
-                  <img src={selectedCard.imageUrl ?? "/hunt-assets/cards/compass-light.webp"} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center", revealImageScale(selectedCard.slug), selectedCard.ownedCount > 0 ? "opacity-100" : "opacity-38 grayscale")} />
+                  <img src={selectedCard.imageUrl ?? "/hunt-assets/cards/compass-light.webp"} alt="" className={cn("absolute inset-0 h-full w-full object-contain object-center", revealImageScale(selectedCard.slug), huntCreatureImageClass(selectedCard.slug), selectedCard.ownedCount > 0 ? "opacity-100" : "opacity-38 grayscale")} />
                   <div className="absolute left-3 top-3">
                     <ElementBadge element={selectedCard.element} />
                   </div>

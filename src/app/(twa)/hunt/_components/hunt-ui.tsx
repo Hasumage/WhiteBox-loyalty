@@ -83,6 +83,25 @@ export function mediaSrc(url?: string | null) {
   return url;
 }
 
+const opaqueCharacterBackgroundSlugs = new Set([
+  "neon-echo",
+  "receipt-munch",
+  "aurora-ticket",
+  "berry-loop",
+  "chai-flare",
+  "coupon-gust",
+  "coupon-wisp",
+  "karaoke-puff",
+  "metro-breeze",
+  "metro-pebble",
+  "mirror-spritz",
+  "velvet-eclipse",
+]);
+
+export function huntCreatureImageClass(slug?: string | null) {
+  return slug && opaqueCharacterBackgroundSlugs.has(slug) ? "mix-blend-screen saturate-110 contrast-110" : "";
+}
+
 export function CreatureGlyph({ card, size = "md" }: { card: Pick<HuntCard, "element" | "rarity"> & { imageUrl?: string | null; species?: { imageUrl?: string | null } }; size?: "sm" | "md" | "lg" }) {
   const bg = {
     FLAME: "from-orange-300 via-red-400 to-stone-900",

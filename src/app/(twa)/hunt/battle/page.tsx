@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  createHuntBattleCode,
-  findRandomHuntBattle,
+  createHuntPrivateMatch,
   getCachedHuntOverview,
   getHuntCollectionOverview,
+  joinHuntPrivateMatch,
+  startHuntRandomMatch,
   type HuntCard,
   type HuntOverview,
 } from "@/lib/api/twa-client";
@@ -32,7 +33,7 @@ function buildMatchCode() {
   return `NH-${segment}`;
 }
 
-function saveBattleState(payload: { mode: BattleMode; teamUuids: string[]; leadCardUuid: string; opponentUuid?: string | null; matchCode?: string | null }) {
+function saveBattleState(payload: { mode: BattleMode; teamUuids: string[]; leadCardUuid: string; opponentUuid?: string | null; matchCode?: string | null; matchId?: string | null }) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...payload, savedAt: new Date().toISOString() }));
 }
@@ -213,15 +214,20 @@ export default function HuntBattleLobbyPage() {
     }
     setNotice(null);
     setBusy("random");
-    const result = await findRandomHuntBattle(leadCard.uuid);
+    const result = await startHuntRandomMatch(teamUuids.slice(0, TEAM_SIZE));
+    setBusy(null);
+    if (!result.ok) {
+      setNotice(result.message);
+      return;
+    }
     saveBattleState({
       mode: "random",
       teamUuids: teamUuids.slice(0, TEAM_SIZE),
       leadCardUuid: leadCard.uuid,
-      opponentUuid: result.ok ? result.data.opponent.uuid : null,
+      opponentUuid: null,
+      matchId: result.data.matchId,
     });
-    setBusy(null);
-    router.push("/hunt/battle/arena");
+    router.push("/hunt/battle/loading");
   }
 
   async function createCode() {
@@ -232,14 +238,20 @@ export default function HuntBattleLobbyPage() {
     }
     setNotice(null);
     setBusy("code");
-    const result = await createHuntBattleCode(leadCard.uuid);
-    const code = result.ok ? result.data.code : buildMatchCode();
+    const result = await createHuntPrivateMatch(teamUuids.slice(0, TEAM_SIZE));
+    if (!result.ok) {
+      setBusy(null);
+      setNotice(result.message);
+      return;
+    }
+    const code = result.data.code ?? buildMatchCode();
     setMatchCode(code);
-    saveBattleState({ mode: "code", teamUuids: teamUuids.slice(0, TEAM_SIZE), leadCardUuid: leadCard.uuid, matchCode: code });
+    saveBattleState({ mode: "code", teamUuids: teamUuids.slice(0, TEAM_SIZE), leadCardUuid: leadCard.uuid, matchCode: code, matchId: result.data.matchId });
     setBusy(null);
+    router.push("/hunt/battle/arena");
   }
 
-  function joinMatch() {
+  async function joinMatch() {
     const leadCard = team.find(Boolean);
     const code = joinCode.trim().toUpperCase();
     if (!leadCard || !ready) {
@@ -250,7 +262,15 @@ export default function HuntBattleLobbyPage() {
       setNotice(t("client.hunt.battle.codeInvalid"));
       return;
     }
-    saveBattleState({ mode: "join", teamUuids: teamUuids.slice(0, TEAM_SIZE), leadCardUuid: leadCard.uuid, matchCode: code.startsWith("NH-") ? code : `NH-${code}` });
+    setNotice(null);
+    setBusy("code");
+    const result = await joinHuntPrivateMatch(code, teamUuids.slice(0, TEAM_SIZE));
+    setBusy(null);
+    if (!result.ok) {
+      setNotice(result.message);
+      return;
+    }
+    saveBattleState({ mode: "join", teamUuids: teamUuids.slice(0, TEAM_SIZE), leadCardUuid: leadCard.uuid, matchCode: result.data.code ?? (code.startsWith("NH-") ? code : `NH-${code}`), matchId: result.data.matchId });
     router.push("/hunt/battle/arena");
   }
 
@@ -288,18 +308,22 @@ export default function HuntBattleLobbyPage() {
         </p>
 
         <div className="mt-4 grid grid-cols-[1fr_60px] gap-2">
-          <Button type="button" onClick={startRandomMatch} disabled={busy === "random"} className={cn("h-12 rounded-2xl bg-cyan-200 text-slate-950 hover:bg-cyan-100", huntInteractiveClass)}>
-            {busy === "random" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Dices className="mr-2 h-4 w-4" />}
-            Случайный бой
+          <Button type="button" onClick={() => void startRandomMatch()} disabled={busy === "random"} aria-busy={busy === "random"} className={cn("h-12 rounded-2xl bg-cyan-200 text-slate-950 hover:bg-cyan-100", huntInteractiveClass)}>
+            <span className="mr-2 flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+              {busy === "random" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Dices className="h-4 w-4" />}
+            </span>
+            <span>Случайный бой</span>
           </Button>
           <Button type="button" onClick={() => void createCode()} disabled={busy === "code"} variant="secondary" className={cn("h-12 w-[60px] rounded-2xl border-white/10 bg-white/[0.06]", huntInteractiveClass)} aria-label={t("client.hunt.battle.matchCode")}>
-            {busy === "code" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+              {busy === "code" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+            </span>
           </Button>
         </div>
 
         <div className="mt-2 grid grid-cols-[1fr_60px] gap-2">
           <Input value={joinCode} onChange={(event) => setJoinCode(event.target.value)} placeholder={t("client.hunt.battle.codePlaceholder")} className="h-11 rounded-2xl border-white/10 bg-white/[0.04] text-white placeholder:text-white/38" />
-          <Button type="button" onClick={joinMatch} variant="secondary" className={cn("h-11 w-[60px] rounded-2xl border-white/10 bg-white/[0.06]", huntInteractiveClass)}>
+          <Button type="button" onClick={() => void joinMatch()} variant="secondary" className={cn("h-11 w-[60px] rounded-2xl border-white/10 bg-white/[0.06]", huntInteractiveClass)}>
             <UserPlus className="h-4 w-4" />
           </Button>
         </div>

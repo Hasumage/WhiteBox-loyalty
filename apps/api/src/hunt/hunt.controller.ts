@@ -40,6 +40,22 @@ export class HuntController {
     return this.huntService.completeTutorial(user.userId);
   }
 
+  @Get("tutorial")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: "Nearloy Hunt guided onboarding state" })
+  tutorial(@CurrentUser() user: RequestUser) {
+    return this.huntService.tutorialStatus(user.userId);
+  }
+
+  @Post("tutorial/advance")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: "Advance Nearloy Hunt guided onboarding and grant one-time rewards" })
+  advanceTutorial(@CurrentUser() user: RequestUser, @Body("action") action?: string) {
+    return this.huntService.advanceTutorial(user.userId, action);
+  }
+
   @Get("feed")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
@@ -126,6 +142,14 @@ export class HuntController {
     return this.huntService.collection(user.userId, query);
   }
 
+  @Get("cards/:uuid")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: "Read one owned Hunt card with duplicate count" })
+  card(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
+    return this.huntService.card(user.userId, uuid);
+  }
+
   @Post("posts")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
@@ -141,6 +165,14 @@ export class HuntController {
   @ApiOperation({ summary: "Like a Hunt post and grant weighted NearCoin to the author" })
   likePost(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
     return this.huntService.likePost(user.userId, uuid);
+  }
+
+  @Post("daily-rewards/seen")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: "Mark pending daily Hunt like rewards popup as seen" })
+  markDailyRewardsSeen(@CurrentUser() user: RequestUser) {
+    return this.huntService.markDailyLikeRewardsSeen(user.userId);
   }
 
   @Post("posts/:uuid/report")
@@ -168,6 +200,22 @@ export class HuntController {
   @ApiOperation({ summary: "Upgrade an owned Hunt card with server-side NearCoin" })
   upgradeCard(@CurrentUser() user: RequestUser, @Body() dto: UpgradeHuntCardDto) {
     return this.huntService.upgradeCard(user.userId, dto.cardUuid, dto.focusStat);
+  }
+
+  @Post("cards/:uuid/sell")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: "Sell an owned Hunt card for a reduced NearCoin refund" })
+  sellCard(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
+    return this.huntService.sellCard(user.userId, uuid);
+  }
+
+  @Post("cards/:uuid/awaken")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: "Awaken an owned Hunt card by spending duplicate cards" })
+  awakenCard(@CurrentUser() user: RequestUser, @Param("uuid") uuid: string) {
+    return this.huntService.awakenCard(user.userId, uuid);
   }
 
   @Post("cards/upgrade/bonus")

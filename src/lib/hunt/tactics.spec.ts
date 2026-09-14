@@ -2,6 +2,7 @@ import {
   alive,
   canAttack,
   createBattle,
+  directDamage,
   moves,
   pathTo,
   planAI,
@@ -178,6 +179,256 @@ describe("Hunt tactical training", () => {
     expect(
       moves(b, b.units[0], { type: "haste", unitId: "player-0" }).length,
     ).toBeGreaterThan(moves(b, b.units[0]).length);
+  });
+  it("applies resonance bonuses to ranged damage and healing", () => {
+    let b = createBattle();
+    const sniper = b.units[0];
+    const target = b.units[3];
+    Object.assign(sniper, {
+      x: 1,
+      y: 1,
+      profile: { ...stats(sniper), attack: 10, rangedDamageBonus: 0.1 },
+    });
+    Object.assign(target, {
+      x: 1,
+      y: 3,
+      profile: { ...stats(target), element: stats(sniper).element },
+    });
+    expect(directDamage(sniper, target, 10)).toBe(11);
+
+    b = createBattle();
+    const healer = b.units[0];
+    const ally = b.units[1];
+    Object.assign(healer, {
+      x: 4,
+      y: 4,
+      profile: { ...stats(healer), attack: 10, healingBonus: 0.1 },
+      abilities: [
+        {
+          key: "testHeal",
+          cost: 0,
+          cooldown: 1,
+          target: "ally",
+          radius: 0,
+          rangeBonus: 0,
+          range: 3,
+          effects: [{ type: "heal", power: { stat: "attack", factor: 1 } }],
+        },
+      ],
+    });
+    Object.assign(ally, {
+      x: 4,
+      y: 5,
+      hp: 1,
+      profile: { ...stats(ally), hp: 30 },
+    });
+    const result = resolveRound(b, [
+      { unitId: healer.id, type: "skill", abilityId: "testHeal", targetId: ally.id },
+    ], []).at(-1)!.battle;
+    expect(result.units.find((unit) => unit.id === ally.id)!.hp).toBe(12);
+  });
+  it("applies rank three guardian shield and scout opening movement", () => {
+    let b = createBattle();
+    const guardian = b.units[0];
+    const enemy = b.units[3];
+    Object.assign(guardian, {
+      x: 1,
+      y: 1,
+      profile: { ...stats(guardian), hp: 40, battleClass: "GUARDIAN", fusionRank: 3 },
+    });
+    Object.assign(enemy, {
+      x: 1,
+      y: 2,
+      profile: { ...stats(enemy), attack: 10, element: stats(guardian).element },
+    });
+    b = resolveRound(b, [], [
+      { unitId: enemy.id, type: "attack", targetId: guardian.id },
+    ]).at(-1)!.battle;
+    expect(b.units.find((unit) => unit.id === guardian.id)!.shield).toBe(5);
+
+    b = createBattle();
+    const scout = b.units[0];
+    Object.assign(scout, {
+      profile: { ...stats(scout), movement: 4, battleClass: "SCOUT", fusionRank: 3 },
+    });
+    const openingMoves = moves(b, scout).length;
+    b.round = 2;
+    expect(openingMoves).toBeGreaterThan(moves(b, scout).length);
+  });
+  it("applies rank three healer pulse and battery resonance refund", () => {
+    let b = createBattle();
+    const healer = b.units[0];
+    const ally = b.units[1];
+    Object.assign(healer, {
+      x: 4,
+      y: 4,
+      profile: { ...stats(healer), hp: 40, battleClass: "HEALER", fusionRank: 3 },
+    });
+    Object.assign(ally, {
+      x: 4,
+      y: 5,
+      hp: 10,
+      profile: { ...stats(ally), hp: 30 },
+    });
+    b = resolve(b);
+    expect(b.units.find((unit) => unit.id === ally.id)!.hp).toBe(14);
+
+    b = createBattle();
+    const battery = b.units[0];
+    const target = b.units[3];
+    Object.assign(battery, {
+      x: 4,
+      y: 4,
+      profile: { ...stats(battery), battleClass: "BATTERY", fusionRank: 3 },
+      abilities: [
+        {
+          key: "testZap",
+          cost: 3,
+          cooldown: 1,
+          target: "enemy",
+          radius: 0,
+          rangeBonus: 0,
+          range: 3,
+          effects: [{ type: "damage", power: { stat: "attack", factor: 1 } }],
+        },
+      ],
+    });
+    Object.assign(target, { x: 4, y: 5 });
+    b.energy.player = 3;
+    b = resolveRound(b, [
+      { unitId: battery.id, type: "skill", abilityId: "testZap", targetId: target.id },
+    ], []).at(-1)!.battle;
+    expect(b.energy.player).toBe(2);
+  });
+  it("applies higher-rank battery discounts, captor flags and finisher momentum", () => {
+    let b = createBattle();
+    const battery = b.units[0];
+    const target = b.units[3];
+    Object.assign(battery, {
+      x: 4,
+      y: 4,
+      profile: { ...stats(battery), battleClass: "BATTERY", fusionRank: 4 },
+      abilities: [
+        {
+          key: "testZap",
+          cost: 4,
+          cooldown: 1,
+          target: "enemy",
+          radius: 0,
+          rangeBonus: 0,
+          range: 3,
+          effects: [{ type: "damage", power: { stat: "attack", factor: 1 } }],
+        },
+      ],
+    });
+    Object.assign(target, { x: 4, y: 5 });
+    b.energy.player = 4;
+    b = resolveRound(b, [
+      { unitId: battery.id, type: "skill", abilityId: "testZap", targetId: target.id },
+    ], []).at(-1)!.battle;
+    expect(b.energy.player).toBe(3);
+
+    b = createBattle();
+    const captor = b.units[0];
+    Object.assign(captor, {
+      x: 4,
+      y: 4,
+      profile: { ...stats(captor), battleClass: "CAPTOR", fusionRank: 5 },
+    });
+    b = resolve(b);
+    expect(b.pointFlags?.player[1]).toBe(true);
+    expect(b.units.filter((unit) => unit.side === "player").some((unit) =>
+      unit.effects.some((effect) => effect.abilityId === "resonance-captor-rush"),
+    )).toBe(true);
+
+    b = createBattle();
+    const finisher = b.units[0];
+    const victim = b.units[3];
+    Object.assign(finisher, {
+      x: 4,
+      y: 4,
+      profile: { ...stats(finisher), attack: 20, battleClass: "FINISHER", fusionRank: 5 },
+    });
+    Object.assign(victim, { x: 4, y: 5, hp: 1 });
+    b = resolveRound(b, [
+      { unitId: finisher.id, type: "attack", targetId: victim.id },
+    ], []).at(-1)!.battle;
+    expect(b.energy.player).toBe(3);
+    expect(b.units.find((unit) => unit.id === finisher.id)!.effects.some(
+      (effect) => effect.abilityId === "resonance-finisher-momentum",
+    )).toBe(true);
+  });
+  it("applies higher-rank guardian redirect and healer revive", () => {
+    let b = createBattle();
+    const ally = b.units[0];
+    const guardian = b.units[1];
+    const enemy = b.units[3];
+    Object.assign(ally, { x: 4, y: 4, hp: 12, profile: { ...stats(ally), hp: 30 } });
+    Object.assign(guardian, {
+      x: 4,
+      y: 5,
+      profile: { ...stats(guardian), hp: 40, battleClass: "GUARDIAN", fusionRank: 5 },
+    });
+    Object.assign(enemy, {
+      x: 4,
+      y: 3,
+      profile: { ...stats(enemy), attack: 20, element: stats(ally).element },
+    });
+    b = resolveRound(b, [], [
+      { unitId: enemy.id, type: "attack", targetId: ally.id },
+    ]).at(-1)!.battle;
+    expect(b.units.find((unit) => unit.id === ally.id)!.hp).toBeGreaterThan(0);
+    expect(b.units.find((unit) => unit.id === guardian.id)!.hp).toBeLessThan(40);
+
+    b = createBattle();
+    const healer = b.units[0];
+    const fallen = b.units[1];
+    const target = b.units[2];
+    Object.assign(healer, {
+      x: 4,
+      y: 4,
+      profile: { ...stats(healer), hp: 40, battleClass: "HEALER", fusionRank: 5 },
+      abilities: [
+        {
+          key: "testHeal",
+          cost: 0,
+          cooldown: 1,
+          target: "ally",
+          radius: 1,
+          rangeBonus: 0,
+          range: 3,
+          effects: [{ type: "heal", power: { stat: "hp", factor: 0.1 } }],
+        },
+      ],
+    });
+    Object.assign(fallen, { x: 4, y: 5, hp: 0, profile: { ...stats(fallen), hp: 32 } });
+    Object.assign(target, { x: 5, y: 5, hp: 10 });
+    b = resolveRound(b, [
+      { unitId: healer.id, type: "skill", abilityId: "testHeal", targetId: target.id },
+    ], []).at(-1)!.battle;
+    expect(b.units.find((unit) => unit.id === fallen.id)!.hp).toBe(12);
+  });
+  it("allows an extra action to resolve a second order from the same fighter", () => {
+    const b = createBattle();
+    const striker = b.units[0];
+    const first = b.units[3];
+    const second = b.units[4];
+    Object.assign(striker, {
+      x: 4,
+      y: 4,
+      profile: { ...stats(striker), attack: 6, element: stats(first).element },
+    });
+    Object.assign(first, { x: 4, y: 5, hp: 20, profile: { ...stats(first), hp: 20 } });
+    Object.assign(second, { x: 5, y: 4, hp: 20, profile: { ...stats(second), hp: 20, element: stats(first).element } });
+    b.actionLimitBonus = { player: 1, bot: 0 };
+    const orders: Order[] = [
+      { unitId: striker.id, type: "attack", targetId: first.id },
+      { unitId: striker.id, type: "attack", targetId: second.id },
+    ];
+    expect(validateOrders(b, "player", orders)).toBe(true);
+    const result = resolveRound(b, orders, []).at(-1)!.battle;
+    expect(result.units.find((unit) => unit.id === first.id)!.hp).toBeLessThan(20);
+    expect(result.units.find((unit) => unit.id === second.id)!.hp).toBeLessThan(20);
   });
   it("finishes at ten rounds and forbids acting after the result", () => {
     const b = createBattle();

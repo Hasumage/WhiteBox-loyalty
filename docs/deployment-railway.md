@@ -129,7 +129,10 @@ If local development cannot call OpenAI directly, route local API/web calls thro
 Do not set `OPENAI_GATEWAY_URL` on the API service itself, otherwise it can recursively call its own gateway.
 
 Daily Telegram reporting is not automatic unless the scheduler process is running. For Railway, add a small worker/service that runs
-`npm run reports:daily:scheduler` with `DAILY_REPORT_SCHEDULER_ENABLED=true`, or trigger `npm run reports:daily:send` from an external scheduler.
+Daily reports are manual by default to keep the web service from holding an extra always-on Node process in memory.
+Use the admin dashboard control to send the report on demand. If an automatic report is needed later, enable
+`DAILY_REPORT_SCHEDULER_ENABLED=true` and run `npm run reports:daily:scheduler`, or trigger
+`npm run reports:daily:send` from an external scheduler.
 
 YooKassa payouts are currently intended for the test gateway and manual operational validation. Keep manual payout closure enabled for launch;
 do not enable raw-card payout mode for real production cards.

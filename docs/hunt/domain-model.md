@@ -1,8 +1,10 @@
 # Nearloy Hunt Domain Model
 
-## Tactical Training State
+## Tactical Match State
 
-The v7 training aggregate is a signed transient `Battle` in `src/lib/hunt/tactics.ts`, not a Prisma entity. `Fighter` holds position, normalized species profile, snapshotted ability definitions/revisions, HP, shield expiry, active effects and cooldowns. `Battle.statistics` tracks actual damage/healing/absorption/control by unit. `Battle.energy` is spendable resonance; `Battle.score` is non-spendable control score. Effects support damage, lifesteal, heal, shield, burn, poison, buffs, push and pull. Directional low cover remains separate from sight-blocking walls. [Rules and scaling](./tactical-arena.md).
+The tactical aggregate is `Battle` in `src/lib/hunt/tactics.ts` and persisted per fight in `HuntBattleMatch.battleState`. `Fighter` holds position, normalized species/card profile, snapshotted ability definitions/revisions, HP, shield expiry, active effects and cooldowns. `Battle.statistics` tracks actual damage/healing/absorption/control by unit. `Battle.energy` is spendable resonance; `Battle.score` is non-spendable control score. Effects support damage, lifesteal, heal, shield, burn, poison, buffs, push and pull. Directional low cover remains separate from sight-blocking walls. [Rules and scaling](./tactical-arena.md).
+
+`HuntBattleMatch` is the server-owned session for training and PvP. It stores mode (`TRAINING`, `PVP_RANDOM`, `PVP_PRIVATE`), status, owner/opponent users, optional private code, selected team UUIDs, team power estimates, fallback bot name/species, deterministic seed, current turn, turn deadline, expiry, pending orders, last animation frames and reward settlement markers. Training starts with the player's owned cards and a random bot team scaled slightly below the player's average power. Random PvP can become a real two-user match or, after the randomized search deadline, an AI-backed temporary player. The client sends orders only; it never sends final HP, score, critical rolls or rewards.
 
 Persistent definitions use `HuntAbility` (localized metadata, JSON config, schema/revision), `HuntSpeciesAbility` (unique ordered slots 0..2) and `HuntAbilityRevision` (immutable snapshots and actor). They extend `HuntCreatureSpecies` without rewriting owned cards. Administration and battle loading enforce three slots per species. [Storage, constraints and extension policy](./ability-framework.md).
 
@@ -12,7 +14,7 @@ The Hunt schema is attached to the existing Nearloy user/company/category graph,
 
 Core aggregates:
 
-- `HuntPlayerProfile` - one game profile per Nearloy user.
+- `HuntPlayerProfile` - one game profile per Nearloy user, including NearCoin balance, Hunt level, seasonal/lifetime battle trophies and guided tutorial state.
 - `HuntPlace` - a real or user-created place that can optionally link to a company.
 - `HuntPost` - the main game action: a GPS/place-bound Nearloy post.
 - `HuntPostReaction` - Nearloy-like or other reaction signal.
@@ -21,6 +23,7 @@ Core aggregates:
 - `HuntBox` - server-granted box that can be opened once.
 - `HuntCreatureSpecies` - seeded creature/card template with its own visual identity and `baseStats` predisposition values from `1` to `10`.
 - `HuntCard` - user-owned collectible instance with permanent rolled stats. Multiple cards may point to the same `HuntCreatureSpecies`; duplicates are expected box drops and keep their own `uuid`, stats, level and upgrade history.
+- `HuntBattleMatch` - persisted tactical fight session and bridge to future multiplayer.
 - `HuntMission` - reusable mission definition.
 - `HuntMissionProgress` - per-profile mission state.
 
@@ -62,7 +65,8 @@ Clients can request actions, but the server owns all game outcomes:
 - Moderation can hide/remove a post and reverse post-created NearCoin.
 - Opening a box spends/updates the box and rolls one card inside a transaction.
 - Upgrading a card spends NearCoin and increases level/stats in a transaction. Growth is rolled against species predisposition, not client input.
-- Tutorial completion grants onboarding rewards only once.
+- Finishing a PvP match grants NearCoin through `HuntCurrencyLedger` reason `BATTLE_REWARD`, applies the daily battle currency cap and updates seasonal/lifetime trophies.
+- Guided tutorial rewards are stored on the profile in `huntTutorialStep` and `huntTutorialState`; NearCoin writes use `TUTORIAL_REWARD`, and tutorial cards are granted once per flagged step.
 - Mission progress and rewards should be calculated server-side.
 
 Never trust client-provided NearCoin, rarity, stats, card levels or mission completion.
@@ -79,6 +83,8 @@ The schema is designed so early local launch can grow without an immediate rewri
 - Active species must not reuse the same character art. Repeated card drops are allowed, but each species needs a unique `imageUrl`.
 - Moderation state is separate from publication state.
 - Missions are seeded definitions, not hard-coded UI steps.
+- Trophy seasons last 60 days. Old seasonal trophy counters reset server-side when leaderboard/reward code sees an expired season; lifetime trophies remain append-only progress.
+- Guided onboarding is a server-side state machine. UI screens may render dialogue, but only `POST /api/hunt/tutorial/advance` can move durable steps or grant starter currency/cards.
 
 Future heavy-load improvements:
 

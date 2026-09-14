@@ -13,9 +13,8 @@ import { huntInteractiveClass, mediaSrc, NearloyStars } from "@/app/(twa)/hunt/_
 const PUBLIC_FEED_PAGE_SIZE = 8;
 const PUBLIC_FEED_REFRESH_MS = 20000;
 const PUBLIC_HUNT_FEED_AD_BLOCK_ID =
-  process.env.NEXT_PUBLIC_YANDEX_RSYA_PUBLIC_HUNT_FEED_BLOCK_ID ||
-  process.env.NEXT_PUBLIC_YANDEX_RSYA_HUNT_FEED_BLOCK_ID ||
-  process.env.NEXT_PUBLIC_YANDEX_RSYA_APP_FEED_BLOCK_ID;
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_HUNT_BANNER_BLOCK_ID ||
+  process.env.NEXT_PUBLIC_YANDEX_RSYA_HUNT_SHOP_BANNER_BLOCK_ID;
 
 type Translate = ReturnType<typeof useI18n>["t"];
 
@@ -281,6 +280,7 @@ export function PublicHuntFeedClient() {
                 blockId={PUBLIC_HUNT_FEED_AD_BLOCK_ID}
                 pageNumber={Math.floor(index / 6) + 1}
                 placement="hunt-public-feed"
+                type="banner"
               />
             )}
           </div>

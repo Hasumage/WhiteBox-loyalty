@@ -45,6 +45,7 @@ export function ActionButton({
       <button
         {...props}
         type="button"
+        translate="no"
         aria-disabled={disabled || undefined}
         aria-describedby={open ? id : undefined}
         data-action-help

@@ -13,3 +13,12 @@ tmp_api_*.log
 .git
 .github
 docs
+output
+storage
+**/storage
+tmp
+.tmp
+artifacts
+.agents
+.githooks
+*.tsbuildinfo

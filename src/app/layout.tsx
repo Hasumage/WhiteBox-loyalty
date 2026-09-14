@@ -7,9 +7,29 @@ const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://nearloy.ru").repl
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "NearLoy — бонусы, подписки и сервис для клиентов",
-  description: "NearLoy помогает клиентам хранить бонусы, подписки, статусы и историю операций в одном удобном интерфейсе.",
+  title: {
+    default: "NearLoy — сервис лояльности, бонусы и Nearloy Hunt",
+    template: "%s | NearLoy",
+  },
+  description: "NearLoy помогает клиентам хранить бонусы, статусы, подписки и игровые награды Nearloy Hunt, а компаниям — возвращать гостей через QR, карту партнёров и удобный кабинет.",
+  keywords: ["NearLoy", "Nearloy", "Nearloy Hunt", "сервис лояльности", "бонусная система", "карта партнёров", "игра про город"],
   manifest: "/site.webmanifest",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "NearLoy",
+    locale: "ru_RU",
+    title: "NearLoy — бонусы, партнёры и Nearloy Hunt",
+    description: "Единый сервис для бонусов, статусов, партнёрских предложений и городской игровой ветки Nearloy Hunt.",
+    url: "/",
+    images: [{ url: "/landing/user-rewards-status.png", width: 1200, height: 630, alt: "NearLoy: бонусы, статусы и награды" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "NearLoy — бонусы, партнёры и Nearloy Hunt",
+    description: "Бонусы, статусы, карта партнёров и игровая ветка Nearloy Hunt в одном сервисе.",
+    images: ["/landing/user-rewards-status.png"],
+  },
   icons: {
     icon: [
       { url: "/favicon-48x48.png", sizes: "48x48", type: "image/png" },
@@ -28,7 +48,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="ru" className="dark" suppressHydrationWarning>
       <body className="antialiased dark twa bg-[var(--twa-bg)] text-foreground">
         <Suspense fallback={null}>
           <YandexMetrika />
