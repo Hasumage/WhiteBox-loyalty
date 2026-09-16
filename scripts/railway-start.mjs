@@ -75,25 +75,30 @@ function npmRunOnce(name, args, env = process.env) {
   });
 }
 
-async function runMigrationsIfConfigured() {
-  if (!process.env.DATABASE_URL) {
-    console.log("DATABASE_URL is not set, skipping database migrations.");
-    return;
+async function runStartupDatabaseTasks() {
+  if (process.env.DATABASE_MIGRATE_ON_START === "true") {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is required when DATABASE_MIGRATE_ON_START=true");
+    }
+    console.log("Applying database migrations before service start.");
+    await npmRunOnce("db:migrate", ["run", "db:migrate"]);
+  } else {
+    console.log("Skipping database migrations at service start; CI/CD handles production migrations.");
   }
 
-  console.log("Applying database migrations before service start.");
-  await npmRunOnce("db:migrate", ["run", "db:migrate"]);
-
   if (process.env.HUNT_SEED_ON_START === "true") {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is required when HUNT_SEED_ON_START=true");
+    }
     console.log("Seeding Nearloy Hunt catalog before service start.");
     await npmRunOnce("db:seed:hunt", ["run", "db:seed:hunt"]);
   }
 }
 
 try {
-  await runMigrationsIfConfigured();
+  await runStartupDatabaseTasks();
 } catch (error) {
-  console.error("Database migration failed before service start", error);
+  console.error("Startup database task failed", error);
   shutdown();
   process.exit(1);
 }
