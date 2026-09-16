@@ -18,6 +18,11 @@ function apiProxyTarget() {
 }
 
 const nextConfig: NextConfig = {
+  // Browser clients (including the Capacitor WebView) must never talk to the
+  // Railway API domain directly. Keep API traffic same-origin through NearLoy.
+  env: {
+    NEXT_PUBLIC_API_URL: "/backend-api",
+  },
   async rewrites() {
     return {
       beforeFiles: [
