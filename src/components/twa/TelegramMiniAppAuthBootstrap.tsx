@@ -6,6 +6,7 @@ import {
   loginWithTelegramMiniApp,
   setStoredSession,
 } from "@/lib/api/auth-client";
+import { promiseWithTimeout } from "@/lib/api/fetch-timeout";
 
 type TelegramWebApp = {
   initData?: string;
@@ -28,6 +29,7 @@ declare global {
 
 const TELEGRAM_SDK_SRC = "https://telegram.org/js/telegram-web-app.js";
 const TELEGRAM_SDK_TIMEOUT_MS = 5_000;
+const TELEGRAM_AUTH_TIMEOUT_MS = 6_000;
 
 function isCapacitorRuntime() {
   const params = new URLSearchParams(window.location.search);
@@ -105,23 +107,37 @@ export function TelegramMiniAppAuthBootstrap() {
       if (!isJwtStale(existingToken)) return;
 
       setAuthing(true);
-      const result = await loginWithTelegramMiniApp(initData);
-      if (cancelled) return;
+      try {
+        const result = await promiseWithTimeout(
+          loginWithTelegramMiniApp(initData),
+          TELEGRAM_AUTH_TIMEOUT_MS,
+        );
+        if (cancelled) return;
 
-      if ("accessToken" in result && result.accessToken) {
-        setStoredSession(result);
-        window.dispatchEvent(new Event("nearloy:auth-updated"));
-        window.location.reload();
-        return;
+        if ("accessToken" in result && result.accessToken) {
+          setStoredSession(result);
+          window.dispatchEvent(new Event("nearloy:auth-updated"));
+          window.location.reload();
+          return;
+        }
+
+        console.info(
+          "NearLoy linked client auth skipped:",
+          "message" in result ? result.message : "Unknown response",
+        );
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("NearLoy Telegram mini-app auth failed or timed out:", error);
+        }
+      } finally {
+        if (!cancelled) setAuthing(false);
       }
-
-      setAuthing(false);
-      // No scary UI here: unlinked users can still sign in normally.
-      console.info(
-        "NearLoy linked client auth skipped:",
-        "message" in result ? result.message : "Unknown response",
-      );
-    })();
+    })().catch((error) => {
+      if (!cancelled) {
+        setAuthing(false);
+        console.warn("NearLoy Telegram mini-app bootstrap failed:", error);
+      }
+    });
 
     return () => {
       cancelled = true;
